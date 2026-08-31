@@ -248,6 +248,18 @@ PF_EXPORT int pf_move_resize_object(pf_context context, pf_document document,
                                     double x0, double y0, double x1, double y1,
                                     const char *receipt_path_utf8);
 
+// FR-EDIT-04: replaces the interior of the object `object_index` (as listed by
+// pf_list_objects) with the raster image at source_path_utf8. The object's
+// bounding box is preserved exactly: the replacement image is embedded as a new
+// XObject under a unique name, added to the page's /Resources /XObject dict, and
+// only the name token before the `Do` operator is spliced in the content stream.
+// Writes a PF-TRW-format receipt (stream, offset, old/new name-token bytes) so
+// pf_revert_text_rewrite can undo/redo it. Returns PF_OK/PF_ERR.
+PF_EXPORT int pf_replace_object(pf_context context, pf_document document,
+                                int page_index, int object_index,
+                                const char *source_path_utf8,
+                                const char *receipt_path_utf8);
+
 #ifdef __cplusplus
 }
 #endif

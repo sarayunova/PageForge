@@ -4150,3 +4150,249 @@ int pf_move_resize_object(pf_context context, pf_document document,
 	}
 	return status;
 }
+
+/* FR-EDIT-04: replace the interior of the object `object_index` (as listed by
+ * pf_list_objects) with the raster image at `source_path_utf8`. The object's
+ * bounding box is preserved exactly: the replacement image is embedded as a NEW
+ * XObject under a unique name, added to the page's /Resources /XObject dict, and
+ * only the name token immediately before the `Do` operator is spliced in the
+ * content stream (`... <OldName> Do` -> `... <NewName> Do`). The `cm` matrix and
+ * every other byte are untouched, so position/size do not change — only the
+ * painted interior is swapped. The original XObject stays in resources, so an
+ * undo that re-splices the old name fully restores the prior painted image.
+ *
+ * Writes a PF-TRW receipt whose O/N payloads are the old/new name-token bytes,
+ * so the generic pf_revert_text_rewrite splice machinery drives replace
+ * undo/redo exactly. */
+int pf_replace_object(pf_context context, pf_document document, int page_index,
+                      int object_index, const char *source_path_utf8,
+                      const char *receipt_path_utf8)
+{
+	fz_context *ctx = (fz_context *)context;
+	fz_document *doc = (fz_document *)document;
+	pdf_document *pdf = NULL;
+	pf_text_op_s *ops = NULL;
+	int nops = 0, opcap = 0;
+	pf_text_op_s *op = NULL;
+	int nstreams = 0;
+	FILE *fh = NULL;
+	int i, j = 0;
+	unsigned char *oldbytes = NULL;
+	size_t oldlen = 0, offset = 0, name_start = 0, name_end = 0;
+	char newname[PF_MAX_TOKEN_NAME + 4];
+	char newtok[PF_MAX_TOKEN_NAME + 8];
+	size_t newlen;
+	char *b64old = NULL, *b64new = NULL;
+	fz_image *img = NULL;
+	pdf_obj *ximg = NULL;
+	int status = PF_ERR;
+
+	if (ctx == NULL || doc == NULL || source_path_utf8 == NULL ||
+	    receipt_path_utf8 == NULL)
+	{
+		return PF_ERR;
+	}
+
+	fz_var(pdf);
+	fz_var(ops);
+	fz_var(img);
+	fz_var(ximg);
+	fz_try(ctx)
+	{
+		pdf = as_pdf_document(ctx, doc);
+		if (pdf == NULL)
+		{
+			fz_throw(ctx, FZ_ERROR_GENERIC, "pf_replace_object: not a PDF document");
+		}
+		{
+			pdf_obj *resources = NULL;
+			if (pf_collect_ops(ctx, pdf, page_index, &resources, &nstreams,
+			                   &ops, &nops, &opcap) != PF_OK)
+			{
+				fz_throw(ctx, FZ_ERROR_GENERIC, "pf_replace_object: could not walk the page content");
+			}
+		}
+
+		for (i = 0; i < nops; i++)
+		{
+			pf_text_op_s *o = &ops[i];
+			if (o->kind != PF_OBJ_OP_DO)
+			{
+				continue;
+			}
+			if (j == object_index)
+			{
+				op = o;
+				break;
+			}
+			j++;
+		}
+		if (op == NULL)
+		{
+			fz_throw(ctx, FZ_ERROR_GENERIC, "pf_replace_object: object index out of range");
+		}
+
+		/* 1. Load + embed the replacement image as a new XObject. */
+		img = fz_new_image_from_file(ctx, source_path_utf8);
+		if (img == NULL)
+		{
+			fz_throw(ctx, FZ_ERROR_GENERIC, "pf_replace_object: cannot load the replacement image");
+		}
+		ximg = pdf_add_image(ctx, pdf, img);
+
+		/* 2. Pick a unique new name and register it on the page's /XObject dict. */
+		{
+			pdf_obj *pageobj = pdf_lookup_page_obj(ctx, pdf, page_index);
+			pdf_obj *resources = pdf_dict_get(ctx, pageobj, PDF_NAME(Resources));
+			pdf_obj *xobjs = NULL;
+			pdf_obj *newnameobj = NULL;
+			int n = object_index;
+			int found;
+			if (resources == NULL)
+			{
+				resources = pdf_new_dict(ctx, pdf, 4);
+				pdf_dict_put(ctx, pageobj, PDF_NAME(Resources), resources);
+				pdf_drop_obj(ctx, resources);
+				resources = pdf_dict_get(ctx, pageobj, PDF_NAME(Resources));
+			}
+			xobjs = pdf_dict_get(ctx, resources, PDF_NAME(XObject));
+			if (xobjs == NULL)
+			{
+				xobjs = pdf_new_dict(ctx, pdf, 4);
+				pdf_dict_put(ctx, resources, PDF_NAME(XObject), xobjs);
+			}
+			do
+			{
+				found = 0;
+				PF_SNPRINTF(newname, sizeof(newname), _TRUNCATE, "PfImgR%d", n++);
+				/* Ensure the generated name is not already in use in this page. */
+				if (newnameobj != NULL)
+				{
+					pdf_drop_obj(ctx, newnameobj);
+					newnameobj = NULL;
+				}
+				newnameobj = pdf_new_name(ctx, newname);
+				if (pdf_dict_get(ctx, xobjs, newnameobj) != NULL)
+				{
+					found = 1;
+				}
+			}
+			while (found);
+			pdf_dict_put(ctx, xobjs, newnameobj, ximg);
+			if (newnameobj != NULL)
+			{
+				pdf_drop_obj(ctx, newnameobj);
+			}
+		}
+
+		/* 3. Locate the old name token immediately before the `Do` operator and
+		 * splice only that token, leaving the cm and the rest untouched. */
+		{
+			pdf_obj *obj = pf_page_stream_obj(ctx, pdf, page_index,
+			                                  op->stream_index, &nstreams);
+			fz_buffer *buf;
+			unsigned char *data;
+			size_t len, p;
+			if (obj == NULL)
+			{
+				fz_throw(ctx, FZ_ERROR_GENERIC, "pf_replace_object: content stream missing");
+			}
+			buf = pdf_load_stream(ctx, obj);
+			len = fz_buffer_storage(ctx, buf, &data);
+
+			/* op->span_end is the past-the-end of the `Do` operator. */
+			if (op->span_end < 3 || op->span_end > len)
+			{
+				fz_drop_buffer(ctx, buf);
+				fz_throw(ctx, FZ_ERROR_GENERIC, "pf_replace_object: Do span outside the content stream");
+			}
+			p = op->span_end - 2; /* start of `Do` */
+			while (p > 0 && (data[p - 1] == ' ' || data[p - 1] == '\t' ||
+			                 data[p - 1] == '\r' || data[p - 1] == '\n'))
+			{
+				p--;
+			}
+			name_end = p;                  /* one past the last name char */
+			while (p > 0 && data[p - 1] != '/')
+			{
+				p--;
+			}
+			if (p == 0)
+			{
+				fz_drop_buffer(ctx, buf);
+				fz_throw(ctx, FZ_ERROR_GENERIC, "pf_replace_object: no name token before Do");
+			}
+			name_start = p - 1;            /* the leading '/' */
+			offset = name_start;
+			oldlen = name_end - name_start;
+			if (oldlen == 0)
+			{
+				fz_drop_buffer(ctx, buf);
+				fz_throw(ctx, FZ_ERROR_GENERIC, "pf_replace_object: old name token is empty");
+			}
+			oldbytes = (unsigned char *)malloc(oldlen);
+			if (oldbytes == NULL)
+			{
+				fz_drop_buffer(ctx, buf);
+				fz_throw(ctx, FZ_ERROR_GENERIC, "pf_replace_object: out of memory");
+			}
+			memcpy(oldbytes, data + offset, oldlen);
+			fz_drop_buffer(ctx, buf);
+		}
+
+		newlen = (size_t)PF_SNPRINTF(newtok, sizeof(newtok), _TRUNCATE, "/%s", newname);
+		if (newlen == (size_t)-1 || newlen > sizeof(newtok))
+		{
+			fz_throw(ctx, FZ_ERROR_GENERIC, "pf_replace_object: new name token is too long");
+		}
+		if (pf_splice_stream(ctx, pdf, page_index, op->stream_index, offset,
+		                     oldlen, (const unsigned char *)newtok, newlen) != PF_OK)
+		{
+			fz_throw(ctx, FZ_ERROR_GENERIC, "pf_replace_object: content stream splice failed");
+		}
+
+		fh = fopen(receipt_path_utf8, "wb");
+		if (fh == NULL)
+		{
+			fz_throw(ctx, FZ_ERROR_GENERIC, "pf_replace_object: cannot open receipt file");
+		}
+		b64old = (char *)calloc(oldlen / 3 * 4 + 8, 1);
+		b64new = (char *)calloc(newlen / 3 * 4 + 8, 1);
+		if (b64old == NULL || b64new == NULL)
+		{
+			fclose(fh);
+			fh = NULL;
+			fz_throw(ctx, FZ_ERROR_GENERIC, "pf_replace_object: out of memory writing the receipt");
+		}
+		pf_b64_encode(oldbytes, oldlen, b64old);
+		pf_b64_encode((const unsigned char *)newtok, newlen, b64new);
+		fprintf(fh, "PF-TRW\t1\n");
+		fprintf(fh, "R\t%d\t%llu\t%llu\t%llu\n", op->stream_index,
+		        (unsigned long long)offset, (unsigned long long)oldlen,
+		        (unsigned long long)newlen);
+		fprintf(fh, "O\t%s\n", b64old);
+		fprintf(fh, "N\t%s\n", b64new);
+		fclose(fh);
+		fh = NULL;
+
+		status = PF_OK;
+	}
+	fz_catch(ctx)
+	{
+		caught_message(ctx);
+	}
+
+	if (img != NULL)
+	{
+		fz_drop_image(ctx, img);
+	}
+	pf_free_text_ops(ops, nops);
+	free(oldbytes);
+	free(b64old);
+	free(b64new);
+	if (fh != NULL)
+	{
+		fclose(fh);
+	}
+	return status;
+}

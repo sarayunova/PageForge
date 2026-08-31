@@ -520,9 +520,10 @@ surfacing wired into the interactive path).
 ## Outstanding / next slices after 2F
 
 - **2E-native:** **DONE** — see the dedicated "# Phase 2 — FR-EDIT slice 2E-native" section below.
-- **FR-EDIT-04 full replace:** the content-stream transform now lists and
-  move/resizes image/vector `Do` invocations natively; swapping the XObject
-  stream (replace interior) is the deferred, highest-fidelity-risk tail.
+- **FR-EDIT-04 image/vector replace:** **DONE** — see the dedicated
+  "# Phase 2 — FR-EDIT slice 2E-native: FR-EDIT-04 replace" section below. The
+  native `pf_replace_object` embeds a new XObject and splices only the name token
+  before `Do`, preserving the bounding box while swapping the painted interior.
 - **Interactive object edit UI (2E follow-on):** the WPF overlay covers text runs;
   click-to-move/resize/replace objects on the page image is deferred with the
   native transform.
@@ -571,8 +572,8 @@ pass is complete and green.
   points), reusing the existing engine gate+temp-file+receipt pattern.
 - `MuPdfEngine.cs` — `ListObjectsAsync` / `MoveResizeObjectAsync` implemented
   for real (validate id, gate, temp-file, parser/receipt; on failure surface the
-  shim error). `ReplaceObjectAsync` stays a stub raising `NotSupportedException`
-  (2E-native tail).
+  shim error). `ReplaceObjectAsync` was the stub at this slice's close; the
+  native replace lands in the FR-EDIT-04 section below.
 
 ### Test + verification (all green)
 
@@ -603,3 +604,60 @@ pass is complete and green.
   /p:PlatformToolset=v143` against the already-built static libs — fast and
   deterministic. A subsequent managed build copies the fresh DLL to output via
   the csproj `PreserveNewest` `None`/`Link` item.
+
+## Phase 2 — FR-EDIT slice 2E-native: FR-EDIT-04 replace (completion)
+
+**Scope:** the deferred, highest-fidelity-risk tail of the object seams is now
+real: `ReplaceObjectAsync` works on the real shim. A replace preserves the
+object's bounding box exactly and swaps only the painted interior, driven by a
+content-stream name-token splice so the existing receipt machinery gives
+faithful undo/redo.
+
+### Native (`native/PageForge.MuPdfShim/mupdf_shim.c`, `mupdf_shim.h`)
+
+- New export `pf_replace_object(ctx, doc, page_index, object_index,
+  source_path_utf8, receipt_path_utf8)`:
+  1. Loads the replacement raster via `fz_new_image_from_file` and embeds it as a
+     new XObject via `pdf_add_image`.
+  2. Registers it on the page's `/Resources /XObject` dict under a unique
+     generated name (`/PfImgR<n>`, verified unused), creating the Resources or
+     XObject dict if absent (`pdf_new_dict(ctx, pdf, cap)` — note 1.28 signature
+     takes the doc).
+  3. Locates the old name token immediately before the `Do` operator (scan
+     backward from `span_end - 2` past whitespace to the last `/`) and splices
+     ONLY that token in the content stream via `pf_splice_stream` — the `cm`
+     matrix and every other byte are untouched, so position/size do not change.
+  4. Writes a `PF-TRW` receipt whose O/N = the old/new name-token bytes; the
+     original XObject stays in resources, so an undo that re-splices the old
+     name fully restores the prior painted image.
+- Native probe on `scan-letters.pdf` (object 0 `/IMG`): receipt
+  `R 0 21 4 8`, `O /IMG` → `N /PfImgR0`; render size changed 3965→15275 bytes
+  after replace; **undo was byte-exact** — post-undo render SHA equals the
+  pre-replace SHA (`76FFB4…5D29`); redo re-applied cleanly.
+
+### Managed (`src/PageForge.MuPdfInterop/`)
+
+- `MuPdfShimBindings.cs` — `pf_replace_object` DllImport.
+- `MuPdfEngine.cs` — `ReplaceObjectAsync` implemented for real (validates object
+  id + source path, gate, temp-file, `pf_replace_object`, parses the receipt,
+  surfaces shim errors). `PdfObjectReplacement` (`SourcePath` + `Format`) is
+  validated; the native loads the image directly from the file.
+
+### Test + verification (all green)
+
+- Fidelity **35/35** (was 31; +4 rows of new
+  `ObjectReplaceFidelityTests.Object_replace_persists_across_save_reopen`,
+  theory over the corpus). Each image-bearing page's first object is replaced
+  with a rendered raster of that same page (a genuine, valid, distinct PNG),
+  then undo/redo splices round-trip exactly, save/reopen persists, and the page
+  still renders. `scan-letters.pdf` is the image-bearing doc; the text-only docs
+  still exercise the empty-list path.
+- Core **114/114.** WPF build **0 warnings / 0 errors**. `--smoke` **EXIT=0**
+  (`rewritten=True undo=True redo=True persists=True`, corpus dogfood zero
+  crashes).
+- Render byte-identity preserved after this second shim rebuild: golden diff
+  gate re-run — spike == mutool == wpfproof `sample-phase0-p1-*.png` are still
+  byte-identical (single SHA-256 `5d2501313a03…45c`), and the
+  `Corpus_commit_matches_the_pinned_manifest_hash` gate still matches every
+  pinned `sha256` in `manifest.psd1`.
+- Build used the same fast targeted shim-only MSBuild path as 2E-native.

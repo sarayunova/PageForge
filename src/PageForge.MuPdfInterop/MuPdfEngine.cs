@@ -712,6 +712,10 @@ public sealed class MuPdfEngine : IPdfEngine
 
     public ValueTask<PdfTextEditReceipt> ReplaceObjectAsync(
         int pageIndex, string objectId, PdfObjectReplacement replacement, CancellationToken cancellationToken = default)
+        => ReplaceObjectCoreAsync(pageIndex, objectId, replacement, cancellationToken);
+
+    private async ValueTask<PdfTextEditReceipt> ReplaceObjectCoreAsync(
+        int pageIndex, string objectId, PdfObjectReplacement replacement, CancellationToken ct)
     {
         if (pageIndex < 0)
         {
@@ -723,9 +727,52 @@ public sealed class MuPdfEngine : IPdfEngine
         ArgumentException.ThrowIfNullOrEmpty(replacement.SourcePath);
         ArgumentException.ThrowIfNullOrEmpty(replacement.Format);
 
-        throw new NotSupportedException(
-            "FR-EDIT-04 image/vector replace is not implemented in the native engine yet " +
-            "(slice 2E covers the Core command layer; the MuPDF content-stream transform is 2E-native).");
+        if (!int.TryParse(objectId, NumberStyles.Integer, CultureInfo.InvariantCulture, out int objectIndex)
+            || objectIndex < 0)
+        {
+            throw new ArgumentException($"The object id '{objectId}' does not name a known object.", nameof(objectId));
+        }
+
+        if (!File.Exists(replacement.SourcePath))
+        {
+            throw new FileNotFoundException("The replacement image does not exist.", replacement.SourcePath);
+        }
+
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            RequireDocument();
+
+            string receiptPath = Path.Combine(Path.GetTempPath(), $"pageforge-replreceipt-{Guid.NewGuid():N}.txt");
+            try
+            {
+                if (MuPdfShimBindings.pf_replace_object(
+                        _context, _document, pageIndex, objectIndex,
+                        Utf8Z(replacement.SourcePath), Utf8Z(receiptPath))
+                    != MuPdfShimBindings.PfOk)
+                {
+                    throw new InvalidOperationException(
+                        $"Failed to replace object {objectId} on page {pageIndex}: {LastError()}");
+                }
+
+                if (!File.Exists(receiptPath))
+                {
+                    throw new InvalidOperationException(
+                        $"Replacing object {objectId} produced no undo receipt for page {pageIndex}.");
+                }
+
+                string[] lines = await File.ReadAllLinesAsync(receiptPath, ct).ConfigureAwait(false);
+                return TextEditReceiptSerializer.Parse(lines);
+            }
+            finally
+            {
+                TryDeleteFile(receiptPath);
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
     }
 
     private static string BuildSpec(AnnotBuildSpec a)
