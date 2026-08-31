@@ -1,0 +1,31 @@
+<UserControl x:Class="PageForge.App.Wpf.Views.ObjectEditView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+    </UserControl.Resources>
+
+    <DockPanel Background="#3a3a3a">
+        <!-- Object-edit toolbar -->
+        <Border DockPanel.Dock="Top" Background="#2b2b2b" Padding="6,4">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="Object edit" Foreground="#9df" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,10,0" />
+                <TextBlock x:Name="HintText" Text="Click an object to select; drag to move; drag a handle to resize."
+                           Foreground="#bbb" VerticalAlignment="Center" Margin="0,0,10,0" />
+                <Button Content="Replace…" Click="Replace_Click" x:Name="ReplaceButton" Padding="8,3"
+                        IsEnabled="False" ToolTip="Pick a PNG/JPEG to paint inside the selected object's box" />
+                <Separator Margin="6,0" Width="1" Background="#555" />
+                <Button Content="↩ Undo" Click="Undo_Click" x:Name="UndoButton" Padding="8,3" />
+                <Button Content="↪ Redo" Click="Redo_Click" x:Name="RedoButton" Padding="8,3" />
+            </StackPanel>
+        </Border>
+
+        <!-- Page + overlay -->
+        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#3a3a3a">
+            <Grid x:Name="PageHost" Background="White" Margin="24">
+                <Image x:Name="PageImage" Stretch="None" SnapsToDevicePixels="True" />
+                <Canvas x:Name="Overlay" IsHitTestVisible="True" ClipToBounds="True" />
+            </Grid>
+        </ScrollViewer>
+    </DockPanel>
+</UserControl>

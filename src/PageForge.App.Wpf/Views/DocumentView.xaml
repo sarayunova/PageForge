@@ -50,6 +50,8 @@
                 <TextBlock Text="Edit" Foreground="#aaa" VerticalAlignment="Center" Margin="0,0,6,0" />
                 <ToggleButton x:Name="EditModeToggle" Content="✎ text" Checked="EditModeToggle_Changed" Unchecked="EditModeToggle_Changed"
                               Padding="8,3" ToolTip="Click a word on the page to edit it; edits grow the box and warn on collision" />
+                <ToggleButton x:Name="ObjectModeToggle" Content="⬒ object" Checked="ObjectModeToggle_Changed" Unchecked="ObjectModeToggle_Changed"
+                              Padding="8,3" ToolTip="Select, move, resize, or replace image/vector objects on the page" />
                 <Button Content="↩ Undo" Click="EditUndo_Click" Padding="8,3" ToolTip="Undo last edit (Ctrl+Z)" />
                 <Button Content="↪ Redo" Click="EditRedo_Click" Padding="8,3" ToolTip="Redo last undone edit (Ctrl+Y)" />
                 <Separator Margin="6,0" Width="1" Background="#555" />
@@ -146,7 +148,9 @@
             <StatusBar DockPanel.Dock="Bottom" Background="#2b2b2b">
                 <TextBlock x:Name="StatusText" Foreground="#bbb" />
             </StatusBar>
-            <ListBox x:Name="PageList" Background="#3a3a3a"
+            <Grid>
+                <locals:ObjectEditView x:Name="ObjectView" Visibility="Collapsed" />
+                <ListBox x:Name="PageList" Background="#3a3a3a"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                      VirtualizingPanel.IsVirtualizing="True"
                      VirtualizingPanel.VirtualizationMode="Recycling"
@@ -180,6 +184,7 @@
                     </DataTemplate>
                 </ListBox.ItemTemplate>
             </ListBox>
+            </Grid>
         </DockPanel>
     </DockPanel>
 </UserControl>

@@ -72,6 +72,11 @@ public partial class DocumentView : UserControl
 
         _vm.ApplyZoomToPages();
 
+        if (ObjectView.Visibility == Visibility.Visible)
+        {
+            ObjectView.Refresh();
+        }
+
         RefreshAnnotationsIfNeeded();
     }
 
@@ -118,6 +123,11 @@ public partial class DocumentView : UserControl
         PageIndicatorText.Text = _vm.PageIndicator;
         ZoomText.Text = $"{_vm.Zoom * 100.0:0}%";
         StatusText.Text = _vm.Status;
+
+        if (ObjectView.Visibility == Visibility.Visible)
+        {
+            ObjectView.Refresh();
+        }
     }
 
     private void Previous_Click(object sender, RoutedEventArgs e)
@@ -425,8 +435,33 @@ public partial class DocumentView : UserControl
 
     private void EditModeToggle_Changed(object sender, RoutedEventArgs e)
     {
+        if (EditModeToggle?.IsChecked == true && ObjectModeToggle?.IsChecked == true)
+        {
+            ObjectModeToggle.IsChecked = false;
+        }
+
         StatusText.Text = (EditModeToggle?.IsChecked == true)
             ? "Edit mode: click a word on the page to replace its text"
+            : _vm?.Status ?? string.Empty;
+    }
+
+    private void ObjectModeToggle_Changed(object sender, RoutedEventArgs e)
+    {
+        if (ObjectModeToggle?.IsChecked == true && EditModeToggle?.IsChecked == true)
+        {
+            EditModeToggle.IsChecked = false;
+        }
+
+        bool on = ObjectModeToggle?.IsChecked == true;
+        if (on && _vm is not null)
+        {
+            ObjectView.SetContext(_vm);
+        }
+
+        ObjectView.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        PageList.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
+        StatusText.Text = on
+            ? "Object edit mode: select, move, resize, or replace image/vector objects"
             : _vm?.Status ?? string.Empty;
     }
 

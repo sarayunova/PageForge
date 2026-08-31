@@ -524,9 +524,10 @@ surfacing wired into the interactive path).
   "# Phase 2 — FR-EDIT slice 2E-native: FR-EDIT-04 replace" section below. The
   native `pf_replace_object` embeds a new XObject and splices only the name token
   before `Do`, preserving the bounding box while swapping the painted interior.
-- **Interactive object edit UI (2E follow-on):** the WPF overlay covers text runs;
-  click-to-move/resize/replace objects on the page image is deferred with the
-  native transform.
+- **Interactive object edit UI (2E follow-on):** **DONE** — see the dedicated
+  "# Phase 2 — FR-EDIT slice 2E-native: interactive object edit UI" section
+  below. The WPF `⬒ object` mode overlays the page with selectable/movable/
+  resizable/replaceable object boxes.
 - **WinAppDriver UI smoke (TSD §8):** Phase 1+; the headless `--smoke` remains the
   stand-in.
 
@@ -661,3 +662,52 @@ faithful undo/redo.
   `Corpus_commit_matches_the_pinned_manifest_hash` gate still matches every
   pinned `sha256` in `manifest.psd1`.
 - Build used the same fast targeted shim-only MSBuild path as 2E-native.
+
+## Phase 2 — FR-EDIT slice 2E-native: interactive object edit UI (completion)
+
+**Scope:** the final FR-EDIT edit-mode tail — a real, interactive object-edit surface
+in the WPF proof. It gives the user click-to-select, drag-to-move, drag-a-handle-to-
+resize, and replace of image/vector page objects, all driven through the existing
+Core command stack so object edits share the FR-EDIT-05 undo/redo history with text
+edits.
+
+### WPF (`src/PageForge.App.Wpf/`)
+
+- New `Views/ObjectEditView.xaml(.cs)` — a dedicated object-edit surface: the current
+  page rendered at the viewer DPI with a transparent `Canvas` overlay on top.
+  - Every `PdfPageObject` from `ListObjectsAsync` gets a dashed box drawn at its
+    PDF-bounds mapped to screen pixels via `scale = RenderDpi/72` (bottom-left PDF
+    origin → top-left pixel origin, mirroring the text-edit hit-test).
+  - Click selects (topmost-under-cursor wins); the selected box gets a solid accent
+    border + 8 resize handles (NW/N/NE/E/SE/S/SW/W).
+  - Drag inside the box moves it; dragging a handle resizes that edge; live preview
+    updates the box while dragging and PDF points are mapped back on mouse-up.
+  - On mouse-up, `MoveResizeObjectAsync(id, bounds)` is committed via an
+    `ObjectEditCommand` push (undoable/redoable); the overlay then re-lists so the
+    drawn boxes reflect engine truth after the transform (byte-splice machinery).
+  - A `Replace…` button lets the user pick a PNG/JPEG/BMP/GIF; the extension maps to
+    a raster `Format` and `ReplaceObjectAsync(id, replacement)` commits a
+    `ReplaceObjectCommand` push (box preserved, interior swapped, undoable).
+  - The surface re-renders + re-lists whenever the current page changes (nav/zoom)
+    or after undo/redo, so boxes never drift from geometry.
+- `ViewModels/DocumentTabViewModel.cs` — added `ListObjectsAsync`, and two commit
+  methods that take the `_editGate`, push the Core `ObjectEditCommand` /
+  `ReplaceObjectCommand`, set status, and refresh the current page render —
+  mirroring `EditTextRunAsync` so object edits stay on the one serialized lane.
+- `Views/DocumentView.xaml(.cs)` — added an `⬒ object` ToggleButton beside the `✎ text`
+  one; toggling swaps the center pane between the page `ListBox` and the
+  `ObjectEditView` (the two edit modes are mutually exclusive). `Refresh()` /
+  `RefreshAndScroll()` re-sync the overlay while object mode is active.
+
+### Test + verification (all green)
+
+- No new managed/fidelity tests needed: the engine/Core object APIs are already
+  covered by `ObjectEditFidelityTests` and `ObjectReplaceFidelityTests`; this slice
+  only adds the interactive presentation layer on top of them.
+- Core **114/114**, Fidelity **35/35** (golden manifest hash intact).
+- WPF build **0 warnings / 0 errors**. `--smoke` **EXIT=0** with the rebuilt shim
+  (edit proof `rewritten=True undo=True redo=True persists=True`, corpus dogfood
+  zero crashes).
+- The solution-level failure remains confined to the not-buildable-on-this-machine
+  WinUI `src/PageForge.App` project (pre-existing `AsBuffer`/XamlCompiler limitation,
+  `winui-build` lane only, continue-on-error) — the managed-only lane is green.

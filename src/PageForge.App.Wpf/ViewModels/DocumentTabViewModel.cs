@@ -573,6 +573,58 @@ public sealed class DocumentTabViewModel : ObservableObject
         }
     }
 
+    /// <summary>Lists the image/vector objects of the currently displayed page
+    /// (FR-EDIT-04) for interactive selection in the object-edit overlay.</summary>
+    public async Task<IReadOnlyList<PdfPageObject>> ListObjectsAsync(CancellationToken ct = default)
+    {
+        GuardPageCount();
+        int page = Math.Min(_doc.CurrentPage, _doc.PageCount - 1);
+        return await _doc.Engine.ListObjectsAsync(page, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Moves/resizes the object identified by <paramref name="objectId"/>
+    /// to <paramref name="newBounds"/> through the FR-EDIT-05 command stack
+    /// (FR-EDIT-04 interactive transform). Undo/redo via the shared stack.</summary>
+    public async Task MoveResizeObjectAsync(string objectId, PdfRect newBounds, CancellationToken ct = default)
+    {
+        await _editGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            GuardPageCount();
+            int page = Math.Min(_doc.CurrentPage, _doc.PageCount - 1);
+            await _editStack
+                .PushAsync(new ObjectEditCommand(_doc.Engine, page, objectId, newBounds), ct).ConfigureAwait(false);
+            Status = $"moved/resized object {objectId} (undo available)";
+            await RefreshCurrentPageRenderAsync(ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            _editGate.Release();
+        }
+    }
+
+    /// <summary>Replaces the interior of the object identified by
+    /// <paramref name="objectId"/> with <paramref name="replacement"/> through the
+    /// FR-EDIT-05 command stack (FR-EDIT-04 interactive replace). The bounding box
+    /// is preserved; undo/redo via the shared stack.</summary>
+    public async Task ReplaceObjectAsync(string objectId, PdfObjectReplacement replacement, CancellationToken ct = default)
+    {
+        await _editGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            GuardPageCount();
+            int page = Math.Min(_doc.CurrentPage, _doc.PageCount - 1);
+            await _editStack
+                .PushAsync(new ReplaceObjectCommand(_doc.Engine, page, objectId, replacement), ct).ConfigureAwait(false);
+            Status = $"replaced object {objectId} (undo available)";
+            await RefreshCurrentPageRenderAsync(ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            _editGate.Release();
+        }
+    }
+
     /// <summary>Undoes the most recent edit on the FR-EDIT-05 stack, if any.</summary>
     public async Task UndoEditAsync(CancellationToken ct = default)
     {
