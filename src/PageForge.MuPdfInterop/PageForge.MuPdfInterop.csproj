@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>PageForge.MuPdfInterop</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PageForge.Core\PageForge.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\native\out\PageForge.MuPdfShim\Release\pageforge_mupdf.dll"
+          Link="pageforge_mupdf.dll"
+          CopyToOutputDirectory="PreserveNewest"
+          Visible="false"
+          Condition="Exists('..\..\native\out\PageForge.MuPdfShim\Release\pageforge_mupdf.dll')" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,36 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+out/
+native/out/
+TestResults/
+
+# Artifacts (playbook: gitignored except committed golden corpus)
+artifacts/
+!artifacts/**/.gitkeep
+tests/PageForge.Fidelity.Tests/golden/**/*.png
+
+# Visual Studio
+.vs/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Native tooling noise
+*.pdb
+*.ipdb
+*.iobj
+*.ilk
+*.exp
+
+# OpenCode agent config (node_modules)
+.opencode/node_modules/
+.opencode/package.json
+.opencode/package-lock.json
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store

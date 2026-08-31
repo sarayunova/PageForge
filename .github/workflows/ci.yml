@@ -1,0 +1,104 @@
+# Copyright (c) 2026 LiVi Software Company
+# SPDX-License-Identifier: AGPL-3.0-only
+# This file is part of PageForge. See LICENSE for the full license text.
+#
+# Phase 0 CI skeleton. Three lanes:
+#   1. native-build  : builds AGPL MuPDF + the PageForge shim via build-mupdf.ps1
+#   2. managed-build : downloads the shim, builds + tests the managed solution, runs the fidelity
+#                      render proof, byte-compares engine output against mutool.
+#   3. winui-build   : builds the WinUI 3 shell (src/PageForge.App). Needs the UWP/MSIX MSBuild
+#                      tasks that the windows-latest image provides; non-fatal in Phase 0 until
+#                      the local/CI environment story is finalized (see AGENTS.md).
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  DOTNET_NOLOGO: 'true'
+  DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
+
+jobs:
+  native-build:
+    name: MuPDF native + shim
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build MuPDF + shim
+        shell: pwsh
+        run: ./native/build-mupdf.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-shim
+          path: |
+            native/out/PageForge.MuPdfShim/Release/pageforge_mupdf.dll
+            native/out/_work/mupdf-1.28.3-source/platform/win32/x64/Release/mutool.exe
+
+  managed-build:
+    name: Managed build + tests + fidelity proof
+    runs-on: windows-latest
+    needs: [native-build]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-shim
+          path: native/out/PageForge.MuPdfShim/Release
+      - name: Restore + build managed projects (WinUI shell builds in its own lane)
+        shell: pwsh
+        run: |
+          $managed = @(
+            'src/PageForge.Core/PageForge.Core.csproj',
+            'src/PageForge.MuPdfInterop/PageForge.MuPdfInterop.csproj',
+            'src/PageForge.App.Wpf/PageForge.App.Wpf.csproj',
+            'tests/PageForge.RenderSpike/PageForge.RenderSpike.csproj',
+            'tests/PageForge.Core.Tests/PageForge.Core.Tests.csproj',
+            'tests/PageForge.Fidelity.Tests/PageForge.Fidelity.Tests.csproj')
+          foreach ($p in $managed) { dotnet build $p -c Release -warnaserror }
+      - name: Test
+        shell: pwsh
+        run: |
+          dotnet test tests/PageForge.Core.Tests -c Release --no-build
+          dotnet test tests/PageForge.Fidelity.Tests -c Release --no-build
+      - name: Render proof + engine/mutool byte-compare
+        shell: pwsh
+        run: |
+          Remove-Item artifacts -Recurse -Force -ErrorAction SilentlyContinue
+          & ./src/PageForge.App.Wpf/bin/Release/net8.0-windows/PageForge.App.Wpf.exe --smoke
+          $mutool = Resolve-Path 'native/out/_work/mupdf-1.28.3-source/platform/win32/x64/Release/mutool.exe'
+          dotnet run -c Release --project tests/PageForge.RenderSpike -- `
+            tools/sample-pdf/sample-phase0.pdf --out artifacts --mutool-path $mutool
+          $hashes = Get-ChildItem artifacts -Filter *.png | ForEach-Object {
+            (Get-FileHash $_.FullName -Algorithm SHA256).Hash }
+          $unique = $hashes | Sort-Object -Unique
+          if ($unique.Count -ne 1) {
+            Write-Error "render artifacts are NOT byte-identical: $($hashes -join ', ')"
+            exit 1
+          }
+          Write-Host "all renders byte-identical: $($unique[0])"
+
+  winui-build:
+    name: WinUI shell build
+    runs-on: windows-latest
+    needs: [managed-build]
+    continue-on-error: true # Phase 0: image must carry UWP/MSIX build tasks; revisit with target env
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-shim
+          path: native/out/PageForge.MuPdfShim/Release
+      - name: Build WinUI app
+        shell: pwsh
+        run: |
+          dotnet build src/PageForge.App/PageForge.App.csproj -c Release `
+            -p:Platform=x64 -p:RuntimeIdentifier=win-x64

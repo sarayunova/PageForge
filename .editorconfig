@@ -1,0 +1,26 @@
+# AGPL v3.0 License header template — paste into every new source file:
+#
+# // Copyright (c) 2026 LiVi Software Company
+# // SPDX-License-Identifier: AGPL-3.0-only
+# // This file is part of PageForge. See LICENSE for the full license text.
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+indent_style = space
+indent_size = 4
+trim_trailing_whitespace = true
+
+[*.{cs,csx}]
+indent_size = 4
+dotnet_sort_system_directives_first = true
+csharp_new_line_before_open_brace = all
+
+[*.{xaml,csproj,xml,jsonc,props,targets}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false

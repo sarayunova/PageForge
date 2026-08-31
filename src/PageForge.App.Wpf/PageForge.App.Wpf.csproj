@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    WPF-fallback viewer: the runnable desktop proof for the viewer (FR-VIEW) until the
+    WinUI app (src/PageForge.App) can be built on a machine with the VS UWP/MSIX build
+    workload. Proves App -> Interop -> Core -> shim -> MuPDF, now as a multi-doc viewer
+    (tabs, continuous/single, zoom, rotation, thumbnails, outline, full-text search).
+    The canonical product shell remains WinUI 3 in src/PageForge.App; this project is a
+    documented fallback proof, not product code. Never delete until WinUI builds locally.
+  -->
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>PageForge.App.Wpf</RootNamespace>
+    <UseWPF>true</UseWPF>
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PageForge.MuPdfInterop\PageForge.MuPdfInterop.csproj" />
+    <ProjectReference Include="..\PageForge.Core\PageForge.Core.csproj" />
+  </ItemGroup>
+
+</Project>

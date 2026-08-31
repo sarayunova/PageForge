@@ -1,0 +1,10 @@
+MSBuild version 17.14.51+25f168cee for .NET Framework
+
+  mupdf_shim.c
+     Creating library ..\out\PageForge.MuPdfShim\Release\pageforge_mupdf.lib and object ..\out\PageForge.MuPdfShim\Release\pageforge_mupdf.exp
+  Generating code
+  1 of 35107 functions (<0.1%) were compiled, the rest were copied from previous compilation.
+    1 functions were new in current compilation
+    0 functions had inline decision re-evaluated but remain unchanged
+  Finished generating code
+  PageForge.MuPdfShim.vcxproj -> C:\Users\shoth\OneDrive\Desktop\Claude code 1\pageforge\native\out\PageForge.MuPdfShim\Release\pageforge_mupdf.dll
