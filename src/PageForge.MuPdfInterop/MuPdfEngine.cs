@@ -865,6 +865,87 @@ public sealed class MuPdfEngine : IPdfEngine
         }
     }
 
+    public ValueTask CreateFormFieldAsync(
+        int pageIndex, FormFieldSpec spec, CancellationToken cancellationToken = default)
+        => CreateFormFieldCoreAsync(pageIndex, spec, cancellationToken);
+
+    private async ValueTask CreateFormFieldCoreAsync(
+        int pageIndex, FormFieldSpec spec, CancellationToken ct)
+    {
+        if (pageIndex < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(pageIndex));
+        }
+
+        ArgumentNullException.ThrowIfNull(spec);
+        ArgumentException.ThrowIfNullOrEmpty(spec.Name);
+
+        if (spec.Kind != FormFieldKind.Text)
+        {
+            throw new NotSupportedException(
+                $"Creating a {spec.Kind} form field is not supported; only {FormFieldKind.Text} fields can be created.");
+        }
+
+        if (spec.MaxLength < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(spec), "MaxLength cannot be negative.");
+        }
+
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            RequireDocument();
+
+            string specPath = Path.Combine(Path.GetTempPath(), $"pageforge-field-spec-{Guid.NewGuid():N}.txt");
+            try
+            {
+                await File.WriteAllTextAsync(specPath, BuildFormFieldSpec(spec), JobUtf8, ct).ConfigureAwait(false);
+
+                if (MuPdfShimBindings.pf_create_field(_context, _document, pageIndex, Utf8Z(specPath))
+                    != MuPdfShimBindings.PfOk)
+                {
+                    throw new InvalidOperationException(
+                        $"Failed to create a form field on page {pageIndex}: {LastError()}");
+                }
+            }
+            finally
+            {
+                TryDeleteFile(specPath);
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    private static string BuildFormFieldSpec(FormFieldSpec s)
+    {
+        // Matches the mupdf_shim.c pf_create_field spec format.
+        var sb = new StringBuilder();
+        sb.Append("K\tTXT\n");
+        sb.Append("N\t").Append(s.Name).Append('\n');
+        sb.Append("R\t").Append(s.Bounds.X0).Append('\t').Append(s.Bounds.Y0)
+          .Append('\t').Append(s.Bounds.X1).Append('\t').Append(s.Bounds.Y1).Append('\n');
+        if (s.Flags != 0)
+        {
+            sb.Append("F\t").Append(s.Flags).Append('\n');
+        }
+        if (s.MaxLength > 0)
+        {
+            sb.Append("M\t").Append(s.MaxLength).Append('\n');
+        }
+        if (s.Quadding != FormFieldJustification.Left)
+        {
+            sb.Append("Q\t").Append((int)s.Quadding).Append('\n');
+        }
+        if (s.BorderWidth != 1 && s.BorderWidth > 0)
+        {
+            sb.Append("W\t").Append(s.BorderWidth).Append('\n');
+        }
+        return sb.ToString();
+    }
+
     public ValueTask FlattenFormAsync(CancellationToken cancellationToken = default)
         => FlattenFormCoreAsync(cancellationToken);
 

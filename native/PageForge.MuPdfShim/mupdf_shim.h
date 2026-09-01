@@ -305,6 +305,17 @@ PF_EXPORT int pf_set_widget_value(pf_context context, pf_document document,
 // interactive. Call pf_save_document to persist. Returns PF_OK/PF_ERR.
 PF_EXPORT int pf_bake_widgets(pf_context context, pf_document document);
 
+// Creates a new AcroForm text field on `page_index` (0-based) of the open
+// document, reading a UTF-8 spec file at spec_path_utf8 (see mupdf_shim.c
+// pf_create_field for the spec format: K kind, N name, R rect, F /Ff flags,
+// M /MaxLen, Q quadding, W border width). The widget is registered on the page
+// and appended to the AcroForm /Fields array; /DA is "/Helv 12 Tf 0 g" and the
+// appearance is generated so the blank field is visible. Call pf_save_document
+// to persist; then list/fill it with pf_list_widgets/pf_set_widget_value.
+// Returns PF_OK/PF_ERR.
+PF_EXPORT int pf_create_field(pf_context context, pf_document document,
+                              int page_index, const char *spec_path_utf8);
+
 #ifdef __cplusplus
 }
 #endif

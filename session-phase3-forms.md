@@ -73,6 +73,77 @@ list/fill/reject/flatten contract (7 tests → Core 114→121).
 
 ## Non-goals / next
 
-- FR-FORM-02 (create new fields with validation types) deferred — needs low-level AcroForm
-  `/Fields` array + widget annotation construction (no `pdf_create_field` in MuPDF 1.28.3).
+- Tesseract OCR / FR-OCR and signature/redaction FR-SEC are later Phase 3 slices.
+
+---
+
+# Phase 3 — FR-FORM slice 3B: create form fields (FR-FORM-02)
+
+**Scope:** Implements FR-FORM-02 — create a new AcroForm field end to end through the real
+MuPDF shim, plus an interactive WPF "New text field…" UI. **Text fields only** (`/FT /Tx`):
+checkbox/radio need manual `/AP` appearance streams, which MuPDF's `pdf_write_widget_appearance`
+refuses for `/Btn` (throws) — explicitly out of scope this slice.
+
+**Status:** **DONE** — Core 124/124, Fidelity 40/40 (incl. new
+`Create_field_fills_then_flattens_to_static_content`), WPF build 0/0, `--smoke` EXIT=0
+(full dogfood incl. form-application.pdf), goldendiff invariant intact (single SHA
+`5d250131…`), corpus manifest pins unchanged.
+
+## Native shim (`native/PageForge.MuPdfShim/mupdf_shim.c/.h`)
+
+- **`pf_create_field(ctx, doc, page, spec_path)`** (exported, verified via dumpbin). Reads a
+  TSV/line spec: `K\tTXT` (kind), `N\t<name>` (/T), `R\tx0\ty0\x1\ty1` (rect), `F\t<flags>`
+  (`/Ff`), `M\t<maxlen>` (`/MaxLen`), `Q\t<quadding>` (`/Q`), `W\t<border>` (`/BS`).
+  Builds the field + widget annotation by hand (no `pdf_create_field` in MuPDF 1.28.3) by
+  adapting `pdf_create_signature_widget`:
+  `pdf_create_annot_raw(..., PDF_ANNOT_WIDGET)`, mutates via `pdf_annot_obj`, then registers
+  the object in the AcroForm `/Fields` array (creating `Root/Fields`+`/AcroForm` if absent).
+  Sets `/FT /Tx`, `/DA "/Helv 12 Tf 0 g"`, `/F PDF_ANNOT_IS_PRINT`, then `pdf_update_widget`
+  to generate `/AP`. Wrapped in `pdf_begin_operation`/`pdf_end_operation` (abandon on error,
+  `pdf_delete_annot` cleanup).
+- **Gotcha (already known):** `pdf_annot` is opaque — `annot->obj` is illegal out-of-package
+  (`error C2037`); must use the public `pdf_annot_obj(ctx, annot)` accessor.
+- **Fonts:** text fields auto-acquire the base-14 `/Helv` Helvetica via `add_required_fonts`
+  (pdf-appearance.c); verified in the produced PDF (`mutool info` shows `18 0 R Helvetica`).
+
+## Managed layer
+
+- `MuPdfShimBindings.cs` — `pf_create_field` P/Invoke.
+- `IPdfEngine.CreateFormFieldAsync(FormFieldSpec, ct)` — rejects non-text kinds with
+  `NotSupportedException` (until a later slice adds `/Btn`).
+- `MuPdfEngine.CreateFormFieldCoreAsync` + `BuildFormFieldSpec` — writes the TSV to a
+  `pageforge-field-spec-{Guid}.txt`, calls the shim, refreshes the page-level field list.
+- `FormFieldModels.cs` — new `FormFieldSpec` record, `FormFieldFlags` constant class
+  (`ReadOnly=1`, `Required=1<<1`, `Multiline=1<<12`, `Comb=1<<24`), `FormFieldJustification`
+  enum. Note: the earlier invented `FormFieldFlags.MaxLengthPlaceholderOrNone()` placeholder
+  was removed in favor of `Required|Comb` + `MaxLength: 8`.
+
+## Tests
+
+- Core: `FakePdfEngine` gained `FormFieldsCreated` tracker + `CreateFormFieldAsync` (silently
+  appends a `PdfFormField`, rejects non-text). `FormFillTests` adds 3 tests (lists back,
+  fillable, rejects non-text). Core 114→124.
+- Fidelity: `Create_field_fills_then_flattens_to_static_content` — create a required/comb
+  text field on page 0 of the preferred corpus PDF, assert field list grows +1 and fill
+  round-trips, flatten+save, reopen has no widgets, render PNG. Fixed a doc-comment typo
+  (`flatten,  save` → `flatten, save`).
+
+## End-to-end (mutool)
+
+`form-create.created.pdf` (7220 B) + `.p1.png` (14304 B): `mutool info` opens clean (4 pages,
+auto-provisioned Helvetica), `mutool draw -F text` shows the filled comb digits
+`1 2 3 - 4 5 6 - 7 8 9 0` as static text, `mutool clean` exit 0, reopen lists no fields
+(flattened).
+
+## WPF UI
+
+`DocumentTabViewModel.CreateFormFieldAsync(FormFieldSpec, ct)` (after `FlattenFormAsync`);
+`FormFillView.xaml` gains a "New text field…" toolbar button wired to `NewField_Click`, which
+shows a `PromptFieldName()` modal and creates a default required field on the current page,
+then re-renders.
+
+## Non-goals / next
+
+- Checkbox/radio field creation (needs manual `/AP` streams — `/Btn` unsupported for
+  auto-appearance) and comb/multiline validation extras are later slices.
 - Tesseract OCR / FR-OCR and signature/redaction FR-SEC are later Phase 3 slices.

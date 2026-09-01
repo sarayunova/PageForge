@@ -4151,6 +4151,318 @@ int pf_move_resize_object(pf_context context, pf_document document,
 	return status;
 }
 
+/* FR-FORM-02: create a new AcroForm text field on `page_index` (0-based) of the
+ * open document, reading a UTF-8 spec file at spec_path_utf8. The spec file uses
+ * one record per line with tab-separated fields (mirroring pf_add_annotation):
+ *
+ *   K\tTXT          field kind (only TXT is supported in this slice; /FT /Tx)
+ *   N\t<field>      field name (the /T entry, shown in list-form results)
+ *   R\tx0\ty0\tx1\ty1   widget rectangle in PDF user space
+ *   F\t<flags>      field /Ff flags (decimal OR):
+ *                   1        = read-only
+ *                   2        = required
+ *                   4096     = multiline (1 << 12)
+ *                   16777216 = comb of width MaxLen (1 << 24)
+ *   M\t<maxlen>     /MaxLen maximum length (decimal, optional)
+ *   Q\t<quadding>   0=left 1=center 2=right (decimal, optional)
+ *   W\t<borderwidth> border width in points (decimal, optional, default 1)
+ *
+ * The widget is registered on the page and appended to the document's AcroForm
+ * /Fields array (creating Root/AcroForm/Fields if absent, as pdf_create_signature_widget
+ * does). The default appearance /DA is set to "/Helv 12 Tf 0 g" (MuPDF
+ * auto-provisions the Helvetica base-14 font when it generates the appearance),
+ * and pdf_update_widget generates the /AP so the blank field is visible. Call
+ * pf_save_document to persist. Returns PF_OK/PF_ERR. */
+int pf_create_field(pf_context context, pf_document document, int page_index,
+                    const char *spec_path_utf8)
+{
+	fz_context *ctx = (fz_context *)context;
+	fz_document *doc = (fz_document *)document;
+	pdf_document *pdf = NULL;
+	pdf_page *page = NULL;
+	pdf_annot *annot = NULL;
+	unsigned char *spec = NULL;
+	char *line;
+	int status = PF_ERR;
+	int ff = 0;
+	int maxlen = 0;
+	int quadding = 0;
+	int borderw = 1;
+	char *field_name = NULL;
+	int have_rect = 0;
+	int have_name = 0;
+	fz_rect rect = { 0, 0, 0, 0 };
+	long filesize;
+
+	if (ctx == NULL || doc == NULL || spec_path_utf8 == NULL || page_index < 0)
+	{
+		return PF_ERR;
+	}
+
+	spec = pf_read_file(spec_path_utf8, NULL);
+	if (spec == NULL)
+	{
+		record_error("pf_create_field: cannot read the spec file");
+		return PF_ERR;
+	}
+
+	filesize = (long)strlen((const char *)spec);
+
+	fz_var(pdf);
+	fz_var(page);
+	fz_var(annot);
+
+	/* Parse the spec line-by-line. Mutates `spec` via next_field/strtok-style
+	 * newline splitting, so keep a separate cursor. */
+	line = (char *)spec;
+	while (line != NULL)
+	{
+		char *nl = strchr(line, '\n');
+		char *eol = nl != NULL ? nl : line + strlen(line);
+		char rec_type;
+		char *p = line;
+		size_t plen = (size_t)(eol - line);
+
+		if (nl != NULL)
+		{
+			*nl = '\0';
+			line = nl + 1;
+		}
+		else
+		{
+			line = NULL;
+		}
+
+		if (plen == 0)
+		{
+			continue;
+		}
+
+		rec_type = p[0];
+		if (rec_type == '\r')
+		{
+			continue;
+		}
+		p++; /* skip the record-type char */
+
+		if (rec_type == 'K')
+		{
+			char *f;
+			size_t fl;
+			if (p[0] == '\t')
+			{
+				p++;
+			}
+			if (next_field(&p, &f, &fl))
+			{
+				if (fl == 3 && f[0] == 'T' && f[1] == 'X' && f[2] == 'T')
+				{
+					/* TXT kind accepted; no-op (only TXT is supported). */
+				}
+				else
+				{
+					record_error("pf_create_field: unsupported field kind (only TXT is supported)");
+					goto cleanup;
+				}
+			}
+			else
+			{
+				record_error("pf_create_field: field kind missing");
+				goto cleanup;
+			}
+		}
+		else if (rec_type == 'N')
+		{
+			char *f;
+			size_t fl;
+			if (p[0] == '\t')
+			{
+				p++;
+			}
+			if (next_field(&p, &f, &fl))
+			{
+				if (field_name != NULL)
+				{
+					free(field_name);
+				}
+				field_name = (char *)malloc(fl + 1);
+				if (field_name == NULL)
+				{
+					record_error("pf_create_field: out of memory copying field name");
+					goto cleanup;
+				}
+				memcpy(field_name, f, fl);
+				field_name[fl] = '\0';
+				have_name = 1;
+			}
+		}
+		else if (rec_type == 'R')
+		{
+			char *r = p;
+			char *f1, *f2, *f3, *f4;
+			size_t l1, l2, l3, l4;
+			if (!next_field(&r, &f1, &l1) || !next_field(&r, &f2, &l2) ||
+			    !next_field(&r, &f3, &l3) || !next_field(&r, &f4, &l4))
+			{
+				record_error("pf_create_field: malformed Rect");
+				goto cleanup;
+			}
+			rect = fz_make_rect((float)strtod(f1, NULL), (float)strtod(f2, NULL),
+			                    (float)strtod(f3, NULL), (float)strtod(f4, NULL));
+			have_rect = 1;
+		}
+		else if (rec_type == 'F')
+		{
+			char *f = p;
+			if (f[0] == '\t')
+			{
+				f++;
+			}
+			ff = (int)strtol(f, NULL, 10);
+		}
+		else if (rec_type == 'M')
+		{
+			char *m = p;
+			if (m[0] == '\t')
+			{
+				m++;
+			}
+			maxlen = (int)strtol(m, NULL, 10);
+		}
+		else if (rec_type == 'Q')
+		{
+			char *q = p;
+			if (q[0] == '\t')
+			{
+				q++;
+			}
+			quadding = (int)strtol(q, NULL, 10);
+		}
+		else if (rec_type == 'W')
+		{
+			char *w = p;
+			if (w[0] == '\t')
+			{
+				w++;
+			}
+			borderw = (int)strtol(w, NULL, 10);
+		}
+		/* unknown record type: ignored */
+	}
+
+	if (!have_rect || !have_name)
+	{
+		record_error(have_name
+			? "pf_create_field: Rect missing"
+			: "pf_create_field: field name missing");
+		goto cleanup;
+	}
+
+	fz_try(ctx)
+	{
+		pdf = as_pdf_document(ctx, doc);
+		if (pdf == NULL)
+		{
+			fz_throw(ctx, FZ_ERROR_GENERIC, "pf_create_field: not a PDF document");
+		}
+		page = pdf_load_page(ctx, pdf, page_index);
+
+		pdf_begin_operation(ctx, pdf, "Create text field");
+
+		annot = pdf_create_annot_raw(ctx, page, PDF_ANNOT_WIDGET);
+
+		{
+			pdf_obj *obj = pdf_annot_obj(ctx, annot);
+			pdf_obj *root = pdf_dict_get(ctx, pdf_trailer(ctx, pdf), PDF_NAME(Root));
+			pdf_obj *acroform = pdf_dict_get(ctx, root, PDF_NAME(AcroForm));
+			pdf_obj *fields;
+			pdf_obj *bs;
+			pdf_obj *mk = NULL;
+
+			if (!acroform)
+			{
+				acroform = pdf_new_dict(ctx, pdf, 2);
+				pdf_dict_put_drop(ctx, root, PDF_NAME(AcroForm), acroform);
+			}
+			fields = pdf_dict_get(ctx, acroform, PDF_NAME(Fields));
+			if (!fields)
+			{
+				fields = pdf_new_array(ctx, pdf, 1);
+				pdf_dict_put_drop(ctx, acroform, PDF_NAME(Fields), fields);
+			}
+
+			pdf_set_annot_rect(ctx, annot, rect);
+			pdf_dict_put(ctx, obj, PDF_NAME(FT), PDF_NAME(Tx));
+			pdf_dict_put_int(ctx, obj, PDF_NAME(F), PDF_ANNOT_IS_PRINT);
+			pdf_dict_put_text_string(ctx, obj, PDF_NAME(T), field_name);
+			pdf_dict_put_text_string(ctx, obj, PDF_NAME(DA), "/Helv 12 Tf 0 g");
+
+			if (ff != 0)
+			{
+				pdf_dict_put_int(ctx, obj, PDF_NAME(Ff), ff);
+			}
+			if (maxlen > 0)
+			{
+				pdf_dict_put_int(ctx, obj, PDF_NAME(MaxLen), maxlen);
+			}
+			if (quadding != 0)
+			{
+				pdf_dict_put_int(ctx, obj, PDF_NAME(Q), quadding);
+			}
+
+			if (borderw > 0)
+			{
+				bs = pdf_dict_put_dict(ctx, obj, PDF_NAME(BS), 2);
+				pdf_dict_put(ctx, bs, PDF_NAME(S), PDF_NAME(S));
+				pdf_dict_put_int(ctx, bs, PDF_NAME(W), borderw);
+			}
+
+			/* Light background + grey border so the empty field is plainly visible. */
+			mk = pdf_dict_put_dict(ctx, obj, PDF_NAME(MK), 3);
+			pdf_dict_put_int(ctx, mk, PDF_NAME(R), 0);
+			{
+				float bg[3] = { 0.95f, 0.95f, 0.95f };
+				pdf_obj *bgarr = pdf_new_array(ctx, pdf, 3);
+				pdf_array_push(ctx, bgarr, pdf_new_real(ctx, bg[0]));
+				pdf_array_push(ctx, bgarr, pdf_new_real(ctx, bg[1]));
+				pdf_array_push(ctx, bgarr, pdf_new_real(ctx, bg[2]));
+				pdf_dict_put_drop(ctx, mk, PDF_NAME(BG), bgarr);
+			}
+			{
+				float bc[3] = { 0.4f, 0.4f, 0.4f };
+				pdf_obj *bcarr = pdf_new_array(ctx, pdf, 3);
+				pdf_array_push(ctx, bcarr, pdf_new_real(ctx, bc[0]));
+				pdf_array_push(ctx, bcarr, pdf_new_real(ctx, bc[1]));
+				pdf_array_push(ctx, bcarr, pdf_new_real(ctx, bc[2]));
+				pdf_dict_put_drop(ctx, mk, PDF_NAME(BC), bcarr);
+			}
+
+			/* Register the widget field in the AcroForm. */
+			pdf_array_push(ctx, fields, obj);
+
+			/* Generate a visible /AP for the (empty) text field. */
+			pdf_update_widget(ctx, annot);
+		}
+
+		pdf_end_operation(ctx, pdf);
+		status = PF_OK;
+	}
+	fz_catch(ctx)
+	{
+		caught_message(ctx);
+		if (annot != NULL && page != NULL)
+		{
+			pdf_abandon_operation(ctx, pdf);
+			pdf_delete_annot(ctx, page, annot);
+		}
+	}
+
+cleanup:
+	free(field_name);
+	free(spec);
+	return status;
+}
+
 // ---------------------------------------------------------------------------
 // FR-FORM AcroForm primitives (slice 3A)
 // ---------------------------------------------------------------------------

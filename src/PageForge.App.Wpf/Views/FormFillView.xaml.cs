@@ -254,4 +254,90 @@ public partial class FormFillView : UserControl
     }
 
     private void Hint(string text) => HintText.Text = text;
+
+    private async void NewField_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm is null)
+        {
+            return;
+        }
+
+        string? name = PromptFieldName();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return;
+        }
+
+        try
+        {
+            // Place the new field near the top-left of the current page, sized and
+            // positioned in PDF points from the on-screen pixel rect.
+            double scale = _scale > 0 ? _scale : 1.0;
+            double wPt = 160.0;
+            double hPt = 22.0;
+            double leftPt = _pixelW / scale * 0.06;
+            double topPt = _pixelH / scale * 0.06;
+
+            var spec = new FormFieldSpec(
+                FormFieldKind.Text,
+                name.Trim(),
+                new PdfRect(leftPt, topPt, leftPt + wPt, topPt + hPt),
+                Flags: FormFieldFlags.Required);
+
+            await _vm.CreateFormFieldAsync(spec).ConfigureAwait(true);
+            Hint($"Created field '{name.Trim()}'. Fill it below or flatten the form.");
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Could not create the field:\n{ex.Message}", "PageForge", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            Refresh();
+        }
+    }
+
+    private static string? PromptFieldName()
+    {
+        var window = new Window
+        {
+            Title = "New text field",
+            Width = 380,
+            SizeToContent = SizeToContent.Height,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Background = new SolidColorBrush(Color.FromRgb(0x2b, 0x2b, 0x2b)),
+            ResizeMode = ResizeMode.NoResize,
+        };
+
+        var grid = new StackPanel { Margin = new Thickness(12) };
+        grid.Children.Add(new TextBlock
+        {
+            Text = "Field name (shown on this page, e.g. TaxRef):",
+            Foreground = Brushes.White,
+            Margin = new Thickness(0, 0, 0, 6),
+        });
+        var nameBox = new TextBox { Width = 330 };
+        grid.Children.Add(nameBox);
+
+        var buttons = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = new Thickness(0, 12, 0, 0),
+        };
+        var ok = new Button { Content = "OK", Width = 80, Margin = new Thickness(0, 0, 6, 0), IsDefault = true };
+        var cancel = new Button { Content = "Cancel", Width = 80, IsCancel = true };
+        buttons.Children.Add(ok);
+        buttons.Children.Add(cancel);
+        grid.Children.Add(buttons);
+
+        window.Content = grid;
+        window.Loaded += (_, _) => { nameBox.Focus(); };
+
+        string? result = null;
+        ok.Click += (_, _) => { result = nameBox.Text; window.DialogResult = true; };
+
+        window.ShowDialog();
+        return string.IsNullOrWhiteSpace(result) ? null : result;
+    }
 }

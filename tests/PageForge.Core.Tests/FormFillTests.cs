@@ -101,6 +101,66 @@ public sealed class FormFillTests
     }
 
     [Fact]
+    public async Task CreateFormFieldAsync_adds_a_new_text_field_that_lists_back()
+    {
+        FakePdfEngine engine = new(1);
+        await using (engine)
+        {
+            var spec = new FormFieldSpec(
+                FormFieldKind.Text,
+                "TaxRef",
+                new PdfRect(170, 650, 420, 672),
+                Flags: FormFieldFlags.Required | FormFieldFlags.Comb,
+                MaxLength: 8);
+
+            await engine.CreateFormFieldAsync(0, spec);
+
+            IReadOnlyList<PdfFormField> fields = await engine.ListFormFieldsAsync(0);
+            Assert.Single(fields);
+            Assert.Equal("TaxRef", fields[0].Name);
+            Assert.Equal(FormFieldKind.Text, fields[0].Kind);
+            Assert.Contains("0:Text:TaxRef", engine.FormFieldsCreated);
+        }
+    }
+
+    [Fact]
+    public async Task CreateFormFieldAsync_new_field_is_immediately_fillable()
+    {
+        FakePdfEngine engine = new(1);
+        await using (engine)
+        {
+            var spec = new FormFieldSpec(
+                FormFieldKind.Text,
+                "Email",
+                new PdfRect(170, 650, 420, 672),
+                MaxLength: 64);
+
+            await engine.CreateFormFieldAsync(0, spec);
+
+            string id = (await engine.ListFormFieldsAsync(0))[0].Id;
+            await engine.SetFormFieldValueAsync(0, id, "grace@example.org");
+
+            Assert.Equal("grace@example.org", engine.StoredFormFields(0)[0].Value);
+        }
+    }
+
+    [Fact]
+    public async Task CreateFormFieldAsync_rejects_non_text_kinds()
+    {
+        FakePdfEngine engine = new(1);
+        await using (engine)
+        {
+            var spec = new FormFieldSpec(
+                FormFieldKind.Checkbox,
+                "Agree",
+                new PdfRect(170, 590, 190, 610));
+
+            await Assert.ThrowsAsync<NotSupportedException>(
+                () => engine.CreateFormFieldAsync(0, spec).AsTask());
+        }
+    }
+
+    [Fact]
     public async Task FlattenFormAsync_marks_the_form_as_flattened()
     {
         FakePdfEngine engine = new(1);

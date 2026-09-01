@@ -139,6 +139,86 @@ public sealed class FormFidelityTests
         }
     }
 
+    /// <summary>
+    /// FR-FORM-02 exit-gate: creating a new AcroForm text field through the real
+    /// MuPDF shim. On the first page of every corpus document we create a required,
+    /// max-length text field, prove it lists back under its name and is immediately
+    /// fillable (text round-trips), then flatten, save, reopen and verify the
+    /// field is baked into static content and no longer interactive, finally
+    /// rendering the page so the created field is visibly present.
+    /// </summary>
+    [Fact]
+    public async Task Create_field_fills_then_flattens_to_static_content()
+    {
+        string name = "form-create";
+        Directory.CreateDirectory(ArtifactRoot);
+
+        string corpusOut = Path.Combine(AppContext.BaseDirectory, $"{name}-{Guid.NewGuid():N}.pdf");
+        try
+        {
+            int pageCount;
+            string createdName = "PR_F2_TaxId";
+
+            await using (MuPdfEngine engine = MuPdfEngine.Create())
+            {
+                string anyPdf = Directory.GetFiles(CorpusDir, "*.pdf", SearchOption.TopDirectoryOnly)
+                    .FirstOrDefault()!;
+                Assert.False(string.IsNullOrEmpty(anyPdf), "Corpus is empty.");
+
+                PdfDocumentInfo info = await engine.OpenAsync(anyPdf);
+                pageCount = info.PageCount;
+                Assert.True(pageCount > 0);
+
+                IReadOnlyList<PdfFormField> before = await engine.ListFormFieldsAsync(0);
+                int beforeCount = before.Count;
+
+                var spec = new FormFieldSpec(
+                    FormFieldKind.Text,
+                    createdName,
+                    new PdfRect(72, 700, 320, 722),
+                    Flags: FormFieldFlags.Required | FormFieldFlags.Comb,
+                    MaxLength: 20);
+
+                await engine.CreateFormFieldAsync(0, spec);
+
+                IReadOnlyList<PdfFormField> afterCreate = await engine.ListFormFieldsAsync(0);
+                Assert.Equal(beforeCount + 1, afterCreate.Count);
+
+                PdfFormField created = afterCreate.Single(f => f.Name == createdName);
+                Assert.Equal(FormFieldKind.Text, created.Kind);
+
+                await engine.SetFormFieldValueAsync(0, created.Id, "123-456-7890");
+                IReadOnlyList<PdfFormField> afterFill = await engine.ListFormFieldsAsync(0);
+                Assert.Equal("123-456-7890", afterFill.Single(f => f.Id == created.Id).Value);
+
+                await engine.FlattenFormAsync();
+                await engine.SaveAsAsync(corpusOut);
+            }
+
+            Assert.True(File.Exists(corpusOut), "Created+filled document did not save.");
+
+            // Reopen: the created field must be baked into static content.
+            await using (MuPdfEngine reader = MuPdfEngine.Create())
+            {
+                PdfDocumentInfo reopened = await reader.OpenAsync(corpusOut);
+                Assert.Equal(pageCount, reopened.PageCount);
+
+                IReadOnlyList<PdfFormField> widgets = await reader.ListFormFieldsAsync(0);
+                Assert.Empty(widgets);
+
+                RenderedPdfPage png = await reader.RenderPageToPngAsync(0, 72);
+                Assert.True(png.PngBytes.Length > 100, "Created-field page did not render.");
+                await File.WriteAllBytesAsync(Artifact($"{name}.created.p1.png"), png.PngBytes);
+            }
+
+            File.Copy(corpusOut, Artifact($"{name}.created.pdf"), overwrite: true);
+        }
+        finally
+        {
+            TryDelete(corpusOut);
+        }
+    }
+
     private static void TryDelete(string path)
     {
         try

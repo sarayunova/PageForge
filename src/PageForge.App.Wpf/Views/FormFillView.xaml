@@ -13,6 +13,8 @@
                            VerticalAlignment="Center" Margin="0,0,10,0" />
                 <TextBlock x:Name="HintText" Text="Set a field value; values appear on the page at once."
                            Foreground="#bbb" VerticalAlignment="Center" Margin="0,0,10,0" />
+                <Button Content="New text field…" Click="NewField_Click" Padding="8,3"
+                        ToolTip="Create a new AcroForm text field on this page (with required/max-length validation)" />
                 <Separator Margin="6,0" Width="1" Background="#555" />
                 <Button Content="Flatten form…" Click="Flatten_Click" Padding="8,3"
                         ToolTip="Bake every field value into static page content (fields stop being interactive)" />

@@ -671,6 +671,27 @@ public sealed class DocumentTabViewModel : ObservableObject
         }
     }
 
+    /// <summary>Creates a new AcroForm text field from <paramref name="spec"/> on
+    /// the current page (FR-FORM-02) and re-renders it so the blank field shows.
+    /// The new field becomes immediately fillable via
+    /// <see cref="SetFormFieldValueAsync"/>.</summary>
+    public async Task CreateFormFieldAsync(FormFieldSpec spec, CancellationToken ct = default)
+    {
+        await _editGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            GuardPageCount();
+            int page = Math.Min(_doc.CurrentPage, _doc.PageCount - 1);
+            await _doc.Engine.CreateFormFieldAsync(page, spec, ct).ConfigureAwait(false);
+            Status = $"created form field '{spec.Name}'";
+            await RefreshCurrentPageRenderAsync(ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            _editGate.Release();
+        }
+    }
+
     /// <summary>Undoes the most recent edit on the FR-EDIT-05 stack, if any.</summary>
     public async Task UndoEditAsync(CancellationToken ct = default)
     {

@@ -64,6 +64,9 @@ internal sealed class FakePdfEngine : IPdfEngine
     /// <summary>Records each SetFormFieldValueAsync action as "page:idx:value", oldest first.</summary>
     public List<string> FormValueSet { get; } = new();
 
+    /// <summary>Records each CreateFormFieldAsync action as "page:kind:name", oldest first.</summary>
+    public List<string> FormFieldsCreated { get; } = new();
+
     /// <summary>Seeds a page's AcroForm fields.</summary>
     public void AddStoredFormField(int pageIndex, PdfFormField field)
     {
@@ -279,6 +282,35 @@ internal sealed class FakePdfEngine : IPdfEngine
 
         list[idx] = list[idx] with { Value = value };
         FormValueSet.Add($"{pageIndex}:{fieldId}:{value}");
+    }
+
+    public async ValueTask CreateFormFieldAsync(
+        int pageIndex, FormFieldSpec spec, CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        await Task.Yield();
+
+        if (spec.Kind != FormFieldKind.Text)
+        {
+            throw new NotSupportedException(
+                $"Creating a {spec.Kind} form field is not supported; only {FormFieldKind.Text} fields can be created.");
+        }
+
+        if (!_formFields.TryGetValue(pageIndex, out var list))
+        {
+            list = new List<PdfFormField>();
+            _formFields[pageIndex] = list;
+        }
+
+        string id = list.Count.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        list.Add(new PdfFormField(
+            FormFieldKind.Text,
+            id,
+            spec.Name,
+            spec.Bounds,
+            string.Empty));
+
+        FormFieldsCreated.Add($"{pageIndex}:{spec.Kind}:{spec.Name}");
     }
 
     public async ValueTask FlattenFormAsync(CancellationToken cancellationToken = default)

@@ -103,5 +103,9 @@ internal static class MuPdfShimBindings
     internal static extern int pf_bake_widgets(nint context, nint document);
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int pf_create_field(
+        nint context, nint document, int pageIndex, [In] byte[] specPathUtf8);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     internal static extern IntPtr pf_last_error();
 }

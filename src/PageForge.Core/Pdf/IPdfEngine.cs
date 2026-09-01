@@ -242,6 +242,23 @@ public interface IPdfEngine : IAsyncDisposable
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Creates a new AcroForm text field on a 0-based page from <paramref name="spec"/>
+    /// (FR-FORM-02). Only <see cref="FormFieldKind.Text"/> is supported in this slice;
+    /// any other kind throws <see cref="NotSupportedException"/>. The widget is registered
+    /// on the page and in the document's AcroForm /Fields, with the default appearance set
+    /// and the blank field made visible, then is immediately fillable via
+    /// <see cref="ListFormFieldsAsync"/>/<see cref="SetFormFieldValueAsync"/>. Basic validation
+    /// (required, read-only, max length, comb/multi-line rendering) is driven by
+    /// <see cref="FormFieldSpec.Flags"/>, <see cref="FormFieldSpec.MaxLength"/> and
+    /// <see cref="FormFieldSpec.Quadding"/>. The document is mutated in memory — persist it
+    /// with <see cref="SaveAsAsync"/>.
+    /// </summary>
+    ValueTask CreateFormFieldAsync(
+        int pageIndex,
+        FormFieldSpec spec,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Flattens every AcroForm field in the open document into static page content
     /// (FR-FORM-01): after this the fields are no longer interactive, and their
     /// current values render as ordinary page content. The document is mutated in
