@@ -55,6 +55,31 @@ internal sealed class FakePdfEngine : IPdfEngine
     /// <summary>Per-page image/vector objects for FR-EDIT-04 tests.</summary>
     private readonly Dictionary<int, List<PdfPageObject>> _objects = new();
 
+    /// <summary>Per-page AcroForm fields for FR-FORM-01 tests.</summary>
+    private readonly Dictionary<int, List<PdfFormField>> _formFields = new();
+
+    /// <summary>Whether <see cref="FlattenFormAsync"/> was called.</summary>
+    public bool FormFlattened { get; private set; }
+
+    /// <summary>Records each SetFormFieldValueAsync action as "page:idx:value", oldest first.</summary>
+    public List<string> FormValueSet { get; } = new();
+
+    /// <summary>Seeds a page's AcroForm fields.</summary>
+    public void AddStoredFormField(int pageIndex, PdfFormField field)
+    {
+        if (!_formFields.TryGetValue(pageIndex, out var list))
+        {
+            list = new List<PdfFormField>();
+            _formFields[pageIndex] = list;
+        }
+
+        list.Add(field);
+    }
+
+    /// <summary>The current form fields of a page (values reflect applied edits).</summary>
+    public IReadOnlyList<PdfFormField> StoredFormFields(int pageIndex)
+        => _formFields.TryGetValue(pageIndex, out var list) ? list.ToArray() : Array.Empty<PdfFormField>();
+
     /// <summary>Object geometry edits keyed by the released receipt, for undo/redo routing.</summary>
     private readonly Dictionary<PdfTextEditReceipt, (int PageIndex, string ObjectId, PdfPageObject Before, PdfPageObject After)> _objectEdits = new();
 
@@ -220,6 +245,47 @@ internal sealed class FakePdfEngine : IPdfEngine
         list[idx] = after;
         _objectEdits[receipt] = (pageIndex, objectId, before, after);
         return receipt;
+    }
+
+    public ValueTask<IReadOnlyList<PdfFormField>> ListFormFieldsAsync(
+        int pageIndex, CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        _formFields.TryGetValue(pageIndex, out var list);
+        return ValueTask.FromResult<IReadOnlyList<PdfFormField>>(list?.ToArray() ?? Array.Empty<PdfFormField>());
+    }
+
+    public async ValueTask SetFormFieldValueAsync(
+        int pageIndex, string fieldId, string value, CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        await Task.Yield();
+
+        if (!_formFields.TryGetValue(pageIndex, out var list))
+        {
+            throw new ArgumentOutOfRangeException(nameof(fieldId));
+        }
+
+        int idx = list.FindIndex(f => f.Id == fieldId);
+        if (idx < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(fieldId));
+        }
+
+        if (list[idx].Kind == FormFieldKind.Signature || list[idx].Kind == FormFieldKind.Button)
+        {
+            throw new InvalidOperationException($"Cannot fill a {list[idx].Kind} field.");
+        }
+
+        list[idx] = list[idx] with { Value = value };
+        FormValueSet.Add($"{pageIndex}:{fieldId}:{value}");
+    }
+
+    public async ValueTask FlattenFormAsync(CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        await Task.Yield();
+        FormFlattened = true;
     }
 
     private static byte[] CrawlBytes(PdfRect r)

@@ -212,4 +212,40 @@ public interface IPdfEngine : IAsyncDisposable
         string objectId,
         PdfObjectReplacement replacement,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Lists the fillable AcroForm fields on a 0-based page (FR-FORM-01). Returns
+    /// an empty list when the page has no widget fields. Each result carries a
+    /// stable <see cref="PdfFormField.Id"/> (the zero-based widget index on the
+    /// page) that is handed back verbatim to <see cref="SetFormFieldValueAsync"/>.
+    /// </summary>
+    ValueTask<IReadOnlyList<PdfFormField>> ListFormFieldsAsync(
+        int pageIndex,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Sets the value of the AcroForm field identified by <paramref name="fieldId"/>
+    /// (as returned by <see cref="ListFormFieldsAsync"/>) on a 0-based page to
+    /// <paramref name="value"/> (FR-FORM-01). For text fields the value becomes the
+    /// field's text; for combo/list boxes it selects the matching option; for
+    /// checkbox/radio buttons "Yes"/"On" checks and "Off" unchecks. The field's on-page
+    /// appearance is regenerated. The open document is mutated in memory — persist it
+    /// with <see cref="SaveAsAsync"/>.
+    ///
+    /// Throws when the page/field id is unknown, the field is a signature or other
+    /// non-fillable type, or the value cannot be applied.
+    /// </summary>
+    ValueTask SetFormFieldValueAsync(
+        int pageIndex,
+        string fieldId,
+        string value,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Flattens every AcroForm field in the open document into static page content
+    /// (FR-FORM-01): after this the fields are no longer interactive, and their
+    /// current values render as ordinary page content. The document is mutated in
+    /// memory — persist it with <see cref="SaveAsAsync"/>.
+    /// </summary>
+    ValueTask FlattenFormAsync(CancellationToken cancellationToken = default);
 }

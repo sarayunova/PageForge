@@ -625,6 +625,52 @@ public sealed class DocumentTabViewModel : ObservableObject
         }
     }
 
+    /// <summary>Returns the fillable AcroForm fields of the current page
+    /// (FR-FORM-01).</summary>
+    public async Task<IReadOnlyList<PdfFormField>> ListFormFieldsAsync(CancellationToken ct = default)
+    {
+        GuardPageCount();
+        int page = Math.Min(_doc.CurrentPage, _doc.PageCount - 1);
+        return await _doc.Engine.ListFormFieldsAsync(page, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Sets the value of the AcroForm field <paramref name="fieldId"/> on
+    /// the current page and re-renders it (FR-FORM-01 fill).</summary>
+    public async Task SetFormFieldValueAsync(string fieldId, string value, CancellationToken ct = default)
+    {
+        await _editGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            GuardPageCount();
+            int page = Math.Min(_doc.CurrentPage, _doc.PageCount - 1);
+            await _doc.Engine.SetFormFieldValueAsync(page, fieldId, value, ct).ConfigureAwait(false);
+            Status = $"filled field {fieldId}";
+            await RefreshCurrentPageRenderAsync(ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            _editGate.Release();
+        }
+    }
+
+    /// <summary>Flattens every AcroForm field in the document into static page
+    /// content (FR-FORM-01 flatten) and re-renders the current page.</summary>
+    public async Task FlattenFormAsync(CancellationToken ct = default)
+    {
+        await _editGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            GuardPageCount();
+            await _doc.Engine.FlattenFormAsync(ct).ConfigureAwait(false);
+            Status = "flattened form (fields are no longer interactive)";
+            await RefreshCurrentPageRenderAsync(ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            _editGate.Release();
+        }
+    }
+
     /// <summary>Undoes the most recent edit on the FR-EDIT-05 stack, if any.</summary>
     public async Task UndoEditAsync(CancellationToken ct = default)
     {

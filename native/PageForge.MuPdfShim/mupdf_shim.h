@@ -260,6 +260,51 @@ PF_EXPORT int pf_replace_object(pf_context context, pf_document document,
                                 const char *source_path_utf8,
                                 const char *receipt_path_utf8);
 
+// ---------------------------------------------------------------------------
+// FR-FORM AcroForm primitives (slice 3A). These give the managed layer what it
+// needs to implement form fill (FR-FORM-01): a per-page listing of the widgets
+// (fields), a primitive that sets one widget's value with its appearance
+// regenerated, and a primitive that flattens every widget into static page
+// content. Apart from listing, they mutate the open document in memory; the
+// caller persists with pf_save_document.
+// ---------------------------------------------------------------------------
+
+// Writes the AcroForm widgets on page `page_index` (0-based) to out_path_utf8
+// as UTF-8 TSV, one line per widget, in deterministic page order:
+//     widget_index<TAB>type_num<TAB>field_name<TAB>x0<TAB>y0<TAB>x1<TAB>y1<TAB>value
+//   - widget_index : zero-based index within the page (the value handed back to
+//               pf_set_widget_value); stable within one document state.
+//   - type_num    : enum pdf_widget_type integer (see mupdf/pdf/form.h):
+//               0=Unknown 1=Button 2=Checkbox 3=Combobox 4=Listbox
+//               5=Radiobutton 6=Signature 7=Text.
+//   - field_name  : the field's /T name (Tab/CR/LF replaced with spaces).
+//   - x0,y0,x1,y1 : the widget Rect in PDF points.
+//   - value       : the field's current value (Tab/CR/LF replaced with spaces);
+//               empty when the field has no value.
+// Writes nothing and returns PF_OK when the page has no widgets. Returns
+// PF_ERR on failure.
+PF_EXPORT int pf_list_widgets(pf_context context, pf_document document,
+                              int page_index, const char *out_path_utf8);
+
+// Sets the value of widget `widget_index` (as listed by pf_list_widgets) on
+// page `page_index` (0-based) of the open document to the UTF-8 text read from
+// the file at value_path_utf8 (a single trailing CR/LF is stripped). Every
+// fillable widget type (Text, Combobox/Listbox, Checkbox/Radiobutton/Button) is
+// set through pdf_set_annot_field_value with trigger events ignored — the
+// canonical direct setter that bypasses keystroke/format JavaScript. For
+// checkbox/radio "Yes"/"On" checks, "Off" unchecks. The widget appearance is then
+// regenerated with pdf_update_widget. The document is mutated in memory; call
+// pf_save_document to persist. Signature widgets are not fillable here.
+// Returns PF_OK/PF_ERR.
+PF_EXPORT int pf_set_widget_value(pf_context context, pf_document document,
+                                  int page_index, int widget_index,
+                                  const char *value_path_utf8);
+
+// Flattens every AcroForm widget in the open document into static page content
+// (pdf_bake_document with widgets baked) in memory, so fields are no longer
+// interactive. Call pf_save_document to persist. Returns PF_OK/PF_ERR.
+PF_EXPORT int pf_bake_widgets(pf_context context, pf_document document);
+
 #ifdef __cplusplus
 }
 #endif

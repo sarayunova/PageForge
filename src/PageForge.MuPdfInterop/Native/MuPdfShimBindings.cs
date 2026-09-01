@@ -92,5 +92,16 @@ internal static class MuPdfShimBindings
         [In] byte[] sourcePathUtf8, [In] byte[] receiptPathUtf8);
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int pf_list_widgets(nint context, nint document, int pageIndex, [In] byte[] outPathUtf8);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int pf_set_widget_value(
+        nint context, nint document, int pageIndex, int widgetIndex,
+        [In] byte[] valuePathUtf8);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int pf_bake_widgets(nint context, nint document);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     internal static extern IntPtr pf_last_error();
 }

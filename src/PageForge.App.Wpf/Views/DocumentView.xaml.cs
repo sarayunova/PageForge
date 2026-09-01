@@ -77,6 +77,11 @@ public partial class DocumentView : UserControl
             ObjectView.Refresh();
         }
 
+        if (FormView.Visibility == Visibility.Visible)
+        {
+            FormView.Refresh();
+        }
+
         RefreshAnnotationsIfNeeded();
     }
 
@@ -127,6 +132,11 @@ public partial class DocumentView : UserControl
         if (ObjectView.Visibility == Visibility.Visible)
         {
             ObjectView.Refresh();
+        }
+
+        if (FormView.Visibility == Visibility.Visible)
+        {
+            FormView.Refresh();
         }
     }
 
@@ -440,6 +450,11 @@ public partial class DocumentView : UserControl
             ObjectModeToggle.IsChecked = false;
         }
 
+        if (EditModeToggle?.IsChecked == true && FormModeToggle?.IsChecked == true)
+        {
+            FormModeToggle.IsChecked = false;
+        }
+
         StatusText.Text = (EditModeToggle?.IsChecked == true)
             ? "Edit mode: click a word on the page to replace its text"
             : _vm?.Status ?? string.Empty;
@@ -452,6 +467,11 @@ public partial class DocumentView : UserControl
             EditModeToggle.IsChecked = false;
         }
 
+        if (ObjectModeToggle?.IsChecked == true && FormModeToggle?.IsChecked == true)
+        {
+            FormModeToggle.IsChecked = false;
+        }
+
         bool on = ObjectModeToggle?.IsChecked == true;
         if (on && _vm is not null)
         {
@@ -462,6 +482,32 @@ public partial class DocumentView : UserControl
         PageList.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
         StatusText.Text = on
             ? "Object edit mode: select, move, resize, or replace image/vector objects"
+            : _vm?.Status ?? string.Empty;
+    }
+
+    private void FormModeToggle_Changed(object sender, RoutedEventArgs e)
+    {
+        if (FormModeToggle?.IsChecked == true && EditModeToggle?.IsChecked == true)
+        {
+            EditModeToggle.IsChecked = false;
+        }
+
+        if (FormModeToggle?.IsChecked == true && ObjectModeToggle?.IsChecked == true)
+        {
+            ObjectModeToggle.IsChecked = false;
+        }
+
+        bool on = FormModeToggle?.IsChecked == true;
+        if (on && _vm is not null)
+        {
+            FormView.SetContext(_vm);
+        }
+
+        FormView.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        ObjectView.Visibility = on ? Visibility.Collapsed : ObjectView.Visibility;
+        PageList.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
+        StatusText.Text = on
+            ? "Fill form mode: set field values, then flatten the form to static content"
             : _vm?.Status ?? string.Empty;
     }
 

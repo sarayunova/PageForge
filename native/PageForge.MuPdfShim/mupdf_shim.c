@@ -4151,6 +4151,233 @@ int pf_move_resize_object(pf_context context, pf_document document,
 	return status;
 }
 
+// ---------------------------------------------------------------------------
+// FR-FORM AcroForm primitives (slice 3A)
+// ---------------------------------------------------------------------------
+
+static void pf_write_utf8_field_text(FILE *fh, const char *s)
+{
+	const char *c = s != NULL ? s : "";
+	for (; *c != '\0'; ++c)
+	{
+		char ch = *c;
+		if (ch == '\t' || ch == '\r' || ch == '\n')
+		{
+			ch = ' ';
+		}
+		fputc(ch, fh);
+	}
+}
+
+int pf_list_widgets(pf_context context, pf_document document, int page_index,
+                    const char *out_path_utf8)
+{
+	fz_context *ctx = (fz_context *)context;
+	fz_document *doc = (fz_document *)document;
+	pdf_document *pdf = NULL;
+	pdf_page *page = NULL;
+	pdf_annot *widget;
+	FILE *fh = NULL;
+	int idx = 0;
+	int status = PF_ERR;
+
+	if (ctx == NULL || doc == NULL || out_path_utf8 == NULL || page_index < 0)
+	{
+		return PF_ERR;
+	}
+
+	fz_var(page);
+
+	fz_try(ctx)
+	{
+		pdf = as_pdf_document(ctx, doc);
+		if (pdf == NULL)
+		{
+			fz_throw(ctx, FZ_ERROR_GENERIC, "pf_list_widgets: not a PDF document");
+		}
+		page = pdf_load_page(ctx, pdf, page_index);
+	}
+	fz_catch(ctx)
+	{
+		caught_message(ctx);
+		return PF_ERR;
+	}
+
+	fh = fopen(out_path_utf8, "wb");
+	if (fh == NULL)
+	{
+		record_error("pf_list_widgets: cannot open output file");
+		fz_drop_page(ctx, (fz_page *)page);
+		return PF_ERR;
+	}
+
+	status = PF_OK;
+	fz_var(widget);
+	fz_try(ctx)
+	{
+		for (widget = pdf_first_widget(ctx, page); widget != NULL; widget = pdf_next_widget(ctx, widget))
+		{
+			enum pdf_widget_type wtype = pdf_widget_type(ctx, widget);
+			fz_rect r = pdf_bound_widget(ctx, widget);
+			pdf_obj *obj = pdf_annot_obj(ctx, widget);
+			pdf_obj *t = obj != NULL ? pdf_dict_get(ctx, obj, PDF_NAME(T)) : NULL;
+			pdf_obj *tres = t != NULL ? pdf_resolve_indirect(ctx, t) : NULL;
+			const char *name = tres != NULL ? pdf_to_text_string(ctx, tres) : NULL;
+			const char *value = pdf_annot_field_value(ctx, widget);
+
+			fprintf(fh, "%d\t%d\t", idx, (int)wtype);
+			pf_write_utf8_field_text(fh, name);
+			fprintf(fh, "\t%g\t%g\t%g\t%g\t",
+			        (double)r.x0, (double)r.y0, (double)r.x1, (double)r.y1);
+			pf_write_utf8_field_text(fh, value);
+			fputc('\n', fh);
+			++idx;
+		}
+	}
+	fz_catch(ctx)
+	{
+		status = PF_ERR;
+		caught_message(ctx);
+	}
+
+	fclose(fh);
+	fz_drop_page(ctx, (fz_page *)page);
+	return status;
+}
+
+int pf_set_widget_value(pf_context context, pf_document document, int page_index,
+                        int widget_index, const char *value_path_utf8)
+{
+	fz_context *ctx = (fz_context *)context;
+	fz_document *doc = (fz_document *)document;
+	pdf_document *pdf = NULL;
+	pdf_page *page = NULL;
+	pdf_annot *widget;
+	unsigned char *value = NULL;
+	int idx = 0;
+	int status = PF_ERR;
+
+	if (ctx == NULL || doc == NULL || value_path_utf8 == NULL ||
+	    page_index < 0 || widget_index < 0)
+	{
+		return PF_ERR;
+	}
+
+	value = pf_read_file(value_path_utf8, NULL);
+	if (value == NULL)
+	{
+		record_error("pf_set_widget_value: cannot read the value file");
+		return PF_ERR;
+	}
+
+	{
+		size_t len = strlen((const char *)value);
+		while (len > 0 && (value[len - 1] == '\n' || value[len - 1] == '\r'))
+		{
+			value[--len] = '\0';
+		}
+	}
+
+	fz_var(pdf);
+	fz_var(page);
+	fz_var(widget);
+	fz_try(ctx)
+	{
+		pdf = as_pdf_document(ctx, doc);
+		if (pdf == NULL)
+		{
+			fz_throw(ctx, FZ_ERROR_GENERIC, "pf_set_widget_value: not a PDF document");
+		}
+		page = pdf_load_page(ctx, pdf, page_index);
+
+		widget = pdf_first_widget(ctx, page);
+		while (widget != NULL && idx < widget_index)
+		{
+			widget = pdf_next_widget(ctx, widget);
+			++idx;
+		}
+		if (widget == NULL)
+		{
+			fz_throw(ctx, FZ_ERROR_GENERIC, "pf_set_widget_value: widget index out of range");
+		}
+
+		switch (pdf_widget_type(ctx, widget))
+		{
+		case PDF_WIDGET_TYPE_CHECKBOX:
+		case PDF_WIDGET_TYPE_RADIOBUTTON:
+		case PDF_WIDGET_TYPE_BUTTON:
+		case PDF_WIDGET_TYPE_TEXT:
+		case PDF_WIDGET_TYPE_COMBOBOX:
+		case PDF_WIDGET_TYPE_LISTBOX:
+			// pdf_set_annot_field_value is the canonical direct setter: it routes by
+			// field type (text/button/choice) and, with ignore_trigger_events set,
+			// bypasses keystroke/format JavaScript triggers that may otherwise reject
+			// a legitimate value. For checkbox/radio "Yes"/"On" checks, "Off" unchecks.
+			// NOTE: its return value is a "validation accepted" tri-state, NOT a
+			// success/failure boolean (text fields return 1 on success), so we do not
+			// gate on it — a real failure surfaces as an exception caught by fz_catch.
+			pdf_set_annot_field_value(ctx, pdf, widget, (const char *)value, 1);
+			break;
+		case PDF_WIDGET_TYPE_SIGNATURE:
+			fz_throw(ctx, FZ_ERROR_GENERIC, "pf_set_widget_value: cannot fill a signature field");
+			break;
+		default:
+			break;
+		}
+
+		pdf_update_widget(ctx, widget);
+	}
+	fz_catch(ctx)
+	{
+		caught_message(ctx);
+		if (page != NULL)
+		{
+			fz_drop_page(ctx, (fz_page *)page);
+		}
+		free(value);
+		return PF_ERR;
+	}
+
+	if (page != NULL)
+	{
+		fz_drop_page(ctx, (fz_page *)page);
+	}
+	free(value);
+	status = PF_OK;
+	return status;
+}
+
+int pf_bake_widgets(pf_context context, pf_document document)
+{
+	fz_context *ctx = (fz_context *)context;
+	fz_document *doc = (fz_document *)document;
+	pdf_document *pdf = NULL;
+	int status = PF_ERR;
+
+	if (ctx == NULL || doc == NULL)
+	{
+		return PF_ERR;
+	}
+
+	fz_try(ctx)
+	{
+		pdf = as_pdf_document(ctx, doc);
+		if (pdf == NULL)
+		{
+			fz_throw(ctx, FZ_ERROR_GENERIC, "pf_bake_widgets: not a PDF document");
+		}
+		pdf_bake_document(ctx, pdf, 0, 1);
+	}
+	fz_catch(ctx)
+	{
+		caught_message(ctx);
+		return PF_ERR;
+	}
+
+	status = PF_OK;
+	return status;
+}
+
 /* FR-EDIT-04: replace the interior of the object `object_index` (as listed by
  * pf_list_objects) with the raster image at `source_path_utf8`. The object's
  * bounding box is preserved exactly: the replacement image is embedded as a NEW

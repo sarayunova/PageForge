@@ -775,6 +775,118 @@ public sealed class MuPdfEngine : IPdfEngine
         }
     }
 
+    public ValueTask<IReadOnlyList<PdfFormField>> ListFormFieldsAsync(
+        int pageIndex, CancellationToken cancellationToken = default)
+        => ListFormFieldsCoreAsync(pageIndex, cancellationToken);
+
+    private async ValueTask<IReadOnlyList<PdfFormField>> ListFormFieldsCoreAsync(int pageIndex, CancellationToken ct)
+    {
+        if (pageIndex < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(pageIndex));
+        }
+
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            RequireDocument();
+
+            string outputPath = Path.Combine(Path.GetTempPath(), $"pageforge-widgets-{Guid.NewGuid():N}.txt");
+            try
+            {
+                if (MuPdfShimBindings.pf_list_widgets(_context, _document, pageIndex, Utf8Z(outputPath))
+                    != MuPdfShimBindings.PfOk)
+                {
+                    throw new InvalidOperationException(
+                        $"Failed to list the form fields of page {pageIndex}: {LastError()}");
+                }
+
+                string[] lines = await File.ReadAllLinesAsync(outputPath, ct).ConfigureAwait(false);
+                return WidgetListParser.Parse(lines);
+            }
+            finally
+            {
+                TryDeleteFile(outputPath);
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public ValueTask SetFormFieldValueAsync(
+        int pageIndex, string fieldId, string value, CancellationToken cancellationToken = default)
+        => SetFormFieldValueCoreAsync(pageIndex, fieldId, value, cancellationToken);
+
+    private async ValueTask SetFormFieldValueCoreAsync(
+        int pageIndex, string fieldId, string value, CancellationToken ct)
+    {
+        if (pageIndex < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(pageIndex));
+        }
+
+        ArgumentException.ThrowIfNullOrEmpty(fieldId);
+        ArgumentNullException.ThrowIfNull(value);
+
+        if (!int.TryParse(fieldId, NumberStyles.Integer, CultureInfo.InvariantCulture, out int widgetIndex)
+            || widgetIndex < 0)
+        {
+            throw new ArgumentException($"The form field id '{fieldId}' does not name a known field.", nameof(fieldId));
+        }
+
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            RequireDocument();
+
+            string valuePath = Path.Combine(Path.GetTempPath(), $"pageforge-widgetval-{Guid.NewGuid():N}.txt");
+            try
+            {
+                await File.WriteAllTextAsync(valuePath, value, ct).ConfigureAwait(false);
+
+                if (MuPdfShimBindings.pf_set_widget_value(
+                        _context, _document, pageIndex, widgetIndex, Utf8Z(valuePath))
+                    != MuPdfShimBindings.PfOk)
+                {
+                    throw new InvalidOperationException(
+                        $"Failed to set form field {fieldId} on page {pageIndex}: {LastError()}");
+                }
+            }
+            finally
+            {
+                TryDeleteFile(valuePath);
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public ValueTask FlattenFormAsync(CancellationToken cancellationToken = default)
+        => FlattenFormCoreAsync(cancellationToken);
+
+    private async ValueTask FlattenFormCoreAsync(CancellationToken ct)
+    {
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            RequireDocument();
+
+            if (MuPdfShimBindings.pf_bake_widgets(_context, _document)
+                != MuPdfShimBindings.PfOk)
+            {
+                throw new InvalidOperationException($"Failed to flatten the form: {LastError()}");
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     private static string BuildSpec(AnnotBuildSpec a)
     {
         var spec = new StringBuilder();
