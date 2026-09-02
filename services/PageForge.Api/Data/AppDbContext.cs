@@ -21,6 +21,9 @@ public sealed class AppDbContext : DbContext
     public DbSet<Signer> Signers => Set<Signer>();
     public DbSet<SignatureAuditEvent> SignatureAuditEvents => Set<SignatureAuditEvent>();
     public DbSet<Comment> Comments => Set<Comment>();
+    public DbSet<OcrJob> OcrJobs => Set<OcrJob>();
+    public DbSet<OcrJobItem> OcrJobItems => Set<OcrJobItem>();
+    public DbSet<OcrUsage> OcrUsages => Set<OcrUsage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -158,6 +161,40 @@ public sealed class AppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(c => c.AuthorId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Batch OCR / conversion (FR-BATCH-01)
+        modelBuilder.Entity<OcrJob>(e =>
+        {
+            e.HasIndex(j => j.OwnerId);
+            e.HasIndex(j => j.IdempotencyKey);
+            e.HasIndex(j => j.Status);
+
+            e.HasOne(j => j.Owner)
+                .WithMany()
+                .HasForeignKey(j => j.OwnerId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<OcrJobItem>(e =>
+        {
+            e.HasIndex(i => new { i.OcrJobId, i.DocumentVersionId });
+            e.HasIndex(i => i.Status);
+
+            e.HasOne(i => i.OcrJob)
+                .WithMany(j => j.Items)
+                .HasForeignKey(i => i.OcrJobId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(i => i.DocumentVersion)
+                .WithMany()
+                .HasForeignKey(i => i.DocumentVersionId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<OcrUsage>(e =>
+        {
+            e.HasKey(u => u.UserId);
         });
     }
 }

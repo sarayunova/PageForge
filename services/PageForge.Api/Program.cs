@@ -94,6 +94,13 @@ builder.Services.AddScoped<EsignService>();
 // Team review (FR-TEAM-01)
 builder.Services.AddScoped<TeamReviewService>();
 
+// Batch OCR / conversion (FR-BATCH-01)
+builder.Services.Configure<OcrOptions>(builder.Configuration.GetSection(OcrOptions.SectionName));
+builder.Services.AddSingleton<IOcrJobProcessor, NoopOcrJobProcessor>();
+builder.Services.AddSingleton<OcrJobWorker>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<OcrJobWorker>());
+builder.Services.AddScoped<OcrJobsService>();
+
 // Controllers + OpenAPI
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
