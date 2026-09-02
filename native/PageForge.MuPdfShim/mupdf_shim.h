@@ -399,6 +399,45 @@ PF_EXPORT int pf_ocr_pdf(pf_context context, pf_document document,
                          const char *datadir_utf8,
                          int *out_page_count);
 
+// ---------------------------------------------------------------------------
+// FR-SEC-01 password protection primitives. protect writes a fresh encrypted
+// copy; authenticate answers "does this password open the (encrypted) open
+// document?" so the managed layer can verify a save and later power an unprotect
+// UI. Protecting never mutates the open document.
+// ---------------------------------------------------------------------------
+
+// Applies PDF standard security (RFC 9506 algorithms) to the open document and
+// writes an encrypted copy at out_path_utf8. The open document is NOT modified.
+//
+// method: PDF encryption algorithm, taken from mupdf/pdf/crypt.h:
+//     PDF_ENCRYPT_RC4_40=2  PDF_ENCRYPT_RC4_128=3
+//     PDF_ENCRYPT_AES_128=4 PDF_ENCRYPT_AES_256=5
+// permissions: the document permissions mask bits OR'd together, also from
+// crypt.h (print=1<<2, modify=1<<3, copy=1<<4, annotate=1<<5, form=1<<8,
+// accessibility=1<<9, assemble=1<<10, print-hq=1<<11; the fixed/masked bits are
+// handled by MuPDF). Use the owner password to restrict permissions.
+//
+// opwd_utf8 / upwd_utf8: open (user) and permissions (owner) passwords as
+// UTF-8, each at most 127 bytes (128-byte PDF string limit). Either may be NULL
+// or ""; a non-empty owner with an empty user password creates a document that
+// opens freely but whose permissions the owner password alone can change, and a
+// non-empty user with an empty owner makes the owner and user passwords equal.
+//
+// The output path must not already exist and must not equal the open document's
+// own path. Returns PF_OK/PF_ERR with the reason in pf_last_error.
+PF_EXPORT int pf_save_encrypted(pf_context context, pf_document document,
+                                const char *out_path_utf8,
+                                const char *opwd_utf8, const char *upwd_utf8,
+                                int method, int permissions);
+
+// Writes the authentication status of `password_utf8` against the open
+// (encrypted) document into *out_result: 0 = the password did not match,
+// 1 = matched (the doc is either unencrypted, in which case any password is
+// accepted, or the password opened it). Returns PF_OK/PF_ERR with the reason
+// in pf_last_error.
+PF_EXPORT int pf_auth_password(pf_context context, pf_document document,
+                               const char *password_utf8, int *out_result);
+
 #ifdef __cplusplus
 }
 #endif

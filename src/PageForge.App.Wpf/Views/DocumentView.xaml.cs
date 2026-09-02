@@ -862,6 +862,39 @@ public partial class DocumentView : UserControl
         }
     }
 
+    private async void Protect_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm is null)
+        {
+            return;
+        }
+
+        string? path = AskSavePath("Protected.pdf");
+        if (path is null)
+        {
+            return;
+        }
+
+        var dialog = new ProtectDialog { Owner = Window.GetWindow(this) };
+        if (dialog.ShowDialog() != true || dialog.Options is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _vm.RunProtectAsync(path, dialog.Options);
+            StatusText.Text = _vm.Status;
+
+            // Deliberately NOT opening the protected file here: the viewer has no
+            // password prompt yet, so opening it would render nothing useful.
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Protect failed:\n{ex.Message}", "PageForge", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
     private string? AskSavePath(string suggestedName)
     {
         var dialog = new Microsoft.Win32.SaveFileDialog

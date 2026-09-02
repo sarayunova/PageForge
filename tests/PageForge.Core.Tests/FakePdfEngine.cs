@@ -564,6 +564,41 @@ internal sealed class FakePdfEngine : IPdfEngine
         return result;
     }
 
+    /// <summary>Paths of every <see cref="SaveEncryptedAsync"/> artifact, oldest first (FR-SEC-01).</summary>
+    public List<string> EncryptedOutputs { get; } = new();
+
+    /// <summary>The most recent protect job (output path, options) handed to
+    /// <see cref="SaveEncryptedAsync"/>, for FR-SEC-01 assertions, or null if none.</summary>
+    public (string OutputPath, PdfProtectionOptions? Options)? LastEncrypt { get; private set; }
+
+    /// <summary>Optional hook to simulate a native protect failure; throw to fail.</summary>
+    public Action<(string OutputPath, PdfProtectionOptions? Options)>? OnEncrypt { get; set; }
+
+    /// <summary>Optional hook for <see cref="AuthenticateAsync"/> results; defaults to true.</summary>
+    public Func<bool>? OnAuthenticate { get; set; }
+
+    /// <summary>Writes a fake encrypted-PDF artifact and records the job (FR-SEC-01).</summary>
+    public async ValueTask SaveEncryptedAsync(
+        string outputPath, PdfProtectionOptions? options, CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        await Task.Yield();
+        (string OutputPath, PdfProtectionOptions? Options) job = (outputPath, options);
+        OnEncrypt?.Invoke(job);
+        await File.WriteAllTextAsync(outputPath, "encrypted", cancellationToken);
+        LastEncrypt = job;
+        EncryptedOutputs.Add(outputPath);
+    }
+
+    /// <summary>Answers <see cref="AuthenticateAsync"/> via <see cref="OnAuthenticate"/> (default true).</summary>
+    public async ValueTask<bool> AuthenticateAsync(
+        string password, CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        await Task.Yield();
+        return OnAuthenticate?.Invoke() ?? true;
+    }
+
     public ValueTask DisposeAsync()
     {
         _disposed = true;

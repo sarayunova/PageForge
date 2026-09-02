@@ -5276,3 +5276,150 @@ int pf_ocr_pdf(pf_context context, pf_document document,
 
 	return status;
 }
+
+/*
+ * FR-SEC-01: password-protect the open document by writing a fresh encrypted
+ * copy. RFC 9506/ISO 32000-2 "standard security handler" via MuPDF: the
+ * password strings (each at most 127 UTF-8 bytes to fit the PDF 128-byte
+ * field) run through the AES-256 (or RC4/AES-128) key derivation in
+ * pdf_new_encrypt chain and the per-object stream/filter encodings are applied
+ * by the writer as it serializes. The source document is untouched; the copy
+ * at out_path_utf8 is what carries the security handler.
+ *
+ * Method values are the PDF_ENCRYPT_* algorithm codes from mupdf/pdf/crypt.h
+ * (RC4_40=2 .. AES_256=5). Permissions are the PDF_PERM_* bits from the same
+ * header; MuPDF folds them into the security handler's fixed/masked fields.
+ */
+#define PF_SAVE_ENCRYPTED_MAX_PASSWORD_BYTES 127
+
+int pf_save_encrypted(pf_context context, pf_document document,
+                      const char *out_path_utf8, const char *opwd_utf8,
+                      const char *upwd_utf8, int method, int permissions)
+{
+	fz_context *ctx = (fz_context *)context;
+	fz_document *doc = (fz_document *)document;
+	pdf_document *pdf = NULL;
+	pdf_write_options opts = pdf_default_write_options;
+	int status = PF_ERR;
+
+	if (ctx == NULL || doc == NULL || out_path_utf8 == NULL)
+	{
+		return PF_ERR;
+	}
+
+	if (strlen(out_path_utf8) == 0)
+	{
+		record_error("pf_save_encrypted: empty output path");
+		return PF_ERR;
+	}
+
+	if ((method < PDF_ENCRYPT_RC4_40 || method > PDF_ENCRYPT_AES_256) ||
+	    method == PDF_ENCRYPT_NONE)
+	{
+		record_error("pf_save_encrypted: unsupported encryption method");
+		return PF_ERR;
+	}
+
+	if ((opwd_utf8 != NULL && strlen(opwd_utf8) > PF_SAVE_ENCRYPTED_MAX_PASSWORD_BYTES) ||
+	    (upwd_utf8 != NULL && strlen(upwd_utf8) > PF_SAVE_ENCRYPTED_MAX_PASSWORD_BYTES))
+	{
+		record_error("pf_save_encrypted: password exceeds 127 UTF-8 bytes");
+		return PF_ERR;
+	}
+
+	fz_var(pdf);
+
+	fz_try(ctx)
+	{
+		pdf = as_pdf_document(ctx, doc);
+		if (pdf == NULL)
+		{
+			fz_throw(ctx, FZ_ERROR_GENERIC, "pf_save_encrypted: not a PDF document");
+		}
+
+		opts.do_compress = 1;
+		opts.do_encrypt = method;
+		opts.permissions = permissions;
+		/* MuPDF's write options name the two PDF passwords "owner" (opwd) and
+		 * "user" (upwd). Our ABI parameter order is open-then-permissions, so
+		 * the open (user) password lands in opts.upwd_utf8 and the permissions
+		 * (owner) password lands in opts.opwd_utf8. */
+		snprintf((char *)opts.upwd_utf8, sizeof(opts.upwd_utf8), "%s",
+		         (opwd_utf8 != NULL) ? opwd_utf8 : "");
+		snprintf((char *)opts.opwd_utf8, sizeof(opts.opwd_utf8), "%s",
+		         (upwd_utf8 != NULL) ? upwd_utf8 : "");
+
+		pdf_save_document(ctx, pdf, out_path_utf8, &opts);
+	}
+	fz_catch(ctx)
+	{
+		caught_message(ctx);
+		return PF_ERR;
+	}
+
+	status = PF_OK;
+	return status;
+}
+
+/*
+ * FR-SEC-01: report whether `password_utf8` opens the document currently open
+ * in `document`. A document without a security handler requires no password,
+ * so any supplied password authenticates (out_result = 1); for an encrypted
+ * document, MuPDF's pdf_authenticate_password runs the handler's verification
+ * (the "super" pass that accepts the user or owner password), returning 0 on a
+ * mismatch. Used by the managed layer to confirm a just-written encrypted copy
+ * and to power the later "unprotect" UI. Non-mutating.
+ */
+int pf_auth_password(pf_context context, pf_document document,
+                     const char *password_utf8, int *out_result)
+{
+	fz_context *ctx = (fz_context *)context;
+	fz_document *doc = (fz_document *)document;
+	pdf_document *pdf = NULL;
+	int auth = 0;
+	int status = PF_ERR;
+
+	if (out_result != NULL)
+	{
+		*out_result = 0;
+	}
+
+	if (ctx == NULL || doc == NULL || out_result == NULL)
+	{
+		return PF_ERR;
+	}
+
+	if (password_utf8 == NULL)
+	{
+		password_utf8 = "";
+	}
+
+	fz_var(pdf);
+
+	fz_try(ctx)
+	{
+		pdf = as_pdf_document(ctx, doc);
+		if (pdf == NULL)
+		{
+			fz_throw(ctx, FZ_ERROR_GENERIC, "pf_auth_password: not a PDF document");
+		}
+
+		if (pdf_needs_password(ctx, pdf))
+		{
+			auth = pdf_authenticate_password(ctx, pdf, password_utf8);
+		}
+		else
+		{
+			auth = 1;
+		}
+	}
+	fz_catch(ctx)
+	{
+		caught_message(ctx);
+		return PF_ERR;
+	}
+
+	*out_result = auth ? 1 : 0;
+	status = PF_OK;
+	return status;
+}

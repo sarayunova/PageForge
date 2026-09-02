@@ -339,4 +339,31 @@ public interface IPdfEngine : IAsyncDisposable
         string outputPath,
         OcrOptions? options = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Applies PDF standard security (FR-SEC-01): writes a fresh encrypted copy
+    /// of the open document to <paramref name="outputPath"/>. The open document
+    /// is left open and unmodified; the copy is what carries the security
+    /// handler. Opening the copy without a correct password fails to render.
+    ///
+    /// Pass <c>null</c> for <paramref name="options"/> to use the defaults (see
+    /// <see cref="PdfProtectionOptions"/>): AES-256 with all permissions allowed.
+    /// The output file must not already exist and must not be the engine's own
+    /// open path. Throws when the engine has no open document or the save fails.
+    /// </summary>
+    ValueTask SaveEncryptedAsync(
+        string outputPath,
+        PdfProtectionOptions? options = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reports whether <paramref name="password"/> opens the currently open
+    /// document (FR-SEC-01): <c>true</c> when the document needs no password or
+    /// the password authenticates (user or owner). Non-mutating; lets the shell
+    /// confirm a just-written encrypted copy or verify a password before
+    /// offering an unprotect action. Throws when the engine has no open document.
+    /// </summary>
+    ValueTask<bool> AuthenticateAsync(
+        string password,
+        CancellationToken cancellationToken = default);
 }

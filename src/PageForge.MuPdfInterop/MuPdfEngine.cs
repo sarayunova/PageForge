@@ -1166,6 +1166,78 @@ public sealed class MuPdfEngine : IPdfEngine
         return null;
     }
 
+    public ValueTask SaveEncryptedAsync(
+        string outputPath, PdfProtectionOptions? options, CancellationToken cancellationToken = default)
+        => SaveEncryptedCoreAsync(outputPath, options, cancellationToken);
+
+    private async ValueTask SaveEncryptedCoreAsync(
+        string outputPath, PdfProtectionOptions? options, CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(outputPath);
+
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            RequireDocument();
+
+            string fullPath = Path.GetFullPath(outputPath);
+
+            if (_openPath is not null
+                && string.Equals(fullPath, _openPath, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "Cannot protect a document onto its own path; choose a different output file.");
+            }
+
+            PdfProtectionOptions effective = options ?? new PdfProtectionOptions();
+            (string open, string owner) = effective.ResolveEffectivePasswords();
+
+            if (MuPdfShimBindings.pf_save_encrypted(
+                    _context, _document,
+                    Utf8Z(fullPath),
+                    open.Length == 0 ? null : Utf8Z(open),
+                    owner.Length == 0 ? null : Utf8Z(owner),
+                    (int)effective.Method,
+                    (int)effective.Permissions)
+                != MuPdfShimBindings.PfOk)
+            {
+                TryDeleteFile(fullPath);
+                throw new InvalidOperationException($"Failed to protect the document: {LastError()}");
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public ValueTask<bool> AuthenticateAsync(string password, CancellationToken cancellationToken = default)
+        => AuthenticateCoreAsync(password ?? string.Empty, cancellationToken);
+
+    private async ValueTask<bool> AuthenticateCoreAsync(string password, CancellationToken ct)
+    {
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            RequireDocument();
+
+            if (MuPdfShimBindings.pf_auth_password(
+                    _context, _document,
+                    password.Length == 0 ? null : Utf8Z(password),
+                    out int result)
+                != MuPdfShimBindings.PfOk)
+            {
+                throw new InvalidOperationException($"Failed to verify the password: {LastError()}");
+            }
+
+            return result != 0;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     private static string BuildSpec(AnnotBuildSpec a)
     {
         var spec = new StringBuilder();

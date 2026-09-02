@@ -59,6 +59,7 @@
                 <Button Content="↩ Undo" Click="EditUndo_Click" Padding="8,3" ToolTip="Undo last edit (Ctrl+Z)" />
                 <Button Content="↪ Redo" Click="EditRedo_Click" Padding="8,3" ToolTip="Redo last undone edit (Ctrl+Y)" />
                 <Button Content="⇺ OCR…" Click="Ocr_Click" Padding="8,3" ToolTip="Render a searchable copy: recognize the document's text offline and embed it (FR-OCR-01)" />
+                <Button Content="🔒 Protect…" Click="Protect_Click" Padding="8,3" ToolTip="Write an encrypted copy protected by an open password (FR-SEC-01)" />
                 <Separator Margin="6,0" Width="1" Background="#555" />
                 <TextBox x:Name="SearchBox" Width="200" KeyDown="SearchBox_KeyDown" />
                 <Button Content="Search" Click="Search_Click" Padding="10,3" />

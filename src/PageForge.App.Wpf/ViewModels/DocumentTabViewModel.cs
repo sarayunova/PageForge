@@ -771,6 +771,29 @@ public sealed class DocumentTabViewModel : ObservableObject
         }
     }
 
+    /// <summary>Writes a freshly password-protected copy of the open document to
+    /// <paramref name="outputPath"/> (FR-SEC-01). The open document is left
+    /// untouched; the new file carries the security handler, so opening it
+    /// requires the open password. The shell should NOT auto-open the result —
+    /// the viewer has no password prompt yet.</summary>
+    public async Task RunProtectAsync(string outputPath, PdfProtectionOptions options, CancellationToken ct = default)
+    {
+        GuardPageCount();
+        IsBusy = true;
+        try
+        {
+            await PdfSecurityService.ProtectAsync(_doc.Engine, outputPath, options, ct).ConfigureAwait(false);
+            string methodName = options.Method == PdfEncryptionMethod.Aes256 ? "AES-256"
+                : options.Method == PdfEncryptionMethod.Aes128 ? "AES-128"
+                : options.Method == PdfEncryptionMethod.Rc4_128 ? "RC4-128" : "RC4-40";
+            Status = $"protected: saved {Path.GetFileName(outputPath)} ({methodName}) — the open password unlocks it";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
     /// <summary>Undoes the most recent edit on the FR-EDIT-05 stack, if any.</summary>
     public async Task UndoEditAsync(CancellationToken ct = default)
     {
