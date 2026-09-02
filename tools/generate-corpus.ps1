@@ -199,16 +199,18 @@ function New-Scan {
     @"
 %%MediaBox 0 0 612 792
 %%Font F1 Helvetica Latin
+1 0.6 0.6 rg 72 480 300 130 re f
+0.6 0.8 1 rg 380 620 60 30 re f
+0 0 0 rg
 BT /F1 16 Tf 72 700 Td (SCANNED PAGE ONE) Tj ET
-1 0 0 rg 72 600 300 200 re f
-0 0 1 rg 120 580 60 30 re f
 "@ | Set-Content $srcA -Encoding Ascii
     @"
 %%MediaBox 0 0 612 792
 %%Font F1 Helvetica Latin
-BT /F1 16 Tf 72 700 Td (SCANNED PAGE TWO) Tj ET
 0 1 0 rg 200 500 250 150 re f
 1 1 0 rg 240 480 60 30 re f
+0 0 0 rg
+BT /F1 16 Tf 72 700 Td (SCANNED PAGE TWO) Tj ET
 "@ | Set-Content $srcB -Encoding Ascii
     $pageA = Join-Path $s 'srca.pdf'
     $pageB = Join-Path $s 'srcb.pdf'

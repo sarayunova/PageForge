@@ -692,6 +692,85 @@ public sealed class DocumentTabViewModel : ObservableObject
         }
     }
 
+    /// <summary>Marks a non-removable redaction region on the current page
+    /// (FR-SEC-02 mark step). Non-destructive: the covered content stays until
+    /// <see cref="ApplyRedactionsCurrentPageAsync"/> removes it.</summary>
+    public async Task MarkRedactionRegionAsync(PdfRect bounds, CancellationToken ct = default)
+    {
+        await _editGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            GuardPageCount();
+            int page = Math.Min(_doc.CurrentPage, _doc.PageCount - 1);
+            await RedactionService.MarkRegionAsync(_doc.Engine, page, bounds, ct).ConfigureAwait(false);
+            Status = "marked a redaction region — apply to remove the covered content";
+        }
+        finally
+        {
+            _editGate.Release();
+        }
+    }
+
+    /// <summary>Pushes an undoable apply command for every redaction region marked
+    /// on the current page (FR-SEC-02 apply + FR-EDIT-05). The command snapshots
+    /// the pre-apply document so <see cref="UndoEditAsync"/> restores the covered
+    /// content; redo re-applies. Returns the number of regions removed.</summary>
+    public async Task<int> ApplyRedactionsCurrentPageAsync(CancellationToken ct = default)
+    {
+        await _editGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            GuardPageCount();
+            int page = Math.Min(_doc.CurrentPage, _doc.PageCount - 1);
+            var cmd = RedactionService.ApplyAsync(_doc.Engine, page, options: null);
+            await _editStack.PushAsync(cmd, ct).ConfigureAwait(false);
+            Status = $"{cmd.Name} — {cmd.AppliedCount} region(s) removed (undo available)";
+            await RefreshCurrentPageRenderAsync(ct).ConfigureAwait(false);
+            return cmd.AppliedCount;
+        }
+        finally
+        {
+            _editGate.Release();
+        }
+    }
+
+    /// <summary>Writes the current in-memory document (redactions already applied)
+    /// to <paramref name="outputPath"/> as a new permanent file (FR-SEC-02 output).</summary>
+    public async Task SaveRedactedAsync(string outputPath, CancellationToken ct = default)
+    {
+        GuardPageCount();
+        IsBusy = true;
+        try
+        {
+            await _doc.Engine.SaveAsAsync(outputPath, ct).ConfigureAwait(false);
+            Status = $"redacted: saved {Path.GetFileName(outputPath)} — covered content is permanently gone";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    /// <summary>Runs local OCR over the whole document, fully offline, and writes
+    /// a new searchable PDF to <paramref name="outputPath"/> (FR-OCR-01). The open
+    /// document is left untouched; the result is a fresh file the shell should
+    /// open for the user.</summary>
+    public async Task<OcrResult> RunOcrAsync(string outputPath, CancellationToken ct = default)
+    {
+        GuardPageCount();
+        IsBusy = true;
+        try
+        {
+            OcrResult result = await OcrService.OcrAsync(_doc.Engine, outputPath, options: null, ct).ConfigureAwait(false);
+            Status = $"OCR: {result.PageCount} page(s) recognized → {Path.GetFileName(outputPath)} is now searchable";
+            return result;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
     /// <summary>Undoes the most recent edit on the FR-EDIT-05 stack, if any.</summary>
     public async Task UndoEditAsync(CancellationToken ct = default)
     {

@@ -30,6 +30,33 @@ $MupdfVersion = '1.28.3'
 $SourceTarball = Join-Path $WorkDir "mupdf-$MupdfVersion-source.tar.gz"
 $SourceUrl = "https://github.com/ArtifexSoftware/mupdf-downloads/releases/download/$MupdfVersion/mupdf-$MupdfVersion-source.tar.gz"
 
+# FR-OCR-01: Tesseract OCR traineddata (Apache-2.0, tesseract-ocr/tessdata_fast).
+# Vendored at tools/tessdata for offline reproducibility. The build copies it
+# into native/out/tessdata so the runtime OCR primitive has a guaranteed
+# datadir, and records a pin for CI offline reproduction.
+$TessdataVendored   = Join-Path $RepoRoot 'tools\tessdata\eng.traineddata'
+$TessdataSourceUrl  = 'https://github.com/tesseract-ocr/tessdata_fast/raw/main/eng.traineddata'
+$TessdataOutDir     = Join-Path $RepoRoot 'native\out\tessdata'
+$TessdataOut        = Join-Path $TessdataOutDir 'eng.traineddata'
+$TessdataSha256     = '7D4322BD2A7749724879683FC3912CB542F19906C83BCC1A52132556427170B2'
+if (-not (Test-Path $TessdataVendored) -or
+    (Get-FileHash $TessdataVendored -Algorithm SHA256).Hash -ne $TessdataSha256) {
+    if (-not $env:PF_MUPDF_SKIP_DOWNLOAD) {
+        Write-Host "downloading $TessdataSourceUrl"
+        New-Item -ItemType Directory -Path (Split-Path $TessdataVendored) -Force | Out-Null
+        curl.exe -L -sS -o $TessdataVendored $TessdataSourceUrl
+        if ($LASTEXITCODE -ne 0 -or
+            (Get-FileHash $TessdataVendored -Algorithm SHA256).Hash -ne $TessdataSha256) {
+            throw 'eng.traineddata fetch or checksum failed; use a PROXY or vendor tools/tessdata/eng.traineddata'
+        }
+    } else {
+        throw 'eng.traineddata missing; run without PF_MUPDF_SKIP_DOWNLOAD once to fetch it'
+    }
+}
+New-Item -ItemType Directory -Path $TessdataOutDir -Force | Out-Null
+Copy-Item $TessdataVendored $TessdataOut -Force
+Write-Host "OK: tessdata staged at $TessdataOut"
+
 if (-not $env:PF_MUPDF_SKIP_DOWNLOAD) { New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null }
 
 function Find-VcVars {

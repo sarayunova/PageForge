@@ -450,6 +450,120 @@ internal sealed class FakePdfEngine : IPdfEngine
         await File.WriteAllTextAsync(outputPath, "saved", cancellationToken);
     }
 
+    /// <summary>Per-page list of redaction marks, seats for the apply/undo model.</summary>
+    private readonly Dictionary<int, List<PdfRect>> _redactions = new();
+
+    /// <summary>Per-page snapshot of the marks present at apply time, for restore.</summary>
+    private readonly Dictionary<int, PdfRect[]> _restoredAnchor = new();
+
+    /// <summary>Records each AddRedactionAsync action as "page:x0:y0:x1:y1", oldest first.</summary>
+    public List<string> RedactionsMarked { get; } = new();
+
+    /// <summary>Pages on which <see cref="ApplyRedactionsAsync"/> was called (in call order).</summary>
+    public List<int> RedactedPages { get; } = new();
+
+    /// <summary>The last options handed to <see cref="ApplyRedactionsAsync"/>, or null if default.</summary>
+    public RedactionOptions? LastRedactionOptions { get; private set; }
+
+    /// <summary>Snapshot paths passed to <see cref="RestoreSnapshotAsync"/>, in call order.</summary>
+    public List<string> RestoredSnapshots { get; } = new();
+
+    /// <summary>Seeds a redaction mark on a page (as if pre-applied), for undo tests.</summary>
+    public void AddStoredRedaction(int pageIndex, PdfRect bounds)
+    {
+        if (!_redactions.TryGetValue(pageIndex, out var list))
+        {
+            list = new List<PdfRect>();
+            _redactions[pageIndex] = list;
+        }
+
+        list.Add(bounds);
+    }
+
+    /// <summary>The current redaction marks of a page (applied marks are removed).</summary>
+    public IReadOnlyList<PdfRect> StoredRedactions(int pageIndex)
+        => _redactions.TryGetValue(pageIndex, out var list) ? list.ToArray() : Array.Empty<PdfRect>();
+
+    public async ValueTask AddRedactionAsync(
+        int pageIndex, PdfRect bounds, CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        await Task.Yield();
+        if (!_redactions.TryGetValue(pageIndex, out var list))
+        {
+            list = new List<PdfRect>();
+            _redactions[pageIndex] = list;
+        }
+
+        list.Add(bounds);
+        RedactionsMarked.Add($"{pageIndex}:{bounds.X0}:{bounds.Y0}:{bounds.X1}:{bounds.Y1}");
+    }
+
+    public async ValueTask<int> ApplyRedactionsAsync(
+        int pageIndex, RedactionOptions? options, CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        await Task.Yield();
+        LastRedactionOptions = options;
+        if (_redactions.TryGetValue(pageIndex, out var list))
+        {
+            // Stash the marks so a snapshot restore can put the page back to its
+            // pre-apply state (the real engine reopens the snapshot, which still
+            // carries the /Redact annotations).
+            _redactions.Remove(pageIndex);
+            _restoredAnchor[pageIndex] = list.ToArray();
+            RedactedPages.Add(pageIndex);
+            return list.Count;
+        }
+
+        RedactedPages.Add(pageIndex);
+        return 0;
+    }
+
+    public async ValueTask RestoreSnapshotAsync(
+        string snapshotPath, CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        await Task.Yield();
+        RestoredSnapshots.Add(snapshotPath);
+
+        // Emulate swapping to the pre-apply document: pages apply had redacted
+        // come back with their marks intact (and their content restored).
+        foreach ((int page, PdfRect[] marks) in _restoredAnchor)
+        {
+            _redactions[page] = new List<PdfRect>(marks);
+        }
+    }
+
+    /// <summary>The receipts of each <see cref="OcrToPdfAsync"/> call, oldest first.</summary>
+    public List<OcrResult> OcrOutputs { get; } = new();
+
+    /// <summary>The most recent OCR job (output path, options) handed to
+    /// <see cref="OcrToPdfAsync"/>, for FR-OCR-01 assertions, or null if none.</summary>
+    public (string OutputPath, OcrOptions? Options)? LastOcr { get; private set; }
+
+    /// <summary>Optional hook to simulate a native OCR failure; throw to fail.</summary>
+    public Action<(string OutputPath, OcrOptions? Options)>? OnOcr { get; set; }
+
+    /// <summary>Writes a fake searchable-PDF artifact and records the job (FR-OCR-01).</summary>
+    public async ValueTask<OcrResult> OcrToPdfAsync(
+        string outputPath, OcrOptions? options, CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        await Task.Yield();
+        (string OutputPath, OcrOptions? Options) job = (outputPath, options);
+        OnOcr?.Invoke(job);
+        await File.WriteAllTextAsync(outputPath, "searchable", cancellationToken);
+        LastOcr = job;
+        var result = new OcrResult(
+            _pageCount,
+            outputPath,
+            string.IsNullOrWhiteSpace(options?.Language) ? "eng" : options.Language!,
+            options?.DataDirectory ?? string.Empty);
+        OcrOutputs.Add(result);
+        return result;
+    }
+
     public ValueTask DisposeAsync()
     {
         _disposed = true;

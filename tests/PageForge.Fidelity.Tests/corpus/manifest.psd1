@@ -28,7 +28,7 @@
   'scan-letters.pdf' = @{
     name     = 'scan-letters.pdf'
     source   = 'tools/generate-corpus.ps1 (raster scan proxy, image-only pages)'
-    sha256   = 'EFC04BB0BEA412E4330FD29ED20707B24C3055AF0E3FFFE2BB4F3B371B9DD1F2'
+    sha256   = '2C53420D45D4205169E1D5D38AC8AC050B4A479E78C43E02B63D4801D0A99504'
     pages    = 2
     page0    = '612x792'
     golden   = 'golden/scan-letters.p1.png'

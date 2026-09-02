@@ -50,6 +50,10 @@ public sealed class EditCommandStack
     /// Executes <paramref name="command"/> and records it as the newest edit,
     /// clearing the redo branch. If execution throws, nothing is recorded and
     /// the document is left in whatever state the command produced.
+    ///
+    /// Commands that are <see cref="IDisposable"/> (e.g. a redaction apply that
+    /// keeps a temp undo snapshot on disk) are disposed when their redo entry is
+    /// pruned here, so their scratch files do not leak.
     /// </summary>
     /// <returns>The same command, for callers that want to reference it.</returns>
     public async ValueTask<IEditCommand> PushAsync(IEditCommand command, CancellationToken cancellationToken = default)
@@ -61,8 +65,8 @@ public sealed class EditCommandStack
         try
         {
             await command.ExecuteAsync(cancellationToken).ConfigureAwait(false);
+            DisposeRange(_redo);
             _undo.Push(command);
-            _redo.Clear();
             OnStateChanged();
             return command;
         }
@@ -127,12 +131,26 @@ public sealed class EditCommandStack
         }
     }
 
-    /// <summary>Drops all undo/redo history for the current document session.</summary>
+    /// <summary>Drops all undo/redo history for the current document session,
+    /// disposing any <see cref="IDisposable"/> command so it can release its
+    /// scratch (e.g. a redaction undo snapshot on disk).</summary>
     public void Clear()
     {
-        _undo.Clear();
-        _redo.Clear();
+        DisposeRange(_undo);
+        DisposeRange(_redo);
         OnStateChanged();
+    }
+
+    private static void DisposeRange(Stack<IEditCommand> stack)
+    {
+        while (stack.Count > 0)
+        {
+            IEditCommand command = stack.Pop();
+            if (command is IDisposable disposable)
+            {
+                disposable.Dispose();
+            }
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

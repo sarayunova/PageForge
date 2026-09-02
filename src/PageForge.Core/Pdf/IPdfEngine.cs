@@ -265,4 +265,78 @@ public interface IPdfEngine : IAsyncDisposable
     /// memory — persist it with <see cref="SaveAsAsync"/>.
     /// </summary>
     ValueTask FlattenFormAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Marks the region <paramref name="bounds"/> (PDF points, normalized) on a
+    /// 0-based page as a redaction to be applied later (FR-SEC-02 mark step). This
+    /// is NON-destructive: it adds a /Redact annotation with a visible red/pink
+    /// appearance so the user sees, across a re-render, exactly what applying will
+    /// remove, but no content is deleted yet. Raise <see cref="SaveAsAsync"/> to
+    /// persist only the marks. Call <see cref="ApplyRedactionsAsync"/> to delete
+    /// the content inside every marked region.
+    /// </summary>
+    ValueTask AddRedactionAsync(
+        int pageIndex,
+        PdfRect bounds,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Applies (FR-SEC-02 apply step) every <c>/Redact</c> region already marked on a
+    /// 0-based page via <see cref="AddRedactionAsync"/>. The content that intrudes into
+    /// each marked region — text runs, vector paths and (per the chosen
+    /// <paramref name="options"/>) images — is REMOVED from the page's content stream,
+    /// not painted over, overlapping annotations and links are pruned, and the
+    /// redaction marks themselves are deleted. A page with no redaction marks is a
+    /// no-op that returns 0.
+    ///
+    /// Pass <c>null</c> for <paramref name="options"/> to use the secure defaults
+    /// (see <see cref="RedactionOptions"/>). The document is mutated in memory and
+    /// should be persisted with <see cref="SaveAsAsync"/>.
+    ///
+    /// The operation is destructive; an <see cref="PageForge.Core.Editing.IEditCommand"/> that
+    /// snapshots the pre-apply document first (via <see cref="SaveAsAsync"/> to a
+    /// scratch file) provides undo by restoring that snapshot with
+    /// <see cref="RestoreSnapshotAsync"/>.
+    ///
+    /// Returns the number of redaction regions that were applied (0 when the page
+    /// had no marks).
+    /// </summary>
+    ValueTask<int> ApplyRedactionsAsync(
+        int pageIndex,
+        RedactionOptions? options = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Replaces the open in-memory document with a fresh copy opened from
+    /// <paramref name="snapshotPath"/>, closing the current one (FR-SEC-02 undo
+    /// plumbing). The engine's open-path/display identity is unchanged — this only
+    /// swaps the in-memory state, so a subsequent <see cref="SaveAsAsync"/> still
+    /// writes the document under the name the user chose. Used by the redaction
+    /// apply command to restore a pre-apply snapshot saved to a scratch file.
+    /// The caller remains responsible for deleting the snapshot file afterwards.
+    /// </summary>
+    ValueTask RestoreSnapshotAsync(
+        string snapshotPath,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Runs local OCR over the whole open document and writes a new searchable
+    /// PDF to <paramref name="outputPath"/> (FR-OCR-01): every page's pixels are
+    /// recognized on this machine and the recognized text is embedded as an
+    /// invisible layer behind the page image, so the output can be searched and
+    /// text-selected while still rendering identically. The open document is
+    /// left open and unmodified.
+    ///
+    /// Pass <c>null</c> for <paramref name="options"/> to use the defaults (see
+    /// <see cref="OcrOptions"/>). The output file must not already exist.
+    ///
+    /// Throws when the engine has no open document, the output path is invalid,
+    /// or recognition fails (for example when the bundled trained data is not
+    /// reachable). Returns the number of pages written and the effective
+    /// language/model on success.
+    /// </summary>
+    ValueTask<OcrResult> OcrToPdfAsync(
+        string outputPath,
+        OcrOptions? options = null,
+        CancellationToken cancellationToken = default);
 }

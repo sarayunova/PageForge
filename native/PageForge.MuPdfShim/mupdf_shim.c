@@ -4935,3 +4935,344 @@ int pf_replace_object(pf_context context, pf_document document, int page_index,
 	}
 	return status;
 }
+
+// ---------------------------------------------------------------------------
+// FR-SEC-02 true redaction primitives
+// ---------------------------------------------------------------------------
+
+int pf_add_redact(pf_context context, pf_document document, int page_index,
+                  double x0, double y0, double x1, double y1)
+{
+	fz_context *ctx = (fz_context *)context;
+	fz_document *doc = (fz_document *)document;
+	pdf_document *pdf = NULL;
+	pdf_page *page = NULL;
+	pdf_annot *annot = NULL;
+	fz_rect rect;
+	int status = PF_ERR;
+
+	if (ctx == NULL || doc == NULL || page_index < 0)
+	{
+		return PF_ERR;
+	}
+
+	/* Normalise the rect so x1>=x0 and y1>=y0. */
+	rect.x0 = (x0 < x1) ? x0 : x1;
+	rect.y0 = (y0 < y1) ? y0 : y1;
+	rect.x1 = (x0 < x1) ? x1 : x0;
+	rect.y1 = (y0 < y1) ? y1 : y0;
+
+	if (rect.x1 <= rect.x0 || rect.y1 <= rect.y0)
+	{
+		record_error("pf_add_redact: degenerate rectangle");
+		return PF_ERR;
+	}
+
+	fz_var(pdf);
+	fz_var(page);
+
+	fz_try(ctx)
+	{
+		pdf = as_pdf_document(ctx, doc);
+		if (pdf == NULL)
+		{
+			fz_throw(ctx, FZ_ERROR_GENERIC,
+			         "pf_add_redact: not a PDF document");
+		}
+		page = pdf_load_page(ctx, pdf, page_index);
+
+		/* The caller passes the region in PDF space (bottom-left origin, y up).
+		 * pdf_set_annot_rect interprets its argument in page DISPLAY space
+		 * (top-left origin, y down) and un-does the page transform itself, so
+		 * feed it the display-space rect here or the stored /R would be
+		 * y-flipped and pdf_redact_page would not cover the requested text. */
+		{
+			fz_matrix page_ctm;
+			pdf_page_transform(ctx, page, NULL, &page_ctm);
+			rect = fz_transform_rect(rect, page_ctm);
+		}
+
+		annot = pdf_create_annot_raw(ctx, page, PDF_ANNOT_REDACT);
+		pdf_set_annot_rect(ctx, annot, rect);
+
+		/* Red stroke so the region is clearly visible to the user. Redaction
+		 * annotations have no /IC (interior color) property, so only the
+		 * border color is set here. */
+		{
+			float red[3] = { 1.0f, 0.0f, 0.0f };
+			pdf_set_annot_color(ctx, annot, 3, red);
+		}
+
+		pdf_update_annot(ctx, annot);
+
+		fz_drop_page(ctx, (fz_page *)page);
+		page = NULL;
+		status = PF_OK;
+	}
+	fz_catch(ctx)
+	{
+		caught_message(ctx);
+		if (page != NULL)
+		{
+			fz_drop_page(ctx, (fz_page *)page);
+		}
+	}
+	return status;
+}
+
+int pf_apply_redactions(pf_context context, pf_document document,
+                        int page_index, const char *opts_path_utf8, int *out_count)
+{
+	fz_context *ctx = (fz_context *)context;
+	fz_document *doc = (fz_document *)document;
+	pdf_document *pdf = NULL;
+	pdf_page *page = NULL;
+	pdf_redact_options opts;
+	unsigned char *spec = NULL;
+	int status = PF_ERR;
+	int count = 0;
+
+	if (out_count != NULL)
+	{
+		*out_count = 0;
+	}
+
+	/* Secure defaults: text removed, images removed, line-art removed-if-
+	 * covered, black boxes on.  These are the choices that never leak
+	 * content, per FR-SEC-02. */
+	memset(&opts, 0, sizeof(opts));
+	opts.black_boxes = 1;
+	opts.image_method = PDF_REDACT_IMAGE_REMOVE;
+	opts.line_art = 1;
+	opts.text = 0;  /* 0 = PDF_REDACT_TEXT_REMOVE */
+
+	if (ctx == NULL || doc == NULL || page_index < 0)
+	{
+		return PF_ERR;
+	}
+
+	fz_var(pdf);
+	fz_var(page);
+	fz_var(spec);
+
+	/* Parse an optional TSV options file. Missing keys keep the secure
+	 * defaults set above. */
+	if (opts_path_utf8 != NULL)
+	{
+		char *cursor;
+		char *field;
+		size_t flen;
+
+		spec = pf_read_file(opts_path_utf8, NULL);
+		if (spec != NULL)
+		{
+			cursor = (char *)spec;
+			while (next_field(&cursor, &field, &flen))
+			{
+				if (flen >= 1)
+				{
+					char key = field[0];
+					char *val = (flen > 1) ? field + 1 : "";
+					switch (key)
+					{
+					case 'B':
+						opts.black_boxes = (int)strtol(val, NULL, 10);
+						break;
+					case 'I':
+						opts.image_method = (int)strtol(val, NULL, 10);
+						break;
+					case 'L':
+						opts.line_art = (int)strtol(val, NULL, 10);
+						break;
+					case 'T':
+						opts.text = (int)strtol(val, NULL, 10);
+						break;
+					default:
+						/* unknown record type: ignore */
+						break;
+					}
+				}
+				/* Move cursor past the value delimiter to the next
+				 * record (next_field will return 0 when done). */
+			}
+		}
+	}
+
+	fz_try(ctx)
+	{
+		pdf_annot *annot;
+
+		pdf = as_pdf_document(ctx, doc);
+		if (pdf == NULL)
+		{
+			fz_throw(ctx, FZ_ERROR_GENERIC,
+			         "pf_apply_redactions: not a PDF document");
+		}
+		page = pdf_load_page(ctx, pdf, page_index);
+
+		/* Count the /Redact regions being applied so the managed layer can
+		 * report them (and detect a no-op page). */
+		for (annot = pdf_first_annot(ctx, page); annot != NULL;
+		     annot = pdf_next_annot(ctx, annot))
+		{
+			if (pdf_annot_type(ctx, annot) == PDF_ANNOT_REDACT)
+			{
+				count++;
+			}
+		}
+
+		/* pdf_redact_page walks all /Redact annotations on the page, clips
+		 * the page content streams, prunes overlapping links/annots, and
+		 * (when black_boxes is set) paints a black rectangle. After this
+		 * call the surviving content is genuinely gone from the streams. */
+		pdf_redact_page(ctx, pdf, page, &opts);
+
+		if (out_count != NULL)
+		{
+			*out_count = count;
+		}
+
+		fz_drop_page(ctx, (fz_page *)page);
+		page = NULL;
+		status = PF_OK;
+	}
+	fz_catch(ctx)
+	{
+		caught_message(ctx);
+		if (page != NULL)
+		{
+			fz_drop_page(ctx, (fz_page *)page);
+		}
+	}
+	free(spec);
+	return status;
+}
+
+/*
+ * FR-OCR-01: convert every page of the open document into a searchable PDF.
+ * Each page is rendered to an RGB raster at PF_OCR_DPI (150 dpi) and fed to
+ * the MuPDF pdfocr band writer, which runs the bundled Tesseract and emits a
+ * PDF page whose transparent text layer is positioned from the recognised
+ * glyph boxes, so the result is searchable and selectable. All recognition
+ * happens locally; nothing leaves the machine.
+ *
+ * The band writer performs the OCR in its trailer (fz_close_band_writer), so a
+ * missing traineddata directory surfaces as a PF_ERR there rather than a
+ * silently empty text layer.
+ */
+#define PF_OCR_DPI 150
+
+int pf_ocr_pdf(pf_context context, pf_document document,
+               const char *out_path_utf8, const char *language_utf8,
+               const char *datadir_utf8, int *out_page_count)
+{
+	fz_context *ctx = (fz_context *)context;
+	fz_document *doc = (fz_document *)document;
+	pdf_document *pdf = NULL;
+	fz_output *out = NULL;
+	fz_band_writer *bander = NULL;
+	fz_pdfocr_options opts;
+	int status = PF_ERR;
+	int count;
+	int page;
+
+	if (ctx == NULL || doc == NULL || out_path_utf8 == NULL)
+	{
+		return PF_ERR;
+	}
+
+	if (out_page_count != NULL)
+	{
+		*out_page_count = 0;
+	}
+
+	if (strlen(out_path_utf8) == 0)
+	{
+		record_error("pf_ocr_pdf: empty output path");
+		return PF_ERR;
+	}
+
+	pdf = as_pdf_document(ctx, doc);
+	if (pdf == NULL)
+	{
+		record_error("pf_ocr_pdf: not a PDF document");
+		return PF_ERR;
+	}
+
+	count = pdf_count_pages(ctx, pdf);
+	if (count < 1)
+	{
+		record_error("pf_ocr_pdf: document has no pages");
+		return PF_ERR;
+	}
+
+	fz_init_pdfocr_options(ctx, &opts);
+	opts.compress = 1;
+	opts.strip_height = 16;
+	snprintf(opts.language, sizeof(opts.language), "%s",
+	         (language_utf8 != NULL && language_utf8[0] != '\0') ? language_utf8 : "eng");
+	if (datadir_utf8 != NULL && datadir_utf8[0] != '\0')
+	{
+		snprintf(opts.datadir, sizeof(opts.datadir), "%s", datadir_utf8);
+	}
+
+	fz_var(out);
+	fz_var(bander);
+
+	fz_try(ctx)
+	{
+		out = fz_new_output_with_path(ctx, out_path_utf8, 0);
+		bander = fz_new_pdfocr_band_writer(ctx, out, &opts);
+
+		for (page = 0; page < count; page++)
+		{
+			fz_page *fpage = NULL;
+			fz_pixmap *pix = NULL;
+
+			fz_var(fpage);
+			fz_var(pix);
+
+			fz_try(ctx)
+			{
+				fz_matrix scale = fz_scale(PF_OCR_DPI / 72.0f, PF_OCR_DPI / 72.0f);
+				fpage = fz_load_page(ctx, doc, page);
+				pix = fz_new_pixmap_from_page(ctx, fpage, scale, fz_device_rgb(ctx), 0);
+				fz_write_header(ctx, bander, pix->w, pix->h, pix->n, pix->alpha,
+				                PF_OCR_DPI, PF_OCR_DPI, page, pix->colorspace, pix->seps);
+				fz_write_band(ctx, bander, pix->stride, pix->h, pix->samples);
+			}
+			fz_always(ctx)
+			{
+				fz_drop_pixmap(ctx, pix);
+				fz_drop_page(ctx, (fz_page *)fpage);
+			}
+			fz_catch(ctx)
+			{
+				fz_rethrow(ctx);
+			}
+		}
+
+		/* Trailer: writes the remaining page objects and runs the OCR pass. */
+		fz_close_band_writer(ctx, bander);
+		fz_close_output(ctx, out);
+		status = PF_OK;
+		if (out_page_count != NULL)
+		{
+			*out_page_count = count;
+		}
+	}
+	fz_catch(ctx)
+	{
+		caught_message(ctx);
+		if (bander != NULL)
+		{
+			fz_drop_band_writer(ctx, bander);
+		}
+		if (out != NULL)
+		{
+			fz_drop_output(ctx, out);
+		}
+	}
+
+	return status;
+}

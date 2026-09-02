@@ -31,6 +31,12 @@
     <None Include="..\..\tools\sample-pdf\golden\*.png"
           CopyToOutputDirectory="PreserveNewest"
           Link="golden\%(Filename)%(Extension)" />
+    <!-- FR-OCR-01: bundle the vendored tessdata alongside the test binary so
+         the native pdfocr bandwriter can initialise Tesseract without a
+         TESSDATA_PREFIX environment variable. -->
+    <None Include="..\..\tools\tessdata\eng.traineddata"
+          CopyToOutputDirectory="PreserveNewest"
+          Link="tessdata\eng.traineddata" />
     <None Include="corpus\manifest.psd1"
           CopyToOutputDirectory="PreserveNewest" />
     <!-- FR-PAGE verification fixture (3-page deterministic mock). -->

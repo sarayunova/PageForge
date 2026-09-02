@@ -54,8 +54,11 @@
                               Padding="8,3" ToolTip="Select, move, resize, or replace image/vector objects on the page" />
                 <ToggleButton x:Name="FormModeToggle" Content="☑ form" Checked="FormModeToggle_Changed" Unchecked="FormModeToggle_Changed"
                               Padding="8,3" ToolTip="Fill AcroForm fields on the page, then flatten the form to static content" />
+                <ToggleButton x:Name="RedactModeToggle" Content="✖ redact" Checked="RedactModeToggle_Changed" Unchecked="RedactModeToggle_Changed"
+                              Padding="8,3" ToolTip="Drag boxes over sensitive content; apply removes it and paints black (undoable)" />
                 <Button Content="↩ Undo" Click="EditUndo_Click" Padding="8,3" ToolTip="Undo last edit (Ctrl+Z)" />
                 <Button Content="↪ Redo" Click="EditRedo_Click" Padding="8,3" ToolTip="Redo last undone edit (Ctrl+Y)" />
+                <Button Content="⇺ OCR…" Click="Ocr_Click" Padding="8,3" ToolTip="Render a searchable copy: recognize the document's text offline and embed it (FR-OCR-01)" />
                 <Separator Margin="6,0" Width="1" Background="#555" />
                 <TextBox x:Name="SearchBox" Width="200" KeyDown="SearchBox_KeyDown" />
                 <Button Content="Search" Click="Search_Click" Padding="10,3" />
@@ -153,6 +156,7 @@
             <Grid>
                 <locals:ObjectEditView x:Name="ObjectView" Visibility="Collapsed" />
                 <locals:FormFillView x:Name="FormView" Visibility="Collapsed" />
+                <locals:RedactView x:Name="RedactViewHost" Visibility="Collapsed" />
                 <ListBox x:Name="PageList" Background="#3a3a3a"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                      VirtualizingPanel.IsVirtualizing="True"

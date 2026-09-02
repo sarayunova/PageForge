@@ -82,6 +82,11 @@ public partial class DocumentView : UserControl
             FormView.Refresh();
         }
 
+        if (RedactViewHost.Visibility == Visibility.Visible)
+        {
+            RedactViewHost.Refresh();
+        }
+
         RefreshAnnotationsIfNeeded();
     }
 
@@ -137,6 +142,11 @@ public partial class DocumentView : UserControl
         if (FormView.Visibility == Visibility.Visible)
         {
             FormView.Refresh();
+        }
+
+        if (RedactViewHost.Visibility == Visibility.Visible)
+        {
+            RedactViewHost.Refresh();
         }
     }
 
@@ -455,6 +465,11 @@ public partial class DocumentView : UserControl
             FormModeToggle.IsChecked = false;
         }
 
+        if (EditModeToggle?.IsChecked == true && RedactModeToggle?.IsChecked == true)
+        {
+            RedactModeToggle.IsChecked = false;
+        }
+
         StatusText.Text = (EditModeToggle?.IsChecked == true)
             ? "Edit mode: click a word on the page to replace its text"
             : _vm?.Status ?? string.Empty;
@@ -470,6 +485,11 @@ public partial class DocumentView : UserControl
         if (ObjectModeToggle?.IsChecked == true && FormModeToggle?.IsChecked == true)
         {
             FormModeToggle.IsChecked = false;
+        }
+
+        if (ObjectModeToggle?.IsChecked == true && RedactModeToggle?.IsChecked == true)
+        {
+            RedactModeToggle.IsChecked = false;
         }
 
         bool on = ObjectModeToggle?.IsChecked == true;
@@ -497,6 +517,11 @@ public partial class DocumentView : UserControl
             ObjectModeToggle.IsChecked = false;
         }
 
+        if (FormModeToggle?.IsChecked == true && RedactModeToggle?.IsChecked == true)
+        {
+            RedactModeToggle.IsChecked = false;
+        }
+
         bool on = FormModeToggle?.IsChecked == true;
         if (on && _vm is not null)
         {
@@ -505,9 +530,42 @@ public partial class DocumentView : UserControl
 
         FormView.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
         ObjectView.Visibility = on ? Visibility.Collapsed : ObjectView.Visibility;
+        RedactViewHost.Visibility = on ? Visibility.Collapsed : RedactViewHost.Visibility;
         PageList.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
         StatusText.Text = on
             ? "Fill form mode: set field values, then flatten the form to static content"
+            : _vm?.Status ?? string.Empty;
+    }
+
+    private void RedactModeToggle_Changed(object sender, RoutedEventArgs e)
+    {
+        if (RedactModeToggle?.IsChecked == true && EditModeToggle?.IsChecked == true)
+        {
+            EditModeToggle.IsChecked = false;
+        }
+
+        if (RedactModeToggle?.IsChecked == true && ObjectModeToggle?.IsChecked == true)
+        {
+            ObjectModeToggle.IsChecked = false;
+        }
+
+        if (RedactModeToggle?.IsChecked == true && FormModeToggle?.IsChecked == true)
+        {
+            FormModeToggle.IsChecked = false;
+        }
+
+        bool on = RedactModeToggle?.IsChecked == true;
+        if (on && _vm is not null)
+        {
+            RedactViewHost.SetContext(_vm);
+        }
+
+        RedactViewHost.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        ObjectView.Visibility = on ? Visibility.Collapsed : ObjectView.Visibility;
+        FormView.Visibility = on ? Visibility.Collapsed : FormView.Visibility;
+        PageList.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
+        StatusText.Text = on
+            ? "Redact mode: drag boxes over sensitive content, then Apply redactions… to remove it"
             : _vm?.Status ?? string.Empty;
     }
 
@@ -776,6 +834,31 @@ public partial class DocumentView : UserControl
         catch (Exception ex)
         {
             MessageBox.Show($"Insert failed:\n{ex.Message}", "PageForge", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private async void Ocr_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm is null)
+        {
+            return;
+        }
+
+        string? path = AskSavePath("Searchable.pdf");
+        if (path is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _vm.RunOcrAsync(path);
+            StatusText.Text = _vm.Status;
+            OpenDocumentRequested?.Invoke(path);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"OCR failed:\n{ex.Message}", "PageForge", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 

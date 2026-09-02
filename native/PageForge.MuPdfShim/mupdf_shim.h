@@ -316,6 +316,89 @@ PF_EXPORT int pf_bake_widgets(pf_context context, pf_document document);
 PF_EXPORT int pf_create_field(pf_context context, pf_document document,
                               int page_index, const char *spec_path_utf8);
 
+// ---------------------------------------------------------------------------
+// FR-SEC-02 true redaction primitives. Redaction DELETES the marked content
+// from the page's content streams (it is not painted over), so it is
+// destructive once applied: the surviving file is genuinely free of the
+// redacted data, which is the product requirement here. Marking (adding the
+// /Redact annotation) is non-destructive and gives the UI a visible preview
+// of what apply will remove; applying removes the content AND the marks.
+// These functions mutate the open document in memory; the caller persists
+// with pf_save_document.
+// ---------------------------------------------------------------------------
+
+// Mark region (x0,y0)-(x1,y1) (PDF points, bottom-left origin; must be
+// normalized x1>=x0 and y1>=y0) on page `page_index` (0-based) of the open
+// document as a redaction to be applied later. Adds a /Subtype /Redact
+// annotation with a visible red-stroked, pink-filled appearance and updates
+// it, so a re-render shows exactly the region that apply will remove.
+// Non-destructive: nothing is removed until pf_apply_redactions runs.
+// Returns PF_OK/PF_ERR.
+PF_EXPORT int pf_add_redact(pf_context context, pf_document document,
+                            int page_index, double x0, double y0,
+                            double x1, double y1);
+
+// Applies every /Redact annotation on page `page_index` (0-based) of the open
+// document. The content that intrudes into each marked region — text runs,
+// vector paths, and image objects according to the option values below — is
+// REMOVED from the page's content stream (not covered), overlapping links and
+// annotations are pruned, and each /Redact annotation itself is deleted. When
+// black_boxes is nonzero a solid black box is painted over the emptied region
+// so the viewer sees a classic redaction bar. Secure defaults are used when
+// opts_path_utf8 is NULL: text=remove-overlapping, images=remove (even if
+// clipped), line-art=remove-if-covered, black boxes on — the choices that do
+// not leak content (FR-SEC-02).
+//
+// opts_path_utf8 names an optional UTF-8 TSV file, one option per line
+// (missing options keep the secure defaults):
+//     B<TAB><0|1>       black box over each region (default 1)
+//     I<TAB><int>       image method: 0=none 1=remove 2=black-out-pixels
+//                       3=remove-unless-invisible (default 1)
+//     L<TAB><int>       line-art method: 0=none 1=remove-if-covered
+//                       2=remove-if-touched (default 1)
+//     T<TAB><int>       text method: 0=remove 1=none 2=remove-invisible-only
+//                       (default 0; 1 leaks on purpose and is NOT recommended)
+//
+// Writes the number of marked regions that were applied into
+// *out_count (may be NULL; 0 when the page had no /Redact annotations, which
+// is also a no-op). Returns PF_OK/PF_ERR; call pf_save_document to persist the
+// redacted document.
+PF_EXPORT int pf_apply_redactions(pf_context context, pf_document document,
+                                  int page_index, const char *opts_path_utf8,
+                                  int *out_count);
+
+// ---------------------------------------------------------------------------
+// FR-OCR-01 local OCR primitives. Recognition runs entirely on this machine
+// through the MuPDF-bundled Tesseract (Apache-2.0); nothing is sent to a
+// hosted service. The pdfocr band writer emits a searchable PDF whose text
+// layer is positioned from the recognised glyph boxes so it overlays the
+// raster image of each page.
+// ---------------------------------------------------------------------------
+
+// Converts every page (0-based count via pf_page_count) of the open document
+// into a searchable PDF at out_path_utf8: each page is rendered to a raster
+// and OCR'd by Tesseract, which writes the raster plus a transparent text
+// layer into the output. The open document is NOT modified; the caller opens
+// the finished file normally afterwards.
+//
+// language_utf8: Tesseract OCR language code (e.g. "eng"); may be NULL or
+// "" for the "eng" default.
+//
+// datadir_utf8: path to the directory containing the language's *.traineddata
+// file (e.g. ".../tessdata"); may be NULL, in which case Tesseract falls back
+// to its TESSDATA_PREFIX environment variable. The managed layer resolves a
+// bundled tessdata dir when present and passes it here, so OCR works offline
+// with no environment configuration.
+//
+// After this call the summary line "N pages OCR'd from <count>
+// input pages" is written to stderr; OCR failures on a page abort the whole
+// run with PF_ERR and a message in pf_last_error. Returns PF_OK/PF_ERR.
+PF_EXPORT int pf_ocr_pdf(pf_context context, pf_document document,
+                         const char *out_path_utf8,
+                         const char *language_utf8,
+                         const char *datadir_utf8,
+                         int *out_page_count);
+
 #ifdef __cplusplus
 }
 #endif

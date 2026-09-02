@@ -20,6 +20,16 @@ build (see `native/build-mupdf.ps1`) are limited to build-system configuration a
 distributed in source form via this repository. The built native output is excluded from the
 repository (`.gitignore`) and is not redistributed as a binary-only artifact.
 
+### Tesseract trained data (FR-OCR-01 offline OCR)
+- Component: `eng.traineddata` from the `tessdata_fast` repository, pinned and staged to
+  `tools/tessdata/` by `native/build-mupdf.ps1` (sha256 `7D4322BD2A7749724879683FC3912CB542F19906C83BCC1A52132556427170B2`).
+- Source: `https://github.com/tesseract-ocr/tessdata_fast`
+- License: Apache License 2.0
+- Copyright: Google Inc. and the Tesseract OCR contributors
+- Usage: embedded next to the application binaries so the bundled Tesseract inside
+  `pageforge_mupdf.dll` can initialize the English recognition model fully offline; installed
+  alongside the native build output. Not distributed as a product artifact separate from the app.
+
 ## Build / verification tooling (used at build or test time, not distributed)
 
 ### qpdf — structural PDF validation (dev tool)

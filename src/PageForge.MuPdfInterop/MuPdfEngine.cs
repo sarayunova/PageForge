@@ -968,6 +968,204 @@ public sealed class MuPdfEngine : IPdfEngine
         }
     }
 
+    public ValueTask AddRedactionAsync(
+        int pageIndex, PdfRect bounds, CancellationToken cancellationToken = default)
+        => AddRedactionCoreAsync(pageIndex, bounds, cancellationToken);
+
+    private async ValueTask AddRedactionCoreAsync(int pageIndex, PdfRect bounds, CancellationToken ct)
+    {
+        if (pageIndex < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(pageIndex));
+        }
+
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            RequireDocument();
+            if (MuPdfShimBindings.pf_add_redact(
+                    _context, _document, pageIndex,
+                    bounds.X0, bounds.Y0, bounds.X1, bounds.Y1)
+                != MuPdfShimBindings.PfOk)
+            {
+                throw new InvalidOperationException(
+                    $"Failed to mark a redaction region on page {pageIndex}: {LastError()}");
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public ValueTask<int> ApplyRedactionsAsync(
+        int pageIndex, RedactionOptions? options, CancellationToken cancellationToken = default)
+        => ApplyRedactionsCoreAsync(pageIndex, options, cancellationToken);
+
+    private async ValueTask<int> ApplyRedactionsCoreAsync(
+        int pageIndex, RedactionOptions? options, CancellationToken ct)
+    {
+        if (pageIndex < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(pageIndex));
+        }
+
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        string? optsPath = null;
+        try
+        {
+            RequireDocument();
+
+            // Only write an options file when non-defaults are requested; the
+            // native side uses secure defaults when the path is NULL.
+            if (options is not null && !IsDefault(options))
+            {
+                optsPath = Path.Combine(Path.GetTempPath(), $"pageforge-redact-opts-{Guid.NewGuid():N}.txt");
+                await File.WriteAllTextAsync(optsPath, BuildRedactionOpts(options), JobUtf8, ct).ConfigureAwait(false);
+            }
+
+            if (MuPdfShimBindings.pf_apply_redactions(
+                    _context, _document, pageIndex,
+                    optsPath is null ? null : Utf8Z(optsPath),
+                    out int appliedCount)
+                != MuPdfShimBindings.PfOk)
+            {
+                throw new InvalidOperationException(
+                    $"Failed to apply redactions on page {pageIndex}: {LastError()}");
+            }
+
+            return appliedCount;
+        }
+        finally
+        {
+            if (optsPath is not null)
+            {
+                TryDeleteFile(optsPath);
+            }
+
+            _gate.Release();
+        }
+    }
+
+    private static bool IsDefault(RedactionOptions options)
+        => options.BlackBox && options.ImageMethod == RedactionImageMethod.Remove
+           && options.LineArtMethod == RedactionLineArtMethod.RemoveIfCovered
+           && options.TextMethod == RedactionTextMethod.Remove;
+
+    private static string BuildRedactionOpts(RedactionOptions options)
+    {
+        var sb = new StringBuilder();
+        sb.Append("B\t").Append(options.BlackBox ? 1 : 0).Append('\n');
+        sb.Append("I\t").Append((int)options.ImageMethod).Append('\n');
+        sb.Append("L\t").Append((int)options.LineArtMethod).Append('\n');
+        sb.Append("T\t").Append((int)options.TextMethod).Append('\n');
+        return sb.ToString();
+    }
+
+    public ValueTask RestoreSnapshotAsync(
+        string snapshotPath, CancellationToken cancellationToken = default)
+        => RestoreSnapshotCoreAsync(snapshotPath, cancellationToken);
+
+    private async ValueTask RestoreSnapshotCoreAsync(string snapshotPath, CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(snapshotPath);
+        if (!File.Exists(snapshotPath))
+        {
+            throw new FileNotFoundException("The snapshot document does not exist.", snapshotPath);
+        }
+
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            RequireDocument();
+
+            // Swap the in-memory document: close the current one (the redacted
+            // state) and reopen the snapshot (the pre-redaction state). The
+            // engine identity/paths stay, so a later SaveAs still targets the
+            // user's chosen file.
+            nint replacement = nint.Zero;
+            if (MuPdfShimBindings.pf_open_document(_context, Utf8Z(Path.GetFullPath(snapshotPath)), out replacement)
+                != MuPdfShimBindings.PfOk)
+            {
+                throw new InvalidOperationException(
+                    $"Failed to restore the snapshot '{Path.GetFileName(snapshotPath)}': {LastError()}");
+            }
+
+            MuPdfShimBindings.pf_close_document(_context, _document);
+            _document = replacement;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public ValueTask<OcrResult> OcrToPdfAsync(
+        string outputPath, OcrOptions? options, CancellationToken cancellationToken = default)
+        => OcrToPdfCoreAsync(outputPath, options, cancellationToken);
+
+    private async ValueTask<OcrResult> OcrToPdfCoreAsync(
+        string outputPath, OcrOptions? options, CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(outputPath);
+
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            RequireDocument();
+
+            string language = string.IsNullOrWhiteSpace(options?.Language) ? "eng" : options.Language!;
+            string? dataDirectory = ResolveOcrDataDirectory(options?.DataDirectory);
+
+            if (MuPdfShimBindings.pf_ocr_pdf(
+                    _context, _document,
+                    Utf8Z(Path.GetFullPath(outputPath)),
+                    Utf8Z(language),
+                    dataDirectory is null ? null : Utf8Z(dataDirectory),
+                    out int pageCount)
+                != MuPdfShimBindings.PfOk)
+            {
+                TryDeleteFile(Path.GetFullPath(outputPath));
+                throw new InvalidOperationException($"Failed to run OCR: {LastError()}");
+            }
+
+            return new OcrResult(pageCount, Path.GetFullPath(outputPath), language, dataDirectory ?? string.Empty);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Returns the first existing directory able to supply
+    /// "&lt;language&gt;.traineddata", or null so the native side falls back to
+    /// its own TESSDATA_PREFIX/cwd search. Candidate order: explicit option,
+    /// PF_TESSDATA_DIR, app-local tessdata, native build output of a dev
+    /// checkout.
+    /// </summary>
+    private static string? ResolveOcrDataDirectory(string? configured)
+    {
+        string?[] candidates = configured is null
+            ? new[]
+            {
+                Environment.GetEnvironmentVariable("PF_TESSDATA_DIR"),
+                Path.Combine(AppContext.BaseDirectory, "tessdata"),
+                Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "native", "out", "tessdata"),
+            }
+            : new[] { configured };
+
+        foreach (string? candidate in candidates)
+        {
+            if (!string.IsNullOrWhiteSpace(candidate) && Directory.Exists(candidate))
+            {
+                return Path.GetFullPath(candidate);
+            }
+        }
+
+        return null;
+    }
+
     private static string BuildSpec(AnnotBuildSpec a)
     {
         var spec = new StringBuilder();
