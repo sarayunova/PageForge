@@ -17,6 +17,16 @@ public sealed class TeamResponse
     public required DateTime CreatedAt { get; init; }
 }
 
+/// <summary>Full team detail including its resolved member roster.</summary>
+public sealed class TeamDetailResponse
+{
+    public required Guid Id { get; init; }
+    public required string Name { get; init; }
+    public required UserResponse Owner { get; init; }
+    public required DateTime CreatedAt { get; init; }
+    public required IReadOnlyList<TeamMemberResponse> Members { get; init; }
+}
+
 public sealed class AddMemberRequest
 {
     public required Guid UserId { get; init; }

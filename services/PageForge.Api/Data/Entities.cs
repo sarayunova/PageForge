@@ -45,6 +45,8 @@ public sealed class Team
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<TeamMember> Members { get; set; } = [];
+
+    public ICollection<Document> Documents { get; set; } = [];
 }
 
 public sealed class TeamMember

@@ -91,6 +91,9 @@ builder.Services.AddSingleton<IEmailSender>(EmailSenderFactory.Create);
 // E-signature workflow (FR-ESIGN-01)
 builder.Services.AddScoped<EsignService>();
 
+// Team review (FR-TEAM-01)
+builder.Services.AddScoped<TeamReviewService>();
+
 // Controllers + OpenAPI
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();

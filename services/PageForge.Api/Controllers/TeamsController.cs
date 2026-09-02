@@ -73,7 +73,31 @@ public sealed class TeamsController : ControllerBase
         if (!await _teams.IsMemberAsync(id, userId))
             return NotFound();
 
-        return Ok(new { id });
+        var members = await _teams.ListMembersAsync(id);
+        var team = await _teams.GetTeamAsync(id);
+
+        return Ok(new TeamDetailResponse
+        {
+            Id = team.Id,
+            Name = team.Name,
+            Owner = new UserResponse
+            {
+                Id = team.Owner.Id,
+                Email = team.Owner.Email,
+                DisplayName = team.Owner.DisplayName,
+                AuthProvider = team.Owner.AuthProvider,
+                CreatedAt = team.Owner.CreatedAt
+            },
+            CreatedAt = team.CreatedAt,
+            Members = members.Select(m => new TeamMemberResponse
+            {
+                UserId = m.User.Id,
+                Email = m.User.Email,
+                DisplayName = m.User.DisplayName,
+                Role = m.Role,
+                JoinedAt = m.JoinedAt
+            }).ToList()
+        });
     }
 
     [HttpPost("{id:guid}/members")]
@@ -86,11 +110,12 @@ public sealed class TeamsController : ControllerBase
         try
         {
             var member = await _teams.AddMemberAsync(id, request.UserId, request.Role);
+            Data.User user = await _teams.GetUserAsync(request.UserId);
             return Ok(new TeamMemberResponse
             {
                 UserId = member.UserId,
-                Email = string.Empty,
-                DisplayName = string.Empty,
+                Email = user.Email,
+                DisplayName = user.DisplayName,
                 Role = member.Role,
                 JoinedAt = member.JoinedAt
             });

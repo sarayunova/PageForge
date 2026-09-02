@@ -19,6 +19,14 @@ public sealed class Document
     public Guid OwnerId { get; set; }
     public User Owner { get; set; } = null!;
 
+    /// <summary>
+    /// Optional team this document is shared with (FR-TEAM-01). When set, every
+    /// member of <see cref="Team"/> can read/annotate the document's comments.
+    /// Null when the document is private to its owner.
+    /// </summary>
+    public Guid? TeamId { get; set; }
+    public Team? Team { get; set; }
+
     [Required, MaxLength(255)]
     public string Name { get; set; } = string.Empty;
 

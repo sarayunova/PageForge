@@ -20,6 +20,7 @@ public sealed class AppDbContext : DbContext
     public DbSet<SignatureRequest> SignatureRequests => Set<SignatureRequest>();
     public DbSet<Signer> Signers => Set<Signer>();
     public DbSet<SignatureAuditEvent> SignatureAuditEvents => Set<SignatureAuditEvent>();
+    public DbSet<Comment> Comments => Set<Comment>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -82,7 +83,13 @@ public sealed class AppDbContext : DbContext
                 .HasForeignKey(d => d.OwnerId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            e.HasOne(d => d.Team)
+                .WithMany(t => t.Documents)
+                .HasForeignKey(d => d.TeamId)
+                .OnDelete(DeleteBehavior.Restrict);
+
             e.HasIndex(d => new { d.OwnerId, d.Name });
+            e.HasIndex(d => d.TeamId);
         });
 
         modelBuilder.Entity<DocumentVersion>(e =>
@@ -133,6 +140,23 @@ public sealed class AppDbContext : DbContext
             e.HasOne(a => a.SignatureRequest)
                 .WithMany(r => r.AuditEvents)
                 .HasForeignKey(a => a.SignatureRequestId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Team review comments (FR-TEAM-01)
+        modelBuilder.Entity<Comment>(e =>
+        {
+            e.HasIndex(c => new { c.DocumentVersionId, c.CreatedAt });
+            e.HasIndex(c => new { c.DocumentVersionId, c.PageNumber });
+
+            e.HasOne(c => c.DocumentVersion)
+                .WithMany()
+                .HasForeignKey(c => c.DocumentVersionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(c => c.Author)
+                .WithMany()
+                .HasForeignKey(c => c.AuthorId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }
