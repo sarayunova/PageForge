@@ -10,6 +10,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using PageForge.Api.Data;
 using PageForge.Api.Services;
+using PageForge.Api.Services.Email;
 
 namespace PageForge.Api.Tests;
 
@@ -32,6 +33,9 @@ public sealed class PageForgeApiFactory : WebApplicationFactory<Program>
     // one EF service provider instead of spawning one provider per test host.
     private static readonly InMemoryDatabaseRoot _root = new();
     private static readonly string _dbName = "pageforge-tests";
+
+    /// <summary>Captured outbound email for this factory instance (e-sign reminders/certificates).</summary>
+    public RecordingEmailSender Email { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -58,6 +62,14 @@ public sealed class PageForgeApiFactory : WebApplicationFactory<Program>
             builder.UseSetting("Sync:Endpoint", "");
             builder.UseSetting("Sync:AccessKey", "");
             builder.UseSetting("Sync:SecretKey", "");
+
+            // Replace the config-selected email sender with a capture sink so
+            // e-sign tests can assert reminders/certificates without SMTP.
+            ServiceDescriptor? email = services.SingleOrDefault(
+                d => d.ServiceType == typeof(IEmailSender));
+            if (email is not null) services.Remove(email);
+            services.AddSingleton<IEmailSender>(Email);
+            builder.UseSetting("Email:Provider", "none");
 
             builder.UseSetting("Jwt:Key", TestJwtKey);
             builder.UseSetting("Jwt:Issuer", Issuer);

@@ -89,6 +89,7 @@ public sealed class DocumentsController : ControllerBase
 
             return StatusCode(StatusCodes.Status201Created, new VersionResponse
             {
+                Id = pushed.Version.Id,
                 VersionNumber = pushed.Version.VersionNumber,
                 Sha256 = pushed.Version.Sha256,
                 SizeBytes = pushed.Version.SizeBytes,
@@ -138,6 +139,7 @@ public sealed class DocumentsController : ControllerBase
                 ? null
                 : new VersionResponse
                 {
+                    Id = latest.Id,
                     VersionNumber = latest.VersionNumber,
                     Sha256 = latest.Sha256,
                     SizeBytes = latest.SizeBytes,
@@ -182,6 +184,7 @@ public sealed class DocumentsController : ControllerBase
 
         return Ok(versions.Select(v => new VersionResponse
         {
+            Id = v.Id,
             VersionNumber = v.VersionNumber,
             Sha256 = v.Sha256,
             SizeBytes = v.SizeBytes,

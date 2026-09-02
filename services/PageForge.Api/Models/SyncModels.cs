@@ -37,6 +37,7 @@ public sealed class DocumentListResponse
 
 public sealed class VersionResponse
 {
+    public required Guid Id { get; init; }
     public required int VersionNumber { get; init; }
     public required string Sha256 { get; init; }
     public required long SizeBytes { get; init; }

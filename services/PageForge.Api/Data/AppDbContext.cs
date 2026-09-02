@@ -17,6 +17,9 @@ public sealed class AppDbContext : DbContext
     public DbSet<Subscription> Subscriptions => Set<Subscription>();
     public DbSet<Document> Documents => Set<Document>();
     public DbSet<DocumentVersion> DocumentVersions => Set<DocumentVersion>();
+    public DbSet<SignatureRequest> SignatureRequests => Set<SignatureRequest>();
+    public DbSet<Signer> Signers => Set<Signer>();
+    public DbSet<SignatureAuditEvent> SignatureAuditEvents => Set<SignatureAuditEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -91,6 +94,45 @@ public sealed class AppDbContext : DbContext
             e.HasOne(v => v.Document)
                 .WithMany(d => d.Versions)
                 .HasForeignKey(v => v.DocumentId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // E-signature workflow (FR-ESIGN-01)
+        modelBuilder.Entity<SignatureRequest>(e =>
+        {
+            e.HasIndex(r => r.OwnerId);
+            e.HasIndex(r => r.IdempotencyKey);
+            e.HasIndex(r => r.Status);
+            e.HasIndex(r => r.NextReminderAt);
+
+            e.HasOne(r => r.Owner)
+                .WithMany()
+                .HasForeignKey(r => r.OwnerId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(r => r.DocumentVersion)
+                .WithMany()
+                .HasForeignKey(r => r.DocumentVersionId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Signer>(e =>
+        {
+            e.HasIndex(s => new { s.SignatureRequestId, s.Email });
+
+            e.HasOne(s => s.SignatureRequest)
+                .WithMany(r => r.Signers)
+                .HasForeignKey(s => s.SignatureRequestId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SignatureAuditEvent>(e =>
+        {
+            e.HasIndex(a => new { a.SignatureRequestId, a.CreatedAt });
+
+            e.HasOne(a => a.SignatureRequest)
+                .WithMany(r => r.AuditEvents)
+                .HasForeignKey(a => a.SignatureRequestId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

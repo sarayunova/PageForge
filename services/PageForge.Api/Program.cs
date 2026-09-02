@@ -13,6 +13,7 @@ using Microsoft.OpenApi.Models;
 using PageForge.Api.Data;
 using PageForge.Api.Middleware;
 using PageForge.Api.Services;
+using PageForge.Api.Services.Email;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -81,6 +82,14 @@ builder.Services.AddScoped<BillingService>();
 builder.Services.Configure<SyncOptions>(builder.Configuration.GetSection(SyncOptions.SectionName));
 builder.Services.AddSingleton<IBlobStorage, BlobStorageService>();
 builder.Services.AddScoped<SyncService>();
+
+// Email delivery (FR-ESIGN-01 reminders + completion certificates). Provider is
+// selected from config so dev/test hosts use the no-op sink with no SMTP.
+builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection(EmailOptions.SectionName));
+builder.Services.AddSingleton<IEmailSender>(EmailSenderFactory.Create);
+
+// E-signature workflow (FR-ESIGN-01)
+builder.Services.AddScoped<EsignService>();
 
 // Controllers + OpenAPI
 builder.Services.AddControllers();
