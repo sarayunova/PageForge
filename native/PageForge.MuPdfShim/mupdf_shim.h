@@ -438,6 +438,53 @@ PF_EXPORT int pf_save_encrypted(pf_context context, pf_document document,
 PF_EXPORT int pf_auth_password(pf_context context, pf_document document,
                                const char *password_utf8, int *out_result);
 
+// ---------------------------------------------------------------------------
+// FR-SEC-03 digital signature primitives. Signing produces a standard PDF
+// signature (/SubFilter adbe.pkcs7.detached); the PKCS#7/CMS blob is built by
+// the Windows crypto backend (crypt32, fully offline) and the digest is
+// computed by MuPDF over the saved /ByteRange exactly as the PDF spec and
+// Acrobat expect. Verification (digest + certificate chain) runs against the
+// OS trust stores, so no certificate bundle is shipped with the app.
+// ---------------------------------------------------------------------------
+
+// Signs the open document on `page_index` (0-based), creating a fresh
+// signature widget. Reads a UTF-8 spec file at spec_path_utf8 (see
+// mupdf_shim.c pf_sign_pdf for the format: N name, R rect, E reason,
+// L location, P12 PKCS#12 path, PW password). The PKCS#12 must contain a
+// certificate with a private key. The document is mutated in memory; call
+// pf_save_document or pf_save_document_incremental to persist (the save
+// completes the signature digest over the file byte range). Returns
+// PF_OK/PF_ERR with the reason in pf_last_error.
+PF_EXPORT int pf_sign_pdf(pf_context context, pf_document document,
+                          int page_index, const char *spec_path_utf8);
+
+// Saves the open document as an incremental update at out_path_utf8 — the
+// canonical save for a just-signed document. Original file bytes are preserved
+// verbatim and changes are appended, so prior signatures stay valid.
+// Returns PF_OK/PF_ERR with the reason in pf_last_error.
+PF_EXPORT int pf_save_document_incremental(pf_context context,
+                                           pf_document document,
+                                           const char *out_path_utf8);
+
+// Lists every AcroForm signature field in the open document to out_path_utf8,
+// verifying each signed field's digest and certificate chain with the OS
+// certificate engine (one TSV row per field; see mupdf_shim.c
+// pf_list_signatures for the column layout). Returns PF_OK/PF_ERR with the
+// reason in pf_last_error.
+PF_EXPORT int pf_list_signatures(pf_context context, pf_document document,
+                                 const char *out_path_utf8);
+
+// ---------------------------------------------------------------------------
+// Internal to the shim DLL (not exported): Windows-crypto backend constructors
+// implemented in pf_sig_crypt32.c. Both return objects the caller owns (drop
+// with pdf_drop_signer/pdf_drop_verifier) and fz_throw on failure.
+// ---------------------------------------------------------------------------
+typedef struct pdf_pkcs7_signer pdf_pkcs7_signer;
+typedef struct pdf_pkcs7_verifier pdf_pkcs7_verifier;
+pdf_pkcs7_signer *pf_capi_signer_new(fz_context *ctx, const unsigned char *pfx,
+                                     size_t pfx_len, const char *password_utf8);
+pdf_pkcs7_verifier *pf_capi_verifier_new(fz_context *ctx);
+
 #ifdef __cplusplus
 }
 #endif

@@ -5423,3 +5423,533 @@ int pf_auth_password(pf_context context, pf_document document,
 	status = PF_OK;
 	return status;
 }
+
+/*
+ * ---- FR-SEC-03 digital signature primitives -------------------------------
+ *
+ * Signing produces a standard PDF digital signature: a /Sig field whose
+ * /SubFilter is adbe.pkcs7.detached and whose /Contents is a PKCS#7/CMS blob
+ * computed by the Windows crypto backend (see pf_sig_crypt32.c). The document
+ * is mutated in memory; the caller persists it with either pf_save_document
+ * (full rewrite) or pf_save_document_incremental (the canonical signing save,
+ * which preserves the original bytes so prior signatures stay intact).
+ *
+ * Verification runs completely offline through the OS certificate engine:
+ * the CMS digest is checked with CryptVerifyMessageSignature and the signer
+ * certificate is validated against the machine/user trust stores.
+ * ---------------------------------------------------------------------------
+ */
+
+// Signs the open document on `page_index` (0-based), creating a fresh signature
+// widget. Reads a UTF-8 spec file at spec_path_utf8, one record per line:
+//     N<TAB>name        field name (required)
+//     R<TAB>x0<TAB>y0<TAB>x1<TAB>y1   widget Rect in PDF points (required)
+//     E<TAB>reason      signing reason (optional)
+//     L<TAB>location    signing location (optional)
+//     P12<TAB>path      the signer's PFX/PKCS#12 cert file (required)
+//     PW<TAB>password   PFX password (optional)
+// The PKCS#12 must contain a certificate with a private key (the leaf that
+// will sign). Returns PF_OK/PF_ERR with the reason in pf_last_error. The
+// document is mutated in memory; call pf_save_document[_incremental] to
+// persist (which completes the signature digest over the file byte range).
+PF_EXPORT int pf_sign_pdf(pf_context context, pf_document document,
+                          int page_index, const char *spec_path_utf8)
+{
+	fz_context *ctx = (fz_context *)context;
+	fz_document *doc = (fz_document *)document;
+	pdf_document *pdf = NULL;
+	pdf_page *page = NULL;
+	pdf_annot *widget = NULL;
+	pdf_pkcs7_signer *signer = NULL;
+	unsigned char *pfx = NULL;
+	size_t pfx_len = 0;
+	unsigned char *spec = NULL;
+	char *field_name = NULL;
+	char *reason = NULL;
+	char *location = NULL;
+	char *pfx_path = NULL;
+	char *password = NULL;
+	fz_rect rect = { 0, 0, 0, 0 };
+	int have_name = 0, have_rect = 0, have_pfx = 0;
+	int status = PF_ERR;
+	char *p;
+
+	if (ctx == NULL || doc == NULL || spec_path_utf8 == NULL || page_index < 0)
+	{
+		return PF_ERR;
+	}
+
+	spec = pf_read_file(spec_path_utf8, NULL);
+	if (spec == NULL)
+	{
+		record_error("pf_sign_pdf: cannot read the spec file");
+		return PF_ERR;
+	}
+
+	/* Parse the spec line-by-line (mutating `spec`), echoing pf_create_field. */
+	p = (char *)spec;
+	while (p != NULL)
+	{
+		char *nl = strchr(p, '\n');
+		char *eol = nl != NULL ? nl : p + strlen(p);
+		char rec_type;
+		char *cursor = p;
+		size_t plen = (size_t)(eol - p);
+
+		if (nl != NULL)
+		{
+			*nl = '\0';
+			p = nl + 1;
+		}
+		else
+		{
+			p = NULL;
+		}
+
+		if (plen == 0)
+		{
+			continue;
+		}
+
+		rec_type = cursor[0];
+		if (rec_type == '\r')
+		{
+			continue;
+		}
+		cursor++; /* skip the record-type char */
+
+		if (rec_type == 'N')
+		{
+			char *f;
+			size_t fl;
+			if (cursor[0] == '\t')
+			{
+				cursor++;
+			}
+			if (next_field(&cursor, &f, &fl))
+			{
+				if (field_name != NULL)
+				{
+					free(field_name);
+				}
+				field_name = (char *)malloc(fl + 1);
+				if (field_name == NULL)
+				{
+					record_error("pf_sign_pdf: out of memory copying field name");
+					goto cleanup;
+				}
+				memcpy(field_name, f, fl);
+				field_name[fl] = '\0';
+				have_name = 1;
+			}
+		}
+		else if (rec_type == 'R')
+		{
+			char *r = cursor;
+			char *f1, *f2, *f3, *f4;
+			size_t l1, l2, l3, l4;
+			if (!next_field(&r, &f1, &l1) || !next_field(&r, &f2, &l2) ||
+			    !next_field(&r, &f3, &l3) || !next_field(&r, &f4, &l4))
+			{
+				record_error("pf_sign_pdf: malformed Rect");
+				goto cleanup;
+			}
+			rect = fz_make_rect((float)strtod(f1, NULL), (float)strtod(f2, NULL),
+			                    (float)strtod(f3, NULL), (float)strtod(f4, NULL));
+			have_rect = 1;
+		}
+		else if (rec_type == 'E')
+		{
+			char *f;
+			size_t fl;
+			if (cursor[0] == '\t')
+			{
+				cursor++;
+			}
+			if (next_field(&cursor, &f, &fl))
+			{
+				if (reason != NULL)
+				{
+					free(reason);
+				}
+				reason = (char *)malloc(fl + 1);
+				if (reason == NULL)
+				{
+					record_error("pf_sign_pdf: out of memory copying reason");
+					goto cleanup;
+				}
+				memcpy(reason, f, fl);
+				reason[fl] = '\0';
+			}
+		}
+		else if (rec_type == 'L')
+		{
+			char *f;
+			size_t fl;
+			if (cursor[0] == '\t')
+			{
+				cursor++;
+			}
+			if (next_field(&cursor, &f, &fl))
+			{
+				if (location != NULL)
+				{
+					free(location);
+				}
+				location = (char *)malloc(fl + 1);
+				if (location == NULL)
+				{
+					record_error("pf_sign_pdf: out of memory copying location");
+					goto cleanup;
+				}
+				memcpy(location, f, fl);
+				location[fl] = '\0';
+			}
+		}
+		else if (rec_type == 'P' && plen >= 3 && cursor[0] == '1' && cursor[1] == '2')
+		{
+			/* "P12<tab>path" (after the record-type char 'P' the rest of the
+			 * record starts at "12<TAB>path"). */
+			char *f;
+			size_t fl;
+			cursor += 2; /* skip "12" */
+			if (cursor[0] == '\t')
+			{
+				cursor++;
+			}
+			if (next_field(&cursor, &f, &fl))
+			{
+				if (pfx_path != NULL)
+				{
+					free(pfx_path);
+				}
+				pfx_path = (char *)malloc(fl + 1);
+				if (pfx_path == NULL)
+				{
+					record_error("pf_sign_pdf: out of memory copying pfx path");
+					goto cleanup;
+				}
+				memcpy(pfx_path, f, fl);
+				pfx_path[fl] = '\0';
+				have_pfx = 1;
+			}
+		}
+		else if (rec_type == 'P' && plen >= 2 && cursor[0] == 'W')
+		{
+			/* "PW<tab>password" */
+			char *f;
+			size_t fl;
+			cursor++; /* skip 'W' */
+			if (cursor[0] == '\t')
+			{
+				cursor++;
+			}
+			if (next_field(&cursor, &f, &fl))
+			{
+				if (password != NULL)
+				{
+					free(password);
+				}
+				password = (char *)malloc(fl + 1);
+				if (password == NULL)
+				{
+					record_error("pf_sign_pdf: out of memory copying password");
+					goto cleanup;
+				}
+				memcpy(password, f, fl);
+				password[fl] = '\0';
+			}
+		}
+	}
+
+	if (!have_name)
+	{
+		record_error("pf_sign_pdf: field name missing (N record)");
+		goto cleanup;
+	}
+	if (!have_rect)
+	{
+		record_error("pf_sign_pdf: widget Rect missing (R record)");
+		goto cleanup;
+	}
+	if (!have_pfx)
+	{
+		record_error("pf_sign_pdf: PKCS#12 path missing (P12 record)");
+		goto cleanup;
+	}
+
+	pfx = pf_read_file(pfx_path, &pfx_len);
+	if (pfx == NULL || pfx_len == 0)
+	{
+		record_error("pf_sign_pdf: cannot read the PKCS#12 file");
+		goto cleanup;
+	}
+
+	fz_var(pdf);
+	fz_var(page);
+	fz_var(widget);
+	fz_var(signer);
+
+	fz_try(ctx)
+	{
+		pdf = as_pdf_document(ctx, doc);
+		if (pdf == NULL)
+		{
+			fz_throw(ctx, FZ_ERROR_GENERIC, "pf_sign_pdf: not a PDF document");
+		}
+
+		signer = pf_capi_signer_new(ctx, pfx, pfx_len, password);
+
+		page = pdf_load_page(ctx, pdf, page_index);
+		widget = pdf_create_signature_widget(ctx, page, field_name);
+		if (!fz_is_empty_rect(rect))
+		{
+			pdf_set_annot_rect(ctx, widget, rect);
+		}
+		pdf_sign_signature(ctx, widget, signer,
+		                   PDF_SIGNATURE_SHOW_LABELS | PDF_SIGNATURE_SHOW_TEXT_NAME |
+		                   PDF_SIGNATURE_SHOW_DATE | PDF_SIGNATURE_SHOW_DN |
+		                   PDF_SIGNATURE_SHOW_GRAPHIC_NAME,
+		                   NULL, reason, location);
+		pdf_drop_annot(ctx, widget);
+		widget = NULL;
+	}
+	fz_always(ctx)
+	{
+		if (widget != NULL)
+		{
+			pdf_drop_annot(ctx, widget);
+		}
+		if (signer != NULL)
+		{
+			pdf_drop_signer(ctx, signer);
+		}
+		if (page != NULL)
+		{
+			fz_drop_page(ctx, (fz_page *)page);
+		}
+	}
+	fz_catch(ctx)
+	{
+		caught_message(ctx);
+		goto cleanup;
+	}
+
+	status = PF_OK;
+
+cleanup:
+	free(spec);
+	free(field_name);
+	free(reason);
+	free(location);
+	free(pfx_path);
+	free(password);
+	free(pfx);
+	return status;
+}
+
+// Saves the open document as an incremental update at out_path_utf8 — the
+// canonical save for a just-signed document. The original file bytes are
+// preserved verbatim and the changes (new signature field, /V object, updated
+// xref) are appended, so previous signatures remain valid as of their original
+// byte ranges. Returns PF_OK/PF_ERR with the reason in pf_last_error.
+PF_EXPORT int pf_save_document_incremental(pf_context context,
+                                           pf_document document,
+                                           const char *out_path_utf8)
+{
+	fz_context *ctx = (fz_context *)context;
+	fz_document *doc = (fz_document *)document;
+	pdf_document *pdf = NULL;
+	pdf_write_options opts = pdf_default_write_options;
+	int status = PF_ERR;
+
+	if (ctx == NULL || doc == NULL || out_path_utf8 == NULL)
+	{
+		return PF_ERR;
+	}
+
+	fz_var(pdf);
+
+	fz_try(ctx)
+	{
+		pdf = as_pdf_document(ctx, doc);
+		if (pdf == NULL)
+		{
+			fz_throw(ctx, FZ_ERROR_GENERIC, "pf_save_document_incremental: not a PDF document");
+		}
+		if (!pdf_can_be_saved_incrementally(ctx, pdf))
+		{
+			fz_throw(ctx, FZ_ERROR_GENERIC,
+			         "pf_save_document_incremental: document cannot be saved incrementally");
+		}
+		opts.do_incremental = 1;
+		pdf_save_document(ctx, pdf, out_path_utf8, &opts);
+	}
+	fz_catch(ctx)
+	{
+		caught_message(ctx);
+		return PF_ERR;
+	}
+
+	status = PF_OK;
+	return status;
+}
+
+// Lists every AcroForm signature field in the open document to out_path_utf8,
+// verifying each signed field's digest and certificate chain with the OS
+// certificate engine. One TSV row per signature field:
+//     sig_index<TAB>page<TAB>name<TAB>x0<TAB>y0<TAB>x1<TAB>y1
+//         <TAB>signed<TAB>digest<TAB>certificate<TAB>signer
+// where sig_index runs 0..n-1 over the whole document in page order; signed is
+// 1 or 0; digest/certificate are pdf_signature_error_description strings
+// ("OK", "Signature invalidated by change to document.", "Self-signed
+// certificate.", ...) and are empty for unsigned fields; signer is the
+// formatted distinguished name ("cn=..., o=...") of the verifier, empty when
+// unknown. Writes nothing but returns PF_OK when the document has no signature
+// fields. Returns PF_OK/PF_ERR on failure (reason in pf_last_error).
+PF_EXPORT int pf_list_signatures(pf_context context, pf_document document,
+                                 const char *out_path_utf8)
+{
+	fz_context *ctx = (fz_context *)context;
+	fz_document *doc = (fz_document *)document;
+	pdf_document *pdf = NULL;
+	pdf_pkcs7_verifier *verifier = NULL;
+	pdf_page *page = NULL;
+	pdf_annot *widget = NULL;
+	FILE *fh = NULL;
+	int page_count = 0;
+	int sig_index = 0;
+	int status = PF_ERR;
+
+	if (ctx == NULL || doc == NULL || out_path_utf8 == NULL)
+	{
+		return PF_ERR;
+	}
+
+	fh = fopen(out_path_utf8, "wb");
+	if (fh == NULL)
+	{
+		record_error("pf_list_signatures: cannot open output file");
+		return PF_ERR;
+	}
+
+	fz_var(pdf);
+	fz_var(verifier);
+	fz_var(page);
+
+	fz_try(ctx)
+	{
+		pdf = as_pdf_document(ctx, doc);
+		if (pdf == NULL)
+		{
+			fz_throw(ctx, FZ_ERROR_GENERIC, "pf_list_signatures: not a PDF document");
+		}
+
+		verifier = pf_capi_verifier_new(ctx);
+		page_count = pdf_count_pages(ctx, pdf);
+
+		while (page_count > 0)
+		{
+			int pi;
+
+			for (pi = 0; pi < page_count; ++pi)
+			{
+				page = pdf_load_page(ctx, pdf, pi);
+				for (widget = pdf_first_widget(ctx, page); widget != NULL;
+				     widget = pdf_next_widget(ctx, widget))
+				{
+					pdf_obj *obj;
+					pdf_obj *t;
+					pdf_obj *tres;
+					const char *name = NULL;
+					int is_sig;
+					int signed_flag = 0;
+
+					if (pdf_widget_type(ctx, widget) != PDF_WIDGET_TYPE_SIGNATURE)
+					{
+						continue;
+					}
+
+					obj = pdf_annot_obj(ctx, widget);
+					t = obj != NULL ? pdf_dict_get(ctx, obj, PDF_NAME(T)) : NULL;
+					tres = t != NULL ? pdf_resolve_indirect(ctx, t) : NULL;
+					name = tres != NULL ? pdf_to_text_string(ctx, tres) : NULL;
+
+					is_sig = obj != NULL ?
+					        pdf_signature_is_signed(ctx, pdf, obj) : 0;
+
+					{
+						fz_rect r = pdf_bound_widget(ctx, widget);
+
+						fprintf(fh, "%d\t%d\t", sig_index, pi);
+						pf_write_utf8_field_text(fh, name);
+						fprintf(fh, "\t%g\t%g\t%g\t%g\t",
+						        (double)r.x0, (double)r.y0,
+						        (double)r.x1, (double)r.y1);
+
+						if (is_sig)
+						{
+							pdf_signature_error derr, cerr;
+							pdf_pkcs7_distinguished_name *dn = NULL;
+							char *signer_desc = NULL;
+
+							derr = pdf_check_widget_digest(ctx, verifier, widget);
+							cerr = pdf_check_widget_certificate(ctx, verifier, widget);
+							dn = pdf_signature_get_widget_signatory(ctx, verifier, widget);
+							if (dn != NULL)
+							{
+								signer_desc = pdf_signature_format_distinguished_name(ctx, dn);
+							}
+
+							fprintf(fh, "1\t");
+							pf_write_utf8_field_text(fh, pdf_signature_error_description(derr));
+							fprintf(fh, "\t");
+							pf_write_utf8_field_text(fh, pdf_signature_error_description(cerr));
+							fprintf(fh, "\t");
+							pf_write_utf8_field_text(fh, signer_desc);
+							fprintf(fh, "\n");
+
+							fz_free(ctx, signer_desc);
+							if (dn != NULL)
+							{
+								pdf_signature_drop_distinguished_name(ctx, dn);
+							}
+						}
+						else
+						{
+							fprintf(fh, "0\t\t\t\n");
+						}
+					}
+					++sig_index;
+				}
+				fz_drop_page(ctx, (fz_page *)page);
+				page = NULL;
+			}
+
+			page_count = 0; /* loop once */
+		}
+	}
+	fz_always(ctx)
+	{
+		if (page != NULL)
+		{
+			fz_drop_page(ctx, (fz_page *)page);
+		}
+		if (verifier != NULL)
+		{
+			pdf_drop_verifier(ctx, verifier);
+		}
+	}
+	fz_catch(ctx)
+	{
+		caught_message(ctx);
+		status = PF_ERR;
+		goto out;
+	}
+
+	status = PF_OK;
+
+out:
+	fclose(fh);
+	return status;
+}
