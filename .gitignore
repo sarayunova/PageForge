@@ -19,6 +19,7 @@ tests/PageForge.Fidelity.Tests/golden/**/*.png
 *.sln.docstates
 
 # Native tooling noise
+*.obj
 *.pdb
 *.ipdb
 *.iobj

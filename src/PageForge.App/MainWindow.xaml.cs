@@ -3,6 +3,7 @@
 // This file is part of PageForge. See LICENSE for the full license text.
 
 using System.IO;
+using System.Runtime.InteropServices.WindowsRuntime;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media.Imaging;
