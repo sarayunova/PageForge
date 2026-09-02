@@ -17,4 +17,12 @@ public sealed class OcrOptions
 
     /// <summary>Maximum cumulative pages an account may submit on the Pro plan (0 = unlimited).</summary>
     public long ProMonthlyPageQuota { get; set; } = 10_000;
+
+    /// <summary>
+    /// When true, <see cref="MuPdfOcrJobProcessor"/> (the real MuPDF+Tesseract
+    /// engine) is registered as the job processor; otherwise the deterministic
+    /// <see cref="NoopOcrJobProcessor"/> is used. Off by default so hosts without
+    /// the native engine (e.g. the integration-test factory) keep a no-op path.
+    /// </summary>
+    public bool EnableNativeEngine { get; set; }
 }

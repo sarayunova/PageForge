@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // This file is part of PageForge. See LICENSE for the full license text.
 
+using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using PageForge.Api.Data;
@@ -20,13 +21,19 @@ public sealed class OcrJobsService
     private readonly IEmailSender _email;
     private readonly OcrOptions _options;
     private readonly OcrJobWorker _worker;
+    private readonly IBlobStorage _blobs;
+    private readonly SyncOptions _sync;
 
-    public OcrJobsService(AppDbContext db, IEmailSender email, IOptions<OcrOptions> options, OcrJobWorker worker)
+    public OcrJobsService(
+        AppDbContext db, IEmailSender email, IOptions<OcrOptions> options, OcrJobWorker worker,
+        IBlobStorage blobs, IOptions<SyncOptions> sync)
     {
         _db = db;
         _email = email;
         _options = options.Value;
         _worker = worker;
+        _blobs = blobs;
+        _sync = sync.Value;
     }
 
     public async Task<OcrJob> SubmitAsync(
@@ -84,6 +91,8 @@ public sealed class OcrJobsService
             .AsNoTracking()
             .Include(j => j.Items)
                 .ThenInclude(i => i.DocumentVersion)
+            .Include(j => j.Items)
+                .ThenInclude(i => i.OutputVersion)
             .Where(j => j.Id == jobId && j.OwnerId == ownerId)
             .SingleOrDefaultAsync(ct);
         if (job is null)
@@ -105,12 +114,13 @@ public sealed class OcrJobsService
     }
 
     /// <summary>
-    /// Marks a job item (and the job) complete/failed and accrues usage. Called by
+    /// Marks a job item (and the job) complete/failed, accrues usage, and when the
+    /// item produced an artifact, persists it as a new document version. Called by
     /// the queue worker after <see cref="IOcrJobProcessor.ProcessAsync"/>. Returns
     /// the job and whether the whole job just finished.
     /// </summary>
     public async Task<(OcrJob Job, bool Finished)> CompleteItemAsync(
-        Guid jobId, Guid itemId, int pagesProcessed, string? error, CancellationToken ct)
+        Guid jobId, Guid itemId, int pagesProcessed, string? error, OcrOutput? output, CancellationToken ct)
     {
         OcrJobItem item = await _db.OcrJobItems.FindAsync([itemId], ct)
             ?? throw new KeyNotFoundException("Job item not found.");
@@ -128,6 +138,9 @@ public sealed class OcrJobsService
         item.PagesProcessed = pagesProcessed;
         item.CompletedAt = DateTime.UtcNow;
         item.ErrorMessage = error;
+
+        if (output is not null)
+            await PersistOutputAsync(item, output, ct);
 
         OcrJob job = await _db.OcrJobs.FindAsync([jobId], ct)
             ?? throw new KeyNotFoundException("Job not found.");
@@ -163,6 +176,44 @@ public sealed class OcrJobsService
 
         await _db.SaveChangesAsync(ct);
         return (job, finished);
+    }
+
+    private async Task<OcrJobItem> PersistOutputAsync(OcrJobItem item, OcrOutput output, CancellationToken ct)
+    {
+        DocumentVersion source = await _db.DocumentVersions
+            .AsNoTracking()
+            .SingleAsync(v => v.Id == item.DocumentVersionId, ct);
+
+        await _blobs.EnsureBucketAsync(ct);
+
+        string blobKey = $"ocr/{item.OcrJobId:N}/{item.Id:N}";
+        await _blobs.PutAsync(
+            _sync.Bucket, blobKey,
+            new MemoryStream(output.Content), output.ContentType, ct);
+
+        var doc = await _db.Documents.FindAsync([source.DocumentId], ct)
+            ?? throw new KeyNotFoundException("Source document not found.");
+
+        int next = doc.LatestVersion + 1;
+        var version = new DocumentVersion
+        {
+            DocumentId = doc.Id,
+            VersionNumber = next,
+            BlobKey = blobKey,
+            Sha256 = Convert.ToHexString(SHA256.HashData(output.Content)).ToLowerInvariant(),
+            SizeBytes = output.Content.LongLength,
+            CreatedAt = DateTime.UtcNow,
+            UploadedAt = DateTime.UtcNow
+        };
+
+        _db.DocumentVersions.Add(version);
+        doc.LatestVersion = next;
+        doc.UpdatedAt = DateTime.UtcNow;
+
+        item.OutputVersionId = version.Id;
+        item.OutputFileName = output.FileName;
+        item.OutputContentType = output.ContentType;
+        return item;
     }
 
     private async Task EnforceQuotaAsync(Guid ownerId, OcrJobType type, CancellationToken ct)

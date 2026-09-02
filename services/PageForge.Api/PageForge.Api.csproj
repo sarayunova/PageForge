@@ -20,4 +20,24 @@
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\PageForge.MuPdfInterop\PageForge.MuPdfInterop.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\native\out\PageForge.MuPdfShim\Release\pageforge_mupdf.dll"
+          Link="pageforge_mupdf.dll"
+          CopyToOutputDirectory="PreserveNewest"
+          Visible="false"
+          Condition="Exists('..\..\native\out\PageForge.MuPdfShim\Release\pageforge_mupdf.dll')" />
+
+    <!-- FR-OCR-01: bundle the vendored Tesseract English model so the real OCR
+         processor works offline (matched by MuPdfEngine's tessdata search). -->
+    <None Include="..\..\tools\tessdata\eng.traineddata"
+          Link="tessdata\eng.traineddata"
+          CopyToOutputDirectory="PreserveNewest"
+          Visible="false"
+          Condition="Exists('..\..\tools\tessdata\eng.traineddata')" />
+  </ItemGroup>
+
 </Project>

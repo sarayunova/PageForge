@@ -100,7 +100,7 @@ public sealed class OcrJobWorker : BackgroundService
             .SingleOrDefaultAsync(v => v.Id == item.DocumentVersionId, ct);
         if (version is null)
         {
-            await service.CompleteItemAsync(jobId, itemId, 0, "The document version no longer exists.", ct);
+            await service.CompleteItemAsync(jobId, itemId, 0, "The document version no longer exists.", null, ct);
             return;
         }
 
@@ -118,6 +118,7 @@ public sealed class OcrJobWorker : BackgroundService
             result = new OcrItemResult(0, ex.Message);
         }
 
-        await service.CompleteItemAsync(jobId, itemId, result.PagesProcessed, result.ErrorMessage, ct);
+        await service.CompleteItemAsync(
+            jobId, itemId, result.PagesProcessed, result.ErrorMessage, result.Output, ct);
     }
 }

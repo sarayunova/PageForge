@@ -18,8 +18,15 @@
       <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.11" />
     </ItemGroup>
 
-    <ItemGroup>
+<ItemGroup>
       <ProjectReference Include="..\..\services\PageForge.Api\PageForge.Api.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <!-- Real-engine OCR fixture (scanned PDF Tesseract can process). -->
+      <None Include="..\..\tools\sample-pdf\corpus\scan-letters.pdf"
+            Link="fixtures\scan-letters.pdf"
+            CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
 
   <ItemGroup>

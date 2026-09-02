@@ -6,10 +6,20 @@ using PageForge.Api.Data;
 
 namespace PageForge.Api.Services;
 
+/// <summary>
+/// Artifact produced by processing one OCR/conversion item. When non-null the
+/// worker persists it as a new document version so it can be downloaded.
+/// </summary>
+public sealed record OcrOutput(
+    byte[] Content,
+    string FileName,
+    string ContentType);
+
 /// <summary>Outcome of running one OCR/conversion item.</summary>
 public sealed record OcrItemResult(
     int PagesProcessed,
-    string? ErrorMessage);
+    string? ErrorMessage,
+    OcrOutput? Output = null);
 
 /// <summary>
 /// Seam for the server-side OCR/conversion engine (FR-BATCH-01). The default

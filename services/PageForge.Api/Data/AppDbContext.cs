@@ -190,6 +190,11 @@ public sealed class AppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(i => i.DocumentVersionId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(i => i.OutputVersion)
+                .WithMany()
+                .HasForeignKey(i => i.OutputVersionId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<OcrUsage>(e =>

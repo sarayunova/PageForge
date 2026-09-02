@@ -93,6 +93,21 @@ public sealed class OcrJobItem
     public Guid DocumentVersionId { get; set; }
     public DocumentVersion DocumentVersion { get; set; } = null!;
 
+    /// <summary>
+    /// New <see cref="DocumentVersion"/> holding the OCR'd/converted artifact this
+    /// item produced (set on success). Used by the result download endpoint.
+    /// </summary>
+    public Guid? OutputVersionId { get; set; }
+    public DocumentVersion? OutputVersion { get; set; }
+
+    /// <summary>Generated file name of the produced artifact (e.g. "ocr-&lt;id&gt;.pdf").</summary>
+    [MaxLength(255)]
+    public string? OutputFileName { get; set; }
+
+    /// <summary>Content type of the produced artifact (e.g. "application/pdf").</summary>
+    [MaxLength(128)]
+    public string? OutputContentType { get; set; }
+
     public OcrItemStatus Status { get; set; } = OcrItemStatus.Queued;
 
     /// <summary>Number of pages actually processed (used for usage metering).</summary>

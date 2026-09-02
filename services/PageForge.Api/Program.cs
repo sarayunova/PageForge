@@ -96,7 +96,17 @@ builder.Services.AddScoped<TeamReviewService>();
 
 // Batch OCR / conversion (FR-BATCH-01)
 builder.Services.Configure<OcrOptions>(builder.Configuration.GetSection(OcrOptions.SectionName));
-builder.Services.AddSingleton<IOcrJobProcessor, NoopOcrJobProcessor>();
+if (bool.TryParse(builder.Configuration["Ocr:EnableNativeEngine"], out bool nativeEngine) && nativeEngine)
+{
+    // Real MuPDF+Tesseract processor: fetches the source blob, runs local OCR, and
+    // returns a searchable PDF. Requires pageforge_mupdf.dll + tessdata on output.
+    builder.Services.AddSingleton<IOcrJobProcessor, MuPdfOcrJobProcessor>();
+}
+else
+{
+    // Deterministic no-op so the job lifecycle is testable without the native engine.
+    builder.Services.AddSingleton<IOcrJobProcessor, NoopOcrJobProcessor>();
+}
 builder.Services.AddSingleton<OcrJobWorker>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<OcrJobWorker>());
 builder.Services.AddScoped<OcrJobsService>();

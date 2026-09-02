@@ -5,6 +5,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using PageForge.Api.Data;
 using PageForge.Api.Models;
 using PageForge.Api.Services;
@@ -13,7 +14,8 @@ namespace PageForge.Api.Controllers;
 
 /// <summary>
 /// Batch OCR / conversion jobs (FR-BATCH-01): submit a multi-document job, poll it
-/// for status, and list past jobs. Usage is metered per account.
+/// for status, list past jobs, and download produced artifacts. Usage is metered
+/// per account.
 /// </summary>
 [Authorize]
 [ApiController]
@@ -21,8 +23,15 @@ namespace PageForge.Api.Controllers;
 public sealed class OcrJobsController : ControllerBase
 {
     private readonly OcrJobsService _jobs;
+    private readonly IBlobStorage _blobs;
+    private readonly SyncOptions _sync;
 
-    public OcrJobsController(OcrJobsService jobs) => _jobs = jobs;
+    public OcrJobsController(OcrJobsService jobs, IBlobStorage blobs, IOptions<SyncOptions> sync)
+    {
+        _jobs = jobs;
+        _blobs = blobs;
+        _sync = sync.Value;
+    }
 
     [HttpPost]
     public async Task<IActionResult> Submit([FromBody] SubmitOcrJobRequest request)
@@ -73,6 +82,23 @@ public sealed class OcrJobsController : ControllerBase
         response.UsagePages = usage;
         response.UsageQuota = quota;
         return Ok(response);
+    }
+
+    /// <summary>Downloads a produced artifact (e.g. an OCR'd searchable PDF).</summary>
+    [HttpGet("{id:guid}/items/{itemId:guid}/result")]
+    public async Task<IActionResult> DownloadResult(Guid id, Guid itemId)
+    {
+        Guid userId = GetUserId();
+        var (job, _, _) = await _jobs.GetForOwnerAsync(userId, id, HttpContext.RequestAborted);
+        OcrJobItem? item = job?.Items.FirstOrDefault(i => i.Id == itemId);
+        if (item is null || item.OutputVersionId is null || item.OutputVersion is null)
+            return NotFound(Error("NOT_FOUND", "No produced result is available for this item."));
+
+        Stream content = await _blobs.GetAsync(_sync.Bucket, item.OutputVersion.BlobKey, HttpContext.RequestAborted);
+        return new FileStreamResult(content, item.OutputContentType ?? "application/octet-stream")
+        {
+            FileDownloadName = item.OutputFileName ?? "result"
+        };
     }
 
     [HttpGet]
@@ -134,6 +160,9 @@ public sealed class OcrJobsController : ControllerBase
         {
             Id = i.Id,
             DocumentVersionId = i.DocumentVersionId,
+            OutputVersionId = i.OutputVersionId,
+            OutputFileName = i.OutputFileName,
+            OutputContentType = i.OutputContentType,
             Status = i.Status.ToString(),
             PagesProcessed = i.PagesProcessed,
             CreatedAt = i.CreatedAt,

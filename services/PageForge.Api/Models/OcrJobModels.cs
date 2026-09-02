@@ -32,6 +32,9 @@ public sealed class OcrJobItemResponse
 {
     public required System.Guid Id { get; init; }
     public required System.Guid DocumentVersionId { get; init; }
+    public System.Guid? OutputVersionId { get; init; }
+    public string? OutputFileName { get; init; }
+    public string? OutputContentType { get; init; }
     public required string Status { get; init; }
     public required int PagesProcessed { get; init; }
     public required System.DateTime CreatedAt { get; init; }

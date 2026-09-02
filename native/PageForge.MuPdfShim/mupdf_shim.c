@@ -5255,6 +5255,13 @@ int pf_ocr_pdf(pf_context context, pf_document document,
 		/* Trailer: writes the remaining page objects and runs the OCR pass. */
 		fz_close_band_writer(ctx, bander);
 		fz_close_output(ctx, out);
+		/* Drop (not just close): pdfocr band writer and output hold the FILE*
+		 * until dropped, leaking the handle on Windows and leaving the output
+		 * file locked after this returns. */
+		fz_drop_band_writer(ctx, bander);
+		fz_drop_output(ctx, out);
+		bander = NULL;
+		out = NULL;
 		status = PF_OK;
 		if (out_page_count != NULL)
 		{
