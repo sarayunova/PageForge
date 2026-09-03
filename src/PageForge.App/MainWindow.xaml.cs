@@ -10,6 +10,7 @@ using Microsoft.UI.Xaml.Media.Imaging;
 using PageForge.Core.Pdf;
 using PageForge.MuPdfInterop;
 using Windows.Storage.Streams;
+using Windows.System;
 
 namespace PageForge.App;
 
@@ -77,6 +78,23 @@ public sealed partial class MainWindow : Window
         catch (Exception ex)
         {
             StatusText.Text = $"render failed: {ex.Message}";
+        }
+    }
+
+    /// <summary>Opens the public source repository, satisfying the AGPL §13 source-availability
+    /// obligation for the desktop client (TSD §7). Reads the same PAGEFORGE_REPO_URL used by
+    /// the hosted /source endpoint so the two stay in sync.</summary>
+    private async void ViewSource_Click(object sender, RoutedEventArgs e)
+    {
+        string repoUrl = Environment.GetEnvironmentVariable("PAGEFORGE_REPO_URL")
+            ?? "https://github.com/pageforge/pageforge";
+        try
+        {
+            await Launcher.LaunchUriAsync(new Uri(repoUrl));
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = $"could not open source repository: {ex.Message}";
         }
     }
 

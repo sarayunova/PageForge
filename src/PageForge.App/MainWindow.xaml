@@ -24,6 +24,15 @@
             <Image x:Name="PreviewImage" Stretch="None" />
         </ScrollViewer>
 
-        <TextBlock Grid.Row="2" x:Name="SizeText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="16">
+            <TextBlock x:Name="SizeText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            <!-- AGPL §13 source availability: point users at the public repository (TSD §7). -->
+            <TextBlock>
+                <Hyperlink Click="ViewSource_Click"
+                           ToolTipService.ToolTip="AGPLv3: view the exact source running here">
+                    View source
+                </Hyperlink>
+            </TextBlock>
+        </StackPanel>
     </Grid>
 </Window>

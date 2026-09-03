@@ -41,6 +41,11 @@ jobs:
     name: Managed build + tests + fidelity proof
     runs-on: windows-latest
     needs: [native-build]
+    env:
+      # AGPL §13 source-offer: the /source endpoint must report the exact commit
+      # running in production. The Api integration tests boot the host in-process,
+      # so this is the value the deployed service would be launched with.
+      PAGEFORGE_COMMIT_SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -59,13 +64,18 @@ jobs:
             'src/PageForge.App.Wpf/PageForge.App.Wpf.csproj',
             'tests/PageForge.RenderSpike/PageForge.RenderSpike.csproj',
             'tests/PageForge.Core.Tests/PageForge.Core.Tests.csproj',
-            'tests/PageForge.Fidelity.Tests/PageForge.Fidelity.Tests.csproj')
+            'tests/PageForge.Fidelity.Tests/PageForge.Fidelity.Tests.csproj',
+            'services/PageForge.Api/PageForge.Api.csproj',
+            'tests/PageForge.Api.Tests/PageForge.Api.Tests.csproj')
           foreach ($p in $managed) { dotnet build $p -c Release -warnaserror }
       - name: Test
         shell: pwsh
         run: |
           dotnet test tests/PageForge.Core.Tests -c Release --no-build
           dotnet test tests/PageForge.Fidelity.Tests -c Release --no-build
+          # Hosted-API suite includes the AGPL /source tests: the `/source`
+          # endpoint honors AGPL-3.0-only and reports the deployed commit SHA.
+          dotnet test tests/PageForge.Api.Tests -c Release --no-build
       - name: Render proof + engine/mutool byte-compare
         shell: pwsh
         run: |

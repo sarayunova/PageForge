@@ -173,6 +173,31 @@ public sealed class AccountsApiTests : IDisposable
         Assert.Equal("AGPL-3.0-only", json.RootElement.GetProperty("license").GetString());
     }
 
+    [Fact]
+    public async Task Source_endpoint_reports_the_deployed_commit_sha()
+    {
+        // The AGPL §13 source offer must expose the exact commit running in
+        // production. Simulate a deploy by seeding PAGEFORGE_COMMIT_SHA (the env
+        // var the /source endpoint reads) and assert it is surfaced verbatim. If
+        // the endpoint ever stops echoing the deployed SHA, flag it as a
+        // release-blocker rather than a cosmetic issue.
+        string? previous = Environment.GetEnvironmentVariable("PAGEFORGE_COMMIT_SHA");
+        const string deployed = "0123456789abcdef0123456789abcdef01234567";
+        try
+        {
+            Environment.SetEnvironmentVariable("PAGEFORGE_COMMIT_SHA", deployed);
+
+            HttpResponseMessage response = await _client.GetAsync("/api/v1/source");
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            Assert.Equal(deployed, json.RootElement.GetProperty("commit").GetString());
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("PAGEFORGE_COMMIT_SHA", previous);
+        }
+    }
+
     // --- Helpers ------------------------------------------------------------
 
     private async Task<RegisterResponse> RegisterAsync(string email, string displayName, string password)

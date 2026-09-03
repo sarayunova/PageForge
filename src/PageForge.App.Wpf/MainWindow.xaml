@@ -10,10 +10,21 @@
 
     <DockPanel>
         <Border DockPanel.Dock="Top" Background="#2b2b2b" Padding="8,6">
-            <StackPanel Orientation="Horizontal">
-                <Button Content="Open PDF…" Click="Open_Click" Padding="12,4"
-                        ToolTip="Open one or more PDF documents (FR-VIEW-04 multi-doc tabs)" />
-            </StackPanel>
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                    <Button Content="Open PDF…" Click="Open_Click" Padding="12,4"
+                            ToolTip="Open one or more PDF documents (FR-VIEW-04 multi-doc tabs)" />
+                </StackPanel>
+                <!-- AGPL §13 source availability: point users at the public repository (TSD §7). -->
+                <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center"
+                           Foreground="#e8e8e8">
+                    <Hyperlink Click="ViewSource_Click"
+                               ToolTip="AGPLv3: view the exact source running here"
+                               Foreground="#7fc4ff">
+                        View source
+                    </Hyperlink>
+                </TextBlock>
+            </DockPanel>
         </Border>
         <TabControl x:Name="DocTabs" />
     </DockPanel>

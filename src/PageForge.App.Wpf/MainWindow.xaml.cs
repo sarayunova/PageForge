@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // This file is part of PageForge. See LICENSE for the full license text.
 
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using PageForge.App.Wpf.ViewModels;
 using PageForge.App.Wpf.Views;
 using PageForge.Core.View;
@@ -40,6 +42,25 @@ public partial class MainWindow : Window
             {
                 _ = OpenDocumentAsync(file);
             }
+        }
+    }
+
+    /// <summary>Opens the public source repository in the default browser, satisfying
+    /// the AGPL §13 source-availability obligation for the desktop client (TSD §7).
+    /// Reads the same PAGEFORGE_REPO_URL used by the hosted /source endpoint so the
+    /// two stay in sync.</summary>
+    private void ViewSource_Click(object sender, RoutedEventArgs e)
+    {
+        string repoUrl = Environment.GetEnvironmentVariable("PAGEFORGE_REPO_URL")
+            ?? "https://github.com/pageforge/pageforge";
+        try
+        {
+            Process.Start(new ProcessStartInfo(repoUrl) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Could not open the source repository.\n\n{ex.Message}",
+                "PageForge", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
