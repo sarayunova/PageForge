@@ -167,12 +167,31 @@ if ($bin2coffText -notmatch 'PlatformToolset>v143') {
 }
 [System.IO.File]::WriteAllText($bin2coff, $bin2coffText)
 
-$libmutool = Join-Path $SourceDir 'platform\win32\libmutool.vcxproj'
-$libmutoolText = [System.IO.File]::ReadAllText($libmutool)
-if ($libmutoolText -match 'sodochandler.vcxproj') {
-    $libmutoolText = [regex]::Replace($libmutoolText, '(?s)\s*<ProjectReference[^>]*sodochandler[^>]*/>', '')
-    [System.IO.File]::WriteAllText($libmutool, $libmutoolText)
-    Write-Host 'removed sodochandler ProjectReference from libmutool.vcxproj (thirdparty/so absent in tarball)'
+# The 1.28.3 tarball ships platform/win32/sodochandler.vcxproj but omits
+# thirdparty/so/source entirely, so any project referencing it dies with C1083.
+# The previous patch touched only libmutool.vcxproj and matched only a
+# self-closing <ProjectReference ... />, so it silently did nothing when the
+# reference is written in the paired form or lives in another project. Strip it
+# wherever it appears, in either spelling.
+$soRefPattern = '(?s)\s*<ProjectReference[^>]*sodochandler[^>]*(?:/>|>.*?</ProjectReference>)'
+$soPatched = @()
+Get-ChildItem (Join-Path $SourceDir 'platform\win32') -Filter '*.vcxproj' |
+    Where-Object { $_.Name -ne 'sodochandler.vcxproj' } |
+    ForEach-Object {
+        $text = [System.IO.File]::ReadAllText($_.FullName)
+        if ($text -notmatch 'sodochandler') { return }
+        $stripped = [regex]::Replace($text, $soRefPattern, '')
+        if ($stripped -ne $text) {
+            [System.IO.File]::WriteAllText($_.FullName, $stripped)
+            $soPatched += $_.Name
+        } else {
+            throw "$($_.Name) references sodochandler but the ProjectReference pattern did not match it; the build will fail with C1083"
+        }
+    }
+if ($soPatched.Count) {
+    Write-Host "removed sodochandler ProjectReference from: $($soPatched -join ', ') (thirdparty/so absent from the tarball)"
+} else {
+    Write-Host 'no sodochandler ProjectReference to remove'
 }
 
 # 3. Build bin2coff first, as a Win32 HOST tool.
