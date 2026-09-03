@@ -59,7 +59,11 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: native-shim
-          path: native/out/PageForge.MuPdfShim/Release
+          # The artifact is rooted at native/out (upload-artifact uses the least
+          # common ancestor of the uploaded paths), so it must be unpacked there.
+          # Unpacking into the shim directory nested the payload one level deeper
+          # and the shim DLL could not be loaded.
+          path: native/out
       - name: Restore + build managed projects (WinUI shell builds in its own lane)
         shell: pwsh
         run: |
@@ -111,7 +115,11 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: native-shim
-          path: native/out/PageForge.MuPdfShim/Release
+          # The artifact is rooted at native/out (upload-artifact uses the least
+          # common ancestor of the uploaded paths), so it must be unpacked there.
+          # Unpacking into the shim directory nested the payload one level deeper
+          # and the shim DLL could not be loaded.
+          path: native/out
       - name: Build WinUI app
         shell: pwsh
         run: |
