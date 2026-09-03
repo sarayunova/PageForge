@@ -124,7 +124,7 @@ Pushed as `3277d07..7637770 master -> main`.
    emulation. A native build (shim cross-build + second release lane) is
    post-beta. **This question is now answered — do not ask it again.**
 
-## CI had never once passed — seven defects (2026-09-04 session)
+## CI had never once passed — eight defects, now fully green (2026-09-04)
 
 `gh` is now authenticated (`gh auth login`, device flow), which is what made all
 of this visible. **Before this session CI had never been green on a single
@@ -183,13 +183,53 @@ Fixed, in the order each one unmasked the next:
    Both steps now unpack at `native/out`. Confirmed by downloading the real
    artifact and listing it.
 
-### Result
+### Result — CI IS FULLY GREEN (first time in the project history)
 
-`468dafa`..`0f551bf` took the native lane from a 15-second faceplant to **green
-in 8m25s** — MuPDF, Tesseract, Leptonica, HarfBuzz, ZXing and the shim all
-building on real infrastructure for the first time. The managed lane then
-reached build + tests before failing on the render proof, which is what
-`6028a1f` addresses. As of that commit the run was still in flight.
+Run 33817621227 (`e09d0e3`): **all three lanes pass.**
+
+- `MuPDF native + shim` — success, ~8m30s. MuPDF, Tesseract, Leptonica,
+  HarfBuzz, ZXing and the shim all build from source.
+- `Managed build + tests + fidelity proof` — success. Core, Fidelity and Api
+  suites pass **against the real engine** (the shim DLL now loads), the corpus
+  dogfood clears 4 documents with zero crashes, and the **Phase 0 fidelity
+  criterion is proven**: the engine and WPF renders are byte-identical to
+  mutool at `5D2501313A03F2BA7B99154185C8E7141F04D89D9CA2266FA2C77627E828345C`
+  — the same hash this dev machine produces.
+- `WinUI shell build` — success, 0 warnings, 0 errors.
+
+Two further fixes were needed after the six above:
+
+7. `5f85744` **The byte-compare was incoherent.** It hashed *every* png in
+   `artifacts/` and demanded they all be equal, which can never hold:
+   `annot-phase1-p1.png` and `edit-proof-p1.png` are renders of deliberately
+   modified pages. It now compares the engine and WPF renders against the
+   mutool reference by name and asserts each expected file exists. Validated
+   both directions locally — it passes on the real artifacts and still reports
+   a mismatch when handed the annotated render, so it is not vacuous.
+8. `e09d0e3` **The WinUI lane could never have worked.** It failed MSB4062,
+   unable to load `Microsoft.Build.Packaging.Pri.Tasks.ExpandPriContent`. Those
+   MSIX/PRI tasks ship with Visual Studio, not the .NET SDK, so `dotnet build`
+   could not reach them — and despite `setup-dotnet` requesting 8.0.x the build
+   resolved against the runner default SDK 10.0.400. The lane now uses Visual
+   Studio's MSBuild via vswhere. **The runner does carry the UWP workload**; the
+   tooling was never the problem.
+
+**The runner image has Visual Studio 18 Enterprise**, not 2022 — the final
+confirmation that the original hardcoded
+`...\Microsoft Visual Studio\2022\{BuildTools,Enterprise}` path could never have
+matched it. Never hardcode a Visual Studio year, edition, or Program Files root;
+use vswhere, and always pass `-requires`, because a bare `-products *` also
+matches shell-based installs (it returns SQL Server Management Studio on this
+dev machine).
+
+### One false green found along the way
+
+Run 33814499028's render proof reported **success** while its log contains no
+RenderSpike output and no byte-identical message — it passed without producing
+the proof at all. With the wrong number of pngs on disk the old
+`$unique.Count -ne 1` test is satisfied trivially and exits 0 having verified
+nothing. `5f85744` closes that path by asserting each expected file exists
+before hashing.
 
 ### A theme worth its own pass: steps that report success while doing nothing
 
@@ -228,16 +268,15 @@ matcher can disagree. Each one can hide a real gap behind a passing build.
 
 ## Next session starts here — open gaps, ranked
 
-1. **Drive CI to fully green.** The native lane passes; the managed lane's
-   render proof is the current frontier and `6028a1f` was in flight when this
-   note was written — check it first. Two things are still entirely unproven
-   because no run has ever reached them: the **byte-identical engine/mutool
-   render compare**, and the **WinUI lane**, which is now enforcing and has
-   never actually executed. Expect the WinUI lane to fail on missing UWP/MSIX
-   build tasks in the runner image; if so the fix is to install the workload in
-   the lane, **not** to restore `continue-on-error`.
+1. **Keep CI green — it now is, and that is new and fragile.** All three lanes
+   passed on `e09d0e3` (run 33817621227). Nothing before this session had ever
+   been verified on real infrastructure, so treat the next few runs as the real
+   test of whether it holds. If a lane goes red, read the error rather than
+   assuming a flake: every failure this session was a genuine defect, and none
+   were flaky.
 2. **Sweep for "reports success while doing nothing".** See the theme section
-   above — three found so far, and each hid a real gap behind a green check.
+   above — four found so far, including one CI run that reported a green render
+   proof while producing no proof at all. Each hid a real gap behind a green check.
    Start with `Condition="Exists(...)"` in the csproj files, then any patch step
    whose guard and matcher can disagree, then catches that log and continue.
    This is ranked second because it undermines the trustworthiness of every
@@ -274,7 +313,8 @@ carries the stale "`.NET 8 / WinUI`" description.
 
 ## Environment notes
 - Build/test must EXCLUDE `src/PageForge.App` locally (see AGENTS.md).
-- Suites: Core 154, Fidelity 48, Api 47 — all passing as of `f82c5e9`.
+- Suites: Core 154, Fidelity 48, Api 47 — passing locally, and as of
+  `e09d0e3` passing in CI against the real engine as well.
 - `gh` is **authenticated** as of the 2026-09-04 session (`gh auth login`,
   browser device flow). CI status, branch protection and artifact contents are
   all readable now; earlier notes saying otherwise are obsolete.
