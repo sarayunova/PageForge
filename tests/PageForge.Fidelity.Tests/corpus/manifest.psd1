@@ -19,7 +19,7 @@
   'form-application.pdf' = @{
     name     = 'form-application.pdf'
     source   = 'tools/generate-corpus.ps1 (AcroForm text field + checkbox)'
-    sha256   = 'A9A504EAB304552E67E4B5E86ACCD9F406E3F1D996B6A4CFA3C1131A8A14C595'
+    sha256   = 'EDE21BC5F63F75C335F7484B87629E851D9F19F8CA61CC812DC113B31BF64634'
     pages    = 1
     page0    = '612x792'
     golden   = 'golden/form-application.p1.png'

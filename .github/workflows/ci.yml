@@ -76,15 +76,41 @@ jobs:
             'tests/PageForge.Fidelity.Tests/PageForge.Fidelity.Tests.csproj',
             'services/PageForge.Api/PageForge.Api.csproj',
             'tests/PageForge.Api.Tests/PageForge.Api.Tests.csproj')
-          foreach ($p in $managed) { dotnet build $p -c Release -warnaserror }
+          # Same trap as the Test step below: a failing dotnet build inside a
+          # foreach neither stops the loop nor fails the step, so only the last
+          # project's result would have been reported.
+          foreach ($p in $managed) {
+            dotnet build $p -c Release -warnaserror
+            if ($LASTEXITCODE -ne 0) { throw "build failed for $p (exit $LASTEXITCODE)" }
+          }
       - name: Test
         shell: pwsh
         run: |
-          dotnet test tests/PageForge.Core.Tests -c Release --no-build
-          dotnet test tests/PageForge.Fidelity.Tests -c Release --no-build
-          # Hosted-API suite includes the AGPL /source tests: the `/source`
-          # endpoint honors AGPL-3.0-only and reports the deployed commit SHA.
-          dotnet test tests/PageForge.Api.Tests -c Release --no-build
+          # Every suite must be checked individually. A pwsh step takes its exit
+          # code from the LAST command, and a failing native command does not
+          # stop the script, so listing `dotnet test` calls in sequence reports
+          # only whether the final one passed. That is not hypothetical: run
+          # 33817621227 shipped a green check while
+          # PageForge.Fidelity.Tests had "Failed: 1, Passed: 47".
+          $suites = @(
+            'tests/PageForge.Core.Tests',
+            'tests/PageForge.Fidelity.Tests',
+            # Hosted-API suite includes the AGPL /source tests: the `/source`
+            # endpoint honors AGPL-3.0-only and reports the deployed commit SHA.
+            'tests/PageForge.Api.Tests')
+          $failed = @()
+          foreach ($s in $suites) {
+            Write-Host "::group::dotnet test $s"
+            dotnet test $s -c Release --no-build
+            $code = $LASTEXITCODE
+            Write-Host '::endgroup::'
+            if ($code -ne 0) { $failed += "$s (exit $code)" }
+          }
+          if ($failed) {
+            Write-Error "test suites failed:`n$($failed -join "`n")"
+            exit 1
+          }
+          Write-Host "all $($suites.Count) test suites passed"
       - name: Render proof + engine/mutool byte-compare
         shell: pwsh
         run: |

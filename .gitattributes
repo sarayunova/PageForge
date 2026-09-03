@@ -1,0 +1,40 @@
+# Binary payloads must never be line-ending translated.
+#
+# The repository had no .gitattributes at all, so git fell back to its content
+# heuristic: a file with no NUL bytes near the start is treated as text. Five of
+# the six committed PDFs are small enough to be misclassified that way, so with
+# core.autocrlf=true - the default on Windows, including the GitHub hosted
+# runners - every checkout rewrote LF to CRLF inside them and corrupted them.
+#
+# The visible symptoms were a fidelity manifest hash that drifted only in CI
+# (CorpusSmokeTests.Corpus_commit_matches_the_pinned_manifest_hash), and MuPDF
+# logging "cannot recognize xref format / trying to repair broken xref" for
+# every corpus document in the hosted render proof but never locally.
+#
+# Marking these binary pins the checked-out bytes to the committed blob on every
+# platform. Add any new binary format here rather than relying on the heuristic.
+
+*.pdf   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.bmp   binary
+*.ttf   binary
+*.otf   binary
+*.woff  binary
+*.woff2 binary
+*.dll   binary
+*.exe   binary
+*.pdb   binary
+*.lib   binary
+*.so    binary
+*.dylib binary
+*.zip   binary
+*.gz    binary
+*.tar   binary
+*.7z    binary
+*.pfx   binary
+*.snk   binary
+*.traineddata binary
