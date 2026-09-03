@@ -59,6 +59,43 @@ FR-BATCH) so reviewers can reason about scope.
 - [ ] If the hosted API/deploy changed, the `/source` endpoint still reports the
       deployed commit SHA — a desync is a release-blocker, not cosmetic.
 
+## Releases & code signing
+
+A release is a signed, self-contained desktop payload staged and zipped by
+`tools/publish-release.ps1` (net8.0-windows, win-x64; folder layout so the
+native `pageforge_mupdf.dll` and `tessdata` stay on disk exactly as CI's `--smoke`
+runs them — offline OCR must not rely on single-file extraction).
+
+Run it locally:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/publish-release.ps1
+```
+
+Output lands in `artifacts/release/`. The script signs **only if a certificate is
+provided**; otherwise it warns loudly and produces an **unsigned** payload, which is
+not a release.
+
+Signing certificate — either mechanism:
+
+- **PFX**: set `PAGEFORGE_CERT_PFX` (path) and `PAGEFORGE_CERT_PASSWORD`, plus
+  optional `PAGEFORGE_TSA_URL` (default `http://timestamp.digicert.com`).
+- **Azure Trusted Signing**: set `PAGEFORGE_ATS_ENDPOINT` and use AzureSignTool
+  to stamp the staged exe.
+
+CI (`release.yml`) automates this: on a `v*` tag push it builds the payload,
+decodes the certificate from the `PAGEFORGE_CERT_PFX_B64` / `PAGEFORGE_CERT_PASSWORD`
+secrets (if present), signs, and attaches a **draft** GitHub Release. If those
+secrets are absent, the workflow still builds and uploads an artifact but does
+**not** create a release — an unsigned build is never published.
+
+Prereqs to make `release.yml` fully live (Phase 7 exit criterion):
+
+- A code-signing certificate (PFX + password, or an Azure Trusted Signing profile).
+- Repository secrets `PAGEFORGE_CERT_PFX_B64` (base64 of the `.pfx`) and
+  `PAGEFORGE_CERT_PASSWORD`.
+- A public hosted repository (the `/source` endpoint's `PAGEFORGE_REPO_URL`).
+
 ## Commit style
 
 - Imperative subject line, matching the phase: `Phase N <SLICE>: <summary>`.
