@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Phase 6 FR-BATCH load harness. Standalone console that drives the hosted
+    PageForge API (in-memory DB + no-op OCR processor so it is hermetic and
+    deterministic) through a concurrent user flow and reports throughput /
+    latency percentiles. Not wired into CI; run manually with dotnet run and the
+    flags: users N, iterations K, p95-ms T, verbose.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>pageforge.loadtest</AssemblyName>
+    <RootNamespace>PageForge.LoadTest</RootNamespace>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\services\PageForge.Api\PageForge.Api.csproj" />
+    <ProjectReference Include="..\..\..\tests\PageForge.Api.Tests\PageForge.Api.Tests.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.11" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.11" />
+  </ItemGroup>
+
+</Project>
