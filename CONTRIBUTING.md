@@ -94,7 +94,11 @@ Prereqs to make `release.yml` fully live (Phase 7 exit criterion):
 - A code-signing certificate (PFX + password, or an Azure Trusted Signing profile).
 - Repository secrets `PAGEFORGE_CERT_PFX_B64` (base64 of the `.pfx`) and
   `PAGEFORGE_CERT_PASSWORD`.
-- A public hosted repository (the `/source` endpoint's `PAGEFORGE_REPO_URL`).
+- ~~A public hosted repository (the `/source` endpoint's `PAGEFORGE_REPO_URL`).~~
+  Done — the repository is live at <https://github.com/sarayunova/PageForge>. CI
+  sets `PAGEFORGE_REPO_URL` from `github.repository`, and the same value is the
+  built-in fallback for the `/source` endpoint and the desktop "View source"
+  link. Deployments outside CI must set the variable explicitly.
 
 ## Commit style
 

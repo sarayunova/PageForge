@@ -198,6 +198,38 @@ public sealed class AccountsApiTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task Source_endpoint_reports_the_public_repository()
+    {
+        // AGPL §13 requires the offer to point at a repository users can
+        // actually fetch from. A deployment names its own repo through
+        // PAGEFORGE_REPO_URL (CI derives it from github.repository, so forks
+        // advertise their own source); with nothing set, the built-in fallback
+        // must still be the real public repo and never a placeholder.
+        string? previous = Environment.GetEnvironmentVariable("PAGEFORGE_REPO_URL");
+        try
+        {
+            Environment.SetEnvironmentVariable("PAGEFORGE_REPO_URL", null);
+
+            var json = JsonDocument.Parse(
+                await (await _client.GetAsync("/api/v1/source")).Content.ReadAsStringAsync());
+            string? repository = json.RootElement.GetProperty("repository").GetString();
+
+            Assert.Equal("https://github.com/sarayunova/PageForge", repository);
+
+            const string deployed = "https://github.example/fork/pageforge";
+            Environment.SetEnvironmentVariable("PAGEFORGE_REPO_URL", deployed);
+
+            json = JsonDocument.Parse(
+                await (await _client.GetAsync("/api/v1/source")).Content.ReadAsStringAsync());
+            Assert.Equal(deployed, json.RootElement.GetProperty("repository").GetString());
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("PAGEFORGE_REPO_URL", previous);
+        }
+    }
+
     // --- Helpers ------------------------------------------------------------
 
     private async Task<RegisterResponse> RegisterAsync(string email, string displayName, string password)

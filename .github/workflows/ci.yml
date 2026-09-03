@@ -46,6 +46,9 @@ jobs:
       # running in production. The Api integration tests boot the host in-process,
       # so this is the value the deployed service would be launched with.
       PAGEFORGE_COMMIT_SHA: ${{ github.sha }}
+      # The public repository the AGPL source offer points at. Derived from the
+      # running repo so a fork advertises its own source, not upstream's.
+      PAGEFORGE_REPO_URL: ${{ github.server_url }}/${{ github.repository }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

@@ -86,7 +86,7 @@ public sealed partial class MainWindow : Window
     private async void ViewSource_Click(object sender, RoutedEventArgs e)
     {
         string repoUrl = Environment.GetEnvironmentVariable("PAGEFORGE_REPO_URL")
-            ?? "https://github.com/pageforge/pageforge";
+            ?? "https://github.com/sarayunova/PageForge";
         try
         {
             await Windows.System.Launcher.LaunchUriAsync(new Uri(repoUrl));

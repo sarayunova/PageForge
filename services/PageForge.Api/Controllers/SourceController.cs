@@ -15,7 +15,7 @@ public sealed class SourceController : ControllerBase
     {
         string? commitSha = Environment.GetEnvironmentVariable("PAGEFORGE_COMMIT_SHA") ?? "unknown";
         string? repoUrl = Environment.GetEnvironmentVariable("PAGEFORGE_REPO_URL")
-            ?? "https://github.com/pageforge/pageforge";
+            ?? "https://github.com/sarayunova/PageForge";
 
         return Ok(new
         {
