@@ -126,17 +126,32 @@ if (-not (Test-Path $SourceDir)) {
 # 2. Apply the two local build patches (idempotent).
 $bin2coff = Join-Path $SourceDir 'platform\win32\bin2coff.vcxproj'
 $bin2coffText = [System.IO.File]::ReadAllText($bin2coff)
-if ($bin2coffText -notmatch '<ProjectConfiguration Include="Release\|x64"') {
-    $bin2coffText = $bin2coffText -replace
-        '<ProjectConfiguration Include="Release\|Win32">',
-        '<ProjectConfiguration Include="Release|Win32">' +
-        "`r`n<ProjectConfiguration Include='Release|x64'>`r`n<Configuration>Release</Configuration>`r`n<Platform>x64</Platform>`r`n</ProjectConfiguration>"
-    if ($bin2coffText -notmatch 'PlatformToolset>v143') {
-        $bin2coffText = $bin2coffText -replace '<PlatformToolset>v142</PlatformToolset>', '<PlatformToolset>v143</PlatformToolset>'
-    }
-    [System.IO.File]::WriteAllText($bin2coff, $bin2coffText)
+if ($bin2coffText -notmatch '<ProjectConfiguration Include="Release\|x64">') {
+    # Insert a Release|x64 configuration after the COMPLETE Release|Win32
+    # element. Anchor on the whole element, not just its opening tag: anchoring
+    # on the opening tag nests the new element inside the old one and yields
+    # malformed XML. Also keep the -replace and both of its operands on a single
+    # line -- spread across continuation lines, pwsh 7 parses this as three
+    # elements and throws "The -replace operator allows only two elements to
+    # follow it", which is what broke the hosted native build.
+    $win32Element = '(?s)<ProjectConfiguration Include="Release\|Win32">.*?</ProjectConfiguration>'
+    $x64Element = @(
+        ''
+        '    <ProjectConfiguration Include="Release|x64">'
+        '      <Configuration>Release</Configuration>'
+        '      <Platform>x64</Platform>'
+        '    </ProjectConfiguration>'
+    ) -join "`r`n"
+    $bin2coffText = $bin2coffText -replace $win32Element, ('$&' + $x64Element)
     Write-Host 'patched bin2coff.vcxproj with Release|x64'
 }
+# Applied independently of the x64 patch above: on a tree that already had the
+# x64 configuration, the old code skipped the toolset fix entirely.
+if ($bin2coffText -notmatch 'PlatformToolset>v143') {
+    $bin2coffText = $bin2coffText -replace '<PlatformToolset>v142</PlatformToolset>', '<PlatformToolset>v143</PlatformToolset>'
+    Write-Host 'patched bin2coff.vcxproj to PlatformToolset v143'
+}
+[System.IO.File]::WriteAllText($bin2coff, $bin2coffText)
 
 $libmutool = Join-Path $SourceDir 'platform\win32\libmutool.vcxproj'
 $libmutoolText = [System.IO.File]::ReadAllText($libmutool)
