@@ -60,15 +60,42 @@ Write-Host "OK: tessdata staged at $TessdataOut"
 if (-not $env:PF_MUPDF_SKIP_DOWNLOAD) { New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null }
 
 function Find-VcVars {
-    foreach ($base in @(
-        "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022",
-        "$env:ProgramFiles\Microsoft Visual Studio\2022")) {
-        $bat = Join-Path $base 'BuildTools\VC\Auxiliary\Build\vcvars64.bat'
-        if (Test-Path $bat) { return $bat }
-        $bat = Join-Path $base 'Enterprise\VC\Auxiliary\Build\vcvars64.bat'
-        if (Test-Path $bat) { return $bat }
+    # Do NOT hardcode the edition, year, or Program Files root. Hosted CI images
+    # move all three -- the GitHub windows-latest image is what broke this -- and
+    # a developer machine may have any of them. vswhere is the supported
+    # discovery tool and always installs to the same fixed path, whatever
+    # version of Visual Studio is present.
+    $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+    if (Test-Path $vswhere) {
+        $bat = & $vswhere -latest -products * `
+            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+            -find 'VC\Auxiliary\Build\vcvars64.bat' | Select-Object -First 1
+        if ($bat -and (Test-Path $bat)) { return $bat }
     }
-    throw 'vcvars64.bat not found. Install VS Build Tools 2022 with Desktop C++ (v143).'
+
+    # Fallback for installs vswhere does not know about: glob every year and
+    # edition under both Program Files roots rather than naming them.
+    foreach ($root in @("${env:ProgramFiles(x86)}\Microsoft Visual Studio",
+                        "$env:ProgramFiles\Microsoft Visual Studio")) {
+        if (-not (Test-Path $root)) { continue }
+        $bat = Get-ChildItem -Path $root -Recurse -Depth 6 -Filter 'vcvars64.bat' `
+            -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($bat) { return $bat.FullName }
+    }
+
+    # Nothing found: report what IS present, so a CI failure is diagnosable from
+    # the log without burning another round trip.
+    Write-Host '--- Visual Studio discovery failed; what is actually installed ---'
+    Write-Host "vswhere present: $(Test-Path $vswhere)"
+    foreach ($root in @("${env:ProgramFiles(x86)}\Microsoft Visual Studio",
+                        "$env:ProgramFiles\Microsoft Visual Studio")) {
+        Write-Host "root '$root' exists: $(Test-Path $root)"
+        if (Test-Path $root) {
+            Get-ChildItem $root -ErrorAction SilentlyContinue |
+                ForEach-Object { Write-Host "  $($_.Name)" }
+        }
+    }
+    throw 'vcvars64.bat not found. Install Visual Studio (or Build Tools) with the Desktop C++ workload (v143).'
 }
 
 $VcVars = Find-VcVars
