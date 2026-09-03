@@ -10,7 +10,6 @@ using Microsoft.UI.Xaml.Media.Imaging;
 using PageForge.Core.Pdf;
 using PageForge.MuPdfInterop;
 using Windows.Storage.Streams;
-using Windows.System;
 
 namespace PageForge.App;
 
@@ -90,7 +89,7 @@ public sealed partial class MainWindow : Window
             ?? "https://github.com/pageforge/pageforge";
         try
         {
-            await Launcher.LaunchUriAsync(new Uri(repoUrl));
+            await Windows.System.Launcher.LaunchUriAsync(new Uri(repoUrl));
         }
         catch (Exception ex)
         {
