@@ -126,14 +126,22 @@ if ($pfx -and (Test-Path $pfx)) {
 $signtool = Get-Command "signtool.exe" -ErrorAction SilentlyContinue
 if (-not $signtool) {
     # signtool is rarely on PATH; locate it under the Windows 10/11 SDK kits.
-    $kitsRoot = Join-Path $env:ProgramFiles "Windows Kits\10\bin"
-    if (Test-Path $kitsRoot) {
-        $candidates = Get-ChildItem $kitsRoot -Recurse -Filter "signtool.exe" -ErrorAction SilentlyContinue |
-            Where-Object { $_.FullName -match "\\x64\\signtool.exe$" } |
-            Sort-Object FullName -Descending
-        if ($candidates) {
-            $signtool = Get-Item $candidates[0].FullName
-        }
+    # The kits install under Program Files (x86) on 64-bit Windows — including on
+    # GitHub's windows-latest runners — so search both roots, not just
+    # $env:ProgramFiles.
+    $kitsRoots = @(
+        (Join-Path $env:ProgramFiles "Windows Kits\10\bin"),
+        (Join-Path ${env:ProgramFiles(x86)} "Windows Kits\10\bin")
+    ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
+    $candidates = @()
+    foreach ($kitsRoot in $kitsRoots) {
+        $candidates += Get-ChildItem $kitsRoot -Recurse -Filter "signtool.exe" -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match "\\x64\\signtool\.exe$" }
+    }
+    # Newest SDK version wins (directory names sort as 10.0.<build>.<rev>).
+    $candidates = $candidates | Sort-Object FullName -Descending
+    if ($candidates) {
+        $signtool = Get-Item $candidates[0].FullName
     }
 }
 if (-not $signtool -and $signArgs.Count -gt 0) {
