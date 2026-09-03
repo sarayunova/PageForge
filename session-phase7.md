@@ -100,33 +100,47 @@ Azure setup — walkthrough is in CONTRIBUTING.md:
 Then `git tag v0.1.0-beta && git push origin v0.1.0-beta` → signed draft release.
 A new certificate has no SmartScreen reputation; early downloads still warn.
 
+## Landed 2026-09-03 (second session)
+
+- `95bfd28` **winui-build lane is now enforcing** (`continue-on-error` removed
+  from `ci.yml`) and a root `CHANGELOG.md` was written from the slice history.
+- `7637770` **TSD/TRD amended** — new TSD §12.1 records both beta decisions,
+  and the stack table, phase table, risk register, TRD platform row, TRD risk
+  list, README, AGENTS.md and the CHANGELOG all point at it.
+
+Pushed as `3277d07..7637770 master -> main`.
+
+## Two decisions the user made (previously open)
+
+1. **Shipping shell: WPF.** Investigating gap (1) showed it was never parity
+   drift: `src/PageForge.App` is still the 185-line Phase 0 spike (renders page
+   one of a sample doc), while `src/PageForge.App.Wpf` is ~4,450 lines holding
+   every product feature. Porting is an unwritten ~4,400-line job whose every
+   build cycle would have to round-trip through CI, since WinUI does not build
+   on this machine. The user chose to declare WPF the beta product target and
+   defer the port post-beta. The WinUI lane stays enforcing so the spike cannot
+   rot.
+2. **ARM64: deferred.** Beta ships x64 only; ARM64 Windows runs it under
+   emulation. A native build (shim cross-build + second release lane) is
+   post-beta. **This question is now answered — do not ask it again.**
+
 ## Next session starts here — open gaps, ranked
 
-1. **WinUI shell (biggest gap).** Releases ship `PageForge.App.Wpf`, the
-   *fallback*, while `src/PageForge.App` is the locked product target. The
-   `winui-build` lane is `continue-on-error: true` (`ci.yml:100`) so breakage is
-   silent — that is why the CS0104 above went unnoticed. Plan: flip the lane to
-   enforcing (expect CI to go red, that is the point), then diff the two shells
-   for drift. WinUI does not build on this dev machine (missing
-   `Microsoft.Build.Packaging.Pri.Tasks.dll`); it only builds in CI.
-2. **ARM64 — needs a decision from the user.** `publish-release.ps1` is
-   `-r win-x64` only, but the Phase 0 exit criterion named x64 *and* ARM64, and
-   there is no ARM64 evidence, including for the native MuPDF shim (the hard
-   part). Either commit to ARM64 for the beta or amend the TSD. Do not silently
-   ship x64-only against a written criterion. **This question was asked and is
-   still unanswered.**
-3. **No CHANGELOG** at the repo root for a public beta. Cheap; write from git log.
+1. **Read the CI result for `7637770`.** This is the first run with the WinUI
+   lane enforcing, and it is expected to go red — the lane was originally
+   excused because the runner image may lack the UWP/MSIX build tasks. If it is
+   an image/tooling gap rather than a code defect, the fix is to install the
+   workload in the lane (`dotnet workload install` / the Windows App SDK
+   tasks), not to re-add `continue-on-error`.
+2. **Phase 6 exit evidence.** `tools/loadtest/` exists but no recorded run
+   against TSD targets, and no WCAG 2.1 AA audit artifact. Now that WPF is the
+   declared product target, a WPF accessibility audit finally counts as real
+   evidence rather than something that would not transfer — so this is
+   unblocked and is the largest remaining substantive gap.
+3. **Azure Artifact Signing setup** — still the only hard Phase 7 blocker, and
+   it needs the maintainer (steps unchanged, above). Until it is done, tagging
+   produces an unsigned preview artifact and no release.
 4. **API excluded from releases** (`-SkipApi`). Fine if hosted deploys are
-   separate, but nothing says so.
-5. **Phase 6 exit evidence.** `tools/loadtest/` exists but no recorded run
-   against TSD targets; no WCAG 2.1 AA audit artifact. An audit of the WPF shell
-   would not transfer to WinUI anyway — ties back to (1).
+   separate, but nothing states so; one sentence in the README would close it.
+5. **Tag `v0.1.0-beta`** once (1) and (3) are settled.
 
-Agreed next step when work resumes: **(1)**, starting with the CI lane flip,
-plus **(3)** alongside it. **(2) is blocked on the user's answer.**
-
-## Environment notes
-- Build/test must EXCLUDE `src/PageForge.App` locally (see AGENTS.md).
-- Suites: Core 154, Fidelity 48, Api 47 — all passing as of `f82c5e9`.
-- `gh` CLI calls were blocked by the permission classifier this session, so CI
-  status could not be read. Ask the user to paste results or allow `gh`.
