@@ -101,7 +101,7 @@ function Find-VcVars {
 $VcVars = Find-VcVars
 
 function Invoke-MsBuild {
-    param([string]$Project)
+    param([string]$Project, [string]$Platform = 'x64')
     # The generated batch file MUST carry a .cmd extension. The previous version
     # wrote it as ...msbuild.log and handed that to `cmd /c`, so Windows
     # dispatched the file by its extension association rather than executing it.
@@ -111,7 +111,7 @@ function Invoke-MsBuild {
     $cmd = @"
 @echo off
 call "$VcVars" >nul 2>&1
-msbuild "$Project" /t:Build /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v143 /m -v:m
+msbuild "$Project" /t:Build /p:Configuration=Release /p:Platform=$Platform /p:PlatformToolset=v143 /m -v:m
 exit /b %ERRORLEVEL%
 "@
     Set-Content -Path $script -Value $cmd -Encoding Ascii
@@ -122,7 +122,7 @@ exit /b %ERRORLEVEL%
     # $? after a pipeline reports the pipeline, not msbuild, so a compile failure
     # used to pass this check silently. Test the real exit code.
     if ($LASTEXITCODE -ne 0) {
-        throw "msbuild failed for $Project (exit code $LASTEXITCODE)"
+        throw "msbuild failed for $Project ($Platform, exit code $LASTEXITCODE)"
     }
 }
 
@@ -175,7 +175,24 @@ if ($libmutoolText -match 'sodochandler.vcxproj') {
     Write-Host 'removed sodochandler ProjectReference from libmutool.vcxproj (thirdparty/so absent in tarball)'
 }
 
-# 3. Build the MuPDF static libraries + mutool.exe.
+# 3. Build bin2coff first, as a Win32 HOST tool.
+# bin2coff.targets invokes the converter as a literal "Release\bin2coff.exe" --
+# the Win32 output path -- no matter which platform is being built. Building it
+# only under Platform=x64 puts it in x64\Release\ instead, and every font
+# resource in libresources then fails with MSB3721. This never showed up on a
+# developer machine that already had a stale Release\bin2coff.exe on disk.
+$bin2coffProj = Join-Path $SourceDir 'platform\win32\bin2coff.vcxproj'
+$bin2coffExe = Join-Path $SourceDir 'platform\win32\Release\bin2coff.exe'
+if (-not (Test-Path $bin2coffExe)) {
+    Write-Host 'building bin2coff.vcxproj (Win32 host tool)'
+    Invoke-MsBuild $bin2coffProj -Platform Win32
+}
+if (-not (Test-Path $bin2coffExe)) {
+    throw "bin2coff.exe was not produced at $bin2coffExe; libresources cannot convert font resources without it"
+}
+Write-Host "OK: host tool present at $bin2coffExe"
+
+# 4. Build the MuPDF static libraries + mutool.exe.
 $Projects = @(
     'libmupdf', 'libresources', 'libthirdparty', 'libmuthreads',
     'libtesseract', 'libleptonica', 'libharfbuzz', 'libzxing',
