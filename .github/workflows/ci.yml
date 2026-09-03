@@ -93,14 +93,36 @@ jobs:
           $mutool = Resolve-Path 'native/out/_work/mupdf-1.28.3-source/platform/win32/x64/Release/mutool.exe'
           dotnet run -c Release --project tests/PageForge.RenderSpike -- `
             tools/sample-pdf/sample-phase0.pdf --out artifacts --mutool-path $mutool
-          $hashes = Get-ChildItem artifacts -Filter *.png | ForEach-Object {
-            (Get-FileHash $_.FullName -Algorithm SHA256).Hash }
-          $unique = $hashes | Sort-Object -Unique
-          if ($unique.Count -ne 1) {
-            Write-Error "render artifacts are NOT byte-identical: $($hashes -join ', ')"
+          # The fidelity claim this step exists to prove: PageForge's own render
+          # of page 1 must be byte-identical to mutool's render of the same page.
+          # Compare exactly those files.
+          #
+          # The previous check hashed EVERY png in artifacts/ and required all of
+          # them to be equal, which can never hold - annot-phase1-p1.png and
+          # edit-proof-p1.png are renders of deliberately MODIFIED pages and
+          # differ by design. That logic had never executed, because no CI run
+          # had ever reached this step.
+          $reference = 'artifacts/sample-phase0-p1-mutool.png'
+          $mustMatch = @(
+            'artifacts/sample-phase0-p1-spike.png',   # engine render through the shim
+            'artifacts/sample-phase0-p1-wpfproof.png' # same page through the WPF shell
+          )
+          foreach ($f in @($reference) + $mustMatch) {
+            if (-not (Test-Path $f)) {
+              Write-Error "expected render is missing: $f"
+              exit 1
+            }
+          }
+          $refHash = (Get-FileHash $reference -Algorithm SHA256).Hash
+          $bad = foreach ($f in $mustMatch) {
+            $h = (Get-FileHash $f -Algorithm SHA256).Hash
+            if ($h -ne $refHash) { "  $f = $h" }
+          }
+          if ($bad) {
+            Write-Error "renders differ from the mutool reference ($refHash):`n$($bad -join "`n")"
             exit 1
           }
-          Write-Host "all renders byte-identical: $($unique[0])"
+          Write-Host "engine and WPF renders are byte-identical to mutool: $refHash"
 
   winui-build:
     name: WinUI shell build
