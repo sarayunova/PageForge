@@ -145,5 +145,37 @@ jobs:
       - name: Build WinUI app
         shell: pwsh
         run: |
-          dotnet build src/PageForge.App/PageForge.App.csproj -c Release `
-            -p:Platform=x64 -p:RuntimeIdentifier=win-x64
+          # The WinUI spike needs the MSIX/PRI build tasks
+          # (Microsoft.Build.Packaging.Pri.Tasks.dll). Those ship with Visual
+          # Studio, not with the .NET SDK, so `dotnet build` can never find
+          # them: it resolved against the runner's default SDK 10.0.400 and
+          # failed with MSB4062 pointing at an AppxPackage folder that does not
+          # exist. Build with Visual Studio's MSBuild instead, located the same
+          # way the native build locates vcvars.
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          if (-not (Test-Path $vswhere)) { throw "vswhere not found at $vswhere" }
+          $msbuild = & $vswhere -latest -products * `
+            -requires Microsoft.Component.MSBuild `
+            -find 'MSBuild\**\Bin\MSBuild.exe' | Select-Object -First 1
+          if (-not $msbuild) { throw 'MSBuild.exe not found via vswhere' }
+          Write-Host "using $msbuild"
+
+          # Report whether the image actually carries the MSIX/PRI tasks, so a
+          # failure here is diagnosable from the log without another round trip.
+          # Must carry the same -requires filter as the lookup above: a bare
+          # `-products *` also matches shell-based installs such as SQL Server
+          # Management Studio, and would report on the wrong directory.
+          $vsRoot = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild `
+            -property installationPath | Select-Object -First 1
+          Write-Host "VS install: $vsRoot"
+          $priTask = Get-ChildItem $vsRoot -Recurse -Filter 'Microsoft.Build.Packaging.Pri.Tasks.dll' `
+            -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($priTask) { Write-Host "PRI tasks: $($priTask.FullName)" }
+          else { Write-Host 'PRI tasks: NOT PRESENT in the Visual Studio install' }
+
+          & $msbuild src/PageForge.App/PageForge.App.csproj -t:Restore `
+            -p:Configuration=Release -p:Platform=x64 -p:RuntimeIdentifier=win-x64
+          if ($LASTEXITCODE -ne 0) { throw "restore failed (exit $LASTEXITCODE)" }
+          & $msbuild src/PageForge.App/PageForge.App.csproj -t:Build `
+            -p:Configuration=Release -p:Platform=x64 -p:RuntimeIdentifier=win-x64
+          if ($LASTEXITCODE -ne 0) { throw "build failed (exit $LASTEXITCODE)" }
