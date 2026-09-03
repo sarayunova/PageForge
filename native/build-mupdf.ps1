@@ -102,14 +102,28 @@ $VcVars = Find-VcVars
 
 function Invoke-MsBuild {
     param([string]$Project)
-    $log = Join-Path $env:TEMP 'pageforge-mupdf-msbuild.log'
+    # The generated batch file MUST carry a .cmd extension. The previous version
+    # wrote it as ...msbuild.log and handed that to `cmd /c`, so Windows
+    # dispatched the file by its extension association rather than executing it.
+    # On a headless CI runner that never returns: the hosted native build sat on
+    # this step for over an hour, producing no output, until it was cancelled.
+    $script = Join-Path $env:TEMP 'pageforge-mupdf-msbuild.cmd'
     $cmd = @"
+@echo off
 call "$VcVars" >nul 2>&1
 msbuild "$Project" /t:Build /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v143 /m -v:m
+exit /b %ERRORLEVEL%
 "@
-    Set-Content -Path $log -Value $cmd -Encoding Ascii
-    cmd /c "`"$log`"" | Out-Null
-    if (-not $?) { throw "msbuild failed for $Project (see $log)" }
+    Set-Content -Path $script -Value $cmd -Encoding Ascii
+    # Let msbuild's output through to the console. Piping it to Out-Null left
+    # every failure undiagnosable, and the old error message pointed at a file
+    # that held the script rather than any build output.
+    & cmd /c "`"$script`""
+    # $? after a pipeline reports the pipeline, not msbuild, so a compile failure
+    # used to pass this check silently. Test the real exit code.
+    if ($LASTEXITCODE -ne 0) {
+        throw "msbuild failed for $Project (exit code $LASTEXITCODE)"
+    }
 }
 
 # 1. Obtain the AGPL source tarball.

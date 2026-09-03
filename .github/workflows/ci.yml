@@ -25,6 +25,7 @@ jobs:
   native-build:
     name: MuPDF native + shim
     runs-on: windows-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - name: Build MuPDF + shim
@@ -40,6 +41,7 @@ jobs:
   managed-build:
     name: Managed build + tests + fidelity proof
     runs-on: windows-latest
+    timeout-minutes: 45
     needs: [native-build]
     env:
       # AGPL §13 source-offer: the /source endpoint must report the exact commit
@@ -99,6 +101,7 @@ jobs:
   winui-build:
     name: WinUI shell build
     runs-on: windows-latest
+    timeout-minutes: 30
     needs: [managed-build]
     steps:
       - uses: actions/checkout@v4
