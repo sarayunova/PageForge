@@ -362,6 +362,23 @@ public interface IPdfEngine : IAsyncDisposable
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Converts every page of the open document into a PNG raster and packs the
+    /// page images into a single <c>.zip</c> container (<c>page-1.png</c>,
+    /// <c>page-2.png</c>, ...) written to <paramref name="outputPath"/>
+    /// (FR-OCR-04). The open document is left open and unmodified; the container
+    /// is produced entirely locally with MuPDF's zip writer and requires no
+    /// OCR/trained data. No <c>OcrOptions</c> are consulted for recognition, so
+    /// pass <c>null</c> for <paramref name="options"/>.
+    ///
+    /// Throws when the engine has no open document, the output path is invalid,
+    /// or a page cannot be rasterized. Returns the number of pages packed.
+    /// </summary>
+    ValueTask<OcrResult> OcrToPngAsync(
+        string outputPath,
+        OcrOptions? options = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Applies PDF standard security (FR-SEC-01): writes a fresh encrypted copy
     /// of the open document to <paramref name="outputPath"/>. The open document
     /// is left open and unmodified; the copy is what carries the security

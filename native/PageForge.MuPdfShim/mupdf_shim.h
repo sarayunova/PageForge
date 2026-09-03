@@ -415,6 +415,14 @@ PF_EXPORT int pf_ocr_docx(pf_context context, pf_document document,
                           const char *datadir_utf8,
                           int *out_page_count);
 
+// Converts every page of the open document into a PNG raster and packs the page
+// images into a single .zip container (page-1.png, page-2.png, ...) at
+// out_path_utf8. The open document is NOT modified and no OCR/trained data is
+// used. Returns PF_OK/PF_ERR (message in pf_last_error) and writes the packed
+// page count to *out_page_count.
+PF_EXPORT int pf_ocr_png(pf_context context, pf_document document,
+                         const char *out_path_utf8, int *out_page_count);
+
 // ---------------------------------------------------------------------------
 // FR-SEC-01 password protection primitives. protect writes a fresh encrypted
 // copy; authenticate answers "does this password open the (encrypted) open

@@ -5604,6 +5604,110 @@ int pf_ocr_docx(pf_context context, pf_document document,
 }
 
 /*
+ * FR-OCR-04: convert every page of the open document into a PNG raster and pack
+ * the page images into a single .zip container (page-1.png, page-2.png, ...).
+ * This is a raster conversion target for the batch API: the open document is
+ * NOT modified and no OCR/trained data is required (and none is used). Page
+ * rasters are produced by fz_new_buffer_from_pixmap_as_png, so the container
+ * uses MuPDF's own zip writer with no third-party dependency.
+ *
+ * Returns PF_OK/PF_ERR (message in pf_last_error) and writes the packed page
+ * count to *out_page_count.
+ */
+int pf_ocr_png(pf_context context, pf_document document, const char *out_path_utf8,
+               int *out_page_count)
+{
+	fz_context *ctx = (fz_context *)context;
+	fz_document *doc = (fz_document *)document;
+	fz_zip_writer *zip = NULL;
+	int status = PF_ERR;
+	int count;
+	int page;
+
+	if (ctx == NULL || doc == NULL || out_path_utf8 == NULL)
+	{
+		return PF_ERR;
+	}
+	if (out_page_count != NULL)
+	{
+		*out_page_count = 0;
+	}
+	if (strlen(out_path_utf8) == 0)
+	{
+		record_error("pf_ocr_png: empty output path");
+		return PF_ERR;
+	}
+
+	count = fz_count_pages(ctx, doc);
+	if (count < 1)
+	{
+		record_error("pf_ocr_png: document has no pages");
+		return PF_ERR;
+	}
+
+	fz_var(zip);
+
+	fz_try(ctx)
+	{
+		zip = fz_new_zip_writer(ctx, out_path_utf8);
+
+		for (page = 0; page < count; page++)
+		{
+			fz_page *fpage = NULL;
+			fz_pixmap *pix = NULL;
+			fz_buffer *img = NULL;
+			fz_matrix ctm;
+			char name[32];
+
+			fz_var(fpage);
+			fz_var(pix);
+			fz_var(img);
+
+			fz_try(ctx)
+			{
+				fpage = fz_load_page(ctx, doc, page);
+				ctm = fz_scale(PF_OCR_DPI / 72.0f, PF_OCR_DPI / 72.0f);
+				pix = fz_new_pixmap_from_page(ctx, fpage, ctm, fz_device_rgb(ctx), 0);
+				img = fz_new_buffer_from_pixmap_as_png(ctx, pix, fz_default_color_params);
+				snprintf(name, sizeof(name), "page-%d.png", page + 1);
+				fz_write_zip_entry(ctx, zip, name, img, 1);
+			}
+			fz_always(ctx)
+			{
+				fz_drop_buffer(ctx, img); img = NULL;
+				fz_drop_pixmap(ctx, pix); pix = NULL;
+				fz_drop_page(ctx, (fz_page *)fpage); fpage = NULL;
+			}
+			fz_catch(ctx)
+			{
+				caught_message(ctx);
+				fz_rethrow(ctx);
+			}
+		}
+
+		fz_close_zip_writer(ctx, zip);
+		fz_drop_zip_writer(ctx, zip);
+		zip = NULL;
+
+		status = PF_OK;
+		if (out_page_count != NULL)
+		{
+			*out_page_count = count;
+		}
+	}
+	fz_catch(ctx)
+	{
+		caught_message(ctx);
+		if (zip != NULL)
+		{
+			fz_drop_zip_writer(ctx, zip);
+		}
+	}
+
+	return status;
+}
+
+/*
  * FR-SEC-01: password-protect the open document by writing a fresh encrypted
  * copy. RFC 9506/ISO 32000-2 "standard security handler" via MuPDF: the
  * password strings (each at most 127 UTF-8 bytes to fit the PDF 128-byte

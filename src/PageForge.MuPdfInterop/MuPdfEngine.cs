@@ -1174,6 +1174,37 @@ public sealed class MuPdfEngine : IPdfEngine
         }
     }
 
+    public ValueTask<OcrResult> OcrToPngAsync(
+        string outputPath, OcrOptions? options, CancellationToken cancellationToken = default)
+        => OcrToPngCoreAsync(outputPath, cancellationToken);
+
+    private async ValueTask<OcrResult> OcrToPngCoreAsync(string outputPath, CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(outputPath);
+
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            RequireDocument();
+
+            if (MuPdfShimBindings.pf_ocr_png(
+                    _context, _document,
+                    Utf8Z(Path.GetFullPath(outputPath)),
+                    out int pageCount)
+                != MuPdfShimBindings.PfOk)
+            {
+                TryDeleteFile(Path.GetFullPath(outputPath));
+                throw new InvalidOperationException($"Failed to rasterize PNGs: {LastError()}");
+            }
+
+            return new OcrResult(pageCount, Path.GetFullPath(outputPath), string.Empty, string.Empty);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     /// <summary>
     /// Returns the first existing directory able to supply
     /// "&lt;language&gt;.traineddata", or null so the native side falls back to

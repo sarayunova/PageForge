@@ -12,13 +12,14 @@ namespace PageForge.Api.Services;
 /// <summary>
 /// Real, engine-backed OCR processor (FR-BATCH-01 "live"). Fetches a job item's
 /// source document version from the blob store, runs local OCR via the shared
-/// MuPDF+Tesseract engine to produce a searchable PDF (or a .docx carrying the
-/// recognized text plus page images), and returns the artifact bytes for
-/// persistence as a new document version.
+/// MuPDF+Tesseract engine to produce a searchable PDF, a .docx (recognized text
+/// plus page images), or a .zip of per-page PNG rasters, and returns the artifact
+/// bytes for persistence as a new document version.
 ///
-/// <see cref="OcrTargetFormat.SearchablePdf"/> and <see cref="OcrTargetFormat.Docx"/>
-/// are produced by the local engine; the other <see cref="OcrTargetFormat"/>
-/// targets are reported as unsupported rather than silently succeeding.
+/// <see cref="OcrTargetFormat.SearchablePdf"/>, <see cref="OcrTargetFormat.Docx"/>
+/// and <see cref="OcrTargetFormat.Png"/> are produced by the local engine; the
+/// remaining <see cref="OcrTargetFormat"/> target is reported as unsupported
+/// rather than silently succeeding.
 /// </summary>
 public sealed class MuPdfOcrJobProcessor : IOcrJobProcessor
 {
@@ -35,11 +36,12 @@ public sealed class MuPdfOcrJobProcessor : IOcrJobProcessor
         OcrJob job, OcrJobItem item, DocumentVersion version, CancellationToken cancellationToken)
     {
         if (job.TargetFormat != OcrTargetFormat.SearchablePdf &&
-            job.TargetFormat != OcrTargetFormat.Docx)
+            job.TargetFormat != OcrTargetFormat.Docx &&
+            job.TargetFormat != OcrTargetFormat.Png)
         {
             return new OcrItemResult(
                 0,
-                $"The local engine currently supports only SearchablePdf and Docx " +
+                $"The local engine currently supports only SearchablePdf, Docx and Png " +
                 $"output; conversion to {job.TargetFormat} is not yet available.");
         }
 
@@ -52,23 +54,27 @@ public sealed class MuPdfOcrJobProcessor : IOcrJobProcessor
 
             string workDir = Path.Combine(Path.GetTempPath(), "pageforge-ocr");
             Directory.CreateDirectory(workDir);
-            string extension = job.TargetFormat == OcrTargetFormat.Docx ? ".docx" : ".pdf";
+            string extension = job.TargetFormat switch
+            {
+                OcrTargetFormat.Docx => ".docx",
+                OcrTargetFormat.Png => ".zip",
+                _ => ".pdf",
+            };
             targetPath = Path.Combine(workDir, $"ocr-{item.Id:N}{extension}");
 
             var engine = MuPdfEngine.Create();
             try
             {
                 await engine.OpenAsync(sourcePath, cancellationToken);
-                if (job.TargetFormat == OcrTargetFormat.Docx)
+                ocrResult = job.TargetFormat switch
                 {
-                    OcrResult ocr = await engine.OcrToDocxAsync(targetPath, null, cancellationToken);
-                    ocrResult = ocr;
-                }
-                else
-                {
-                    OcrResult ocr = await engine.OcrToPdfAsync(targetPath, null, cancellationToken);
-                    ocrResult = ocr;
-                }
+                    OcrTargetFormat.Docx =>
+                        await engine.OcrToDocxAsync(targetPath, null, cancellationToken),
+                    OcrTargetFormat.Png =>
+                        await engine.OcrToPngAsync(targetPath, null, cancellationToken),
+                    _ =>
+                        await engine.OcrToPdfAsync(targetPath, null, cancellationToken),
+                };
             }
             finally
             {
@@ -79,9 +85,12 @@ public sealed class MuPdfOcrJobProcessor : IOcrJobProcessor
             }
 
             byte[] content = await ReadFileWithRetryAsync(targetPath, cancellationToken);
-            string contentType = job.TargetFormat == OcrTargetFormat.Docx
-                ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                : "application/pdf";
+            string contentType = job.TargetFormat switch
+            {
+                OcrTargetFormat.Docx => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                OcrTargetFormat.Png => "application/zip",
+                _ => "application/pdf",
+            };
             return new OcrItemResult(
                 ocrResult!.PageCount,
                 ErrorMessage: null,

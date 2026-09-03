@@ -125,6 +125,45 @@ public sealed class OcrNativeEngineTests : IDisposable
         Assert.Contains(names, n => n.StartsWith("word/media/image1", StringComparison.OrdinalIgnoreCase));
     }
 
+    [Fact]
+    public async Task Ocr_job_persists_a_downloadable_png_zip()
+    {
+        if (!File.Exists(Path.Combine(AppContext.BaseDirectory, "pageforge_mupdf.dll"))
+            || !File.Exists(Path.Combine(AppContext.BaseDirectory, "tessdata", "eng.traineddata")))
+        {
+            return;
+        }
+
+        string token = await RegisterAsync("ocr-png@example.com", "Native", "pw");
+        Guid versionId = await PushFixtureVersionAsync(token);
+
+        Guid jobId = await SubmitJobAsync(token, versionId, targetFormat: "png");
+        JsonElement done = await WaitForStatusAsync(token, jobId, "Completed", TimeSpan.FromSeconds(30));
+
+        Assert.Equal("Png", done.GetProperty("targetFormat").GetString());
+        Assert.True(done.GetProperty("pagesProcessed").GetInt32() > 0);
+
+        JsonElement item = done.GetProperty("items")[0];
+        Assert.Equal("application/zip", item.GetProperty("outputContentType").GetString());
+        Assert.NotEqual(Guid.Empty, item.GetProperty("outputVersionId").GetGuid());
+
+        Guid itemId = item.GetProperty("id").GetGuid();
+        using var dl = new HttpRequestMessage(HttpMethod.Get,
+            $"/api/v1/ocr-jobs/{jobId}/items/{itemId}/result");
+        dl.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        using HttpResponseMessage download = await _client.SendAsync(dl);
+        Assert.Equal(HttpStatusCode.OK, download.StatusCode);
+        byte[] body = await download.Content.ReadAsByteArrayAsync();
+        Assert.True(body.Length > 0, "Downloaded PNG zip must not be empty.");
+
+        // The PNG target is a .zip of per-page rasters: page-1.png, page-2.png.
+        using var zip = new System.IO.Compression.ZipArchive(
+            new MemoryStream(body), System.IO.Compression.ZipArchiveMode.Read);
+        var names = zip.Entries.Select(e => e.FullName).ToHashSet();
+        Assert.Contains("page-1.png", names);
+        Assert.Equal(names.Count, done.GetProperty("pagesProcessed").GetInt32());
+    }
+
     // --- Helpers ------------------------------------------------------------
 
     private async Task<JsonElement> WaitForStatusAsync(
