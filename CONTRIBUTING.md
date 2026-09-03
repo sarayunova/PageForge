@@ -76,24 +76,62 @@ Output lands in `artifacts/release/`. The script signs **only if a certificate i
 provided**; otherwise it warns loudly and produces an **unsigned** payload, which is
 not a release.
 
-Signing certificate — either mechanism:
+Signing — the production path is **Azure Artifact Signing** (formerly Trusted
+Signing). The signing key never leaves Azure, so nothing secret is stored in
+GitHub: CI authenticates with OIDC and the signing service does the work.
 
-- **PFX**: set `PAGEFORGE_CERT_PFX` (path) and `PAGEFORGE_CERT_PASSWORD`, plus
-  optional `PAGEFORGE_TSA_URL` (default `http://timestamp.digicert.com`).
-- **Azure Trusted Signing**: set `PAGEFORGE_ATS_ENDPOINT` and use AzureSignTool
-  to stamp the staged exe.
+Public CAs no longer issue exportable `.pfx` files (since June 2023 OV
+certificates ship on a FIPS token or HSM), so the local `PAGEFORGE_CERT_PFX` /
+`PAGEFORGE_CERT_PASSWORD` path is for self-signed dry runs and internal-CA
+certificates only — useful to rehearse the pipeline, but not a publishable
+release.
 
-CI (`release.yml`) automates this: on a `v*` tag push it builds the payload,
-decodes the certificate from the `PAGEFORGE_CERT_PFX_B64` / `PAGEFORGE_CERT_PASSWORD`
-secrets (if present), signs, and attaches a **draft** GitHub Release. If those
-secrets are absent, the workflow still builds and uploads an artifact but does
-**not** create a release — an unsigned build is never published.
+### One-time Azure setup
+
+1. Create an **Azure Artifact Signing account** and complete identity
+   validation (an individual takes roughly three business days; a business
+   needs 3+ years of verifiable history). Then create a **certificate
+   profile** under that account.
+2. Create an **app registration** (Microsoft Entra ID) for CI, and add a
+   **federated credential** for this repository — entity type "Environment" or
+   "Branch"/tag as appropriate. No client secret is needed with OIDC.
+3. Grant that app registration the **Trusted Signing Certificate Profile
+   Signer** role on the signing account (Access control (IAM) → Add role
+   assignment).
+4. In the repository, add:
+   - secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`
+   - variables `AZURE_SIGNING_ENDPOINT` (e.g. `https://eus.codesigning.azure.net/`),
+     `AZURE_SIGNING_ACCOUNT`, `AZURE_CERT_PROFILE`
+
+### How a release runs
+
+`release.yml`, on a `v*` tag push:
+
+1. builds the native shim, then stages the desktop payload **unzipped**
+   (`publish-release.ps1 -NoZip`);
+2. logs in to Azure with OIDC and signs the staged executables;
+3. re-runs `publish-release.ps1 -ZipOnly -RequireSignature`, which verifies
+   every executable with `signtool verify /pa` **before** building the zip, then
+   packages it;
+4. attaches the zip to a **draft** GitHub Release for manual review.
+
+Ordering matters: signtool rewrites the `.exe` in place, so a zip built before
+signing would ship an unsigned binary inside a nominally signed release. The
+`-RequireSignature` verification is what makes a silently skipped signing step
+fail the build instead of shipping.
+
+If `AZURE_CLIENT_ID` is unset the workflow still builds and uploads an
+**unsigned preview artifact**, but creates no release — an unsigned build is
+never published.
+
+Note that a newly issued certificate has no SmartScreen reputation; early
+downloads may still warn until reputation accrues.
 
 Prereqs to make `release.yml` fully live (Phase 7 exit criterion):
 
-- A code-signing certificate (PFX + password, or an Azure Trusted Signing profile).
-- Repository secrets `PAGEFORGE_CERT_PFX_B64` (base64 of the `.pfx`) and
-  `PAGEFORGE_CERT_PASSWORD`.
+- An Azure Artifact Signing account with a validated identity and a certificate
+  profile, plus the app registration and role assignment above.
+- The three repository secrets and three variables listed above.
 - ~~A public hosted repository (the `/source` endpoint's `PAGEFORGE_REPO_URL`).~~
   Done — the repository is live at <https://github.com/sarayunova/PageForge>. CI
   sets `PAGEFORGE_REPO_URL` from `github.repository`, and the same value is the

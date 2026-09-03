@@ -3,15 +3,20 @@
 # This file is part of PageForge. See LICENSE for the full license text.
 #
 # Phase 7 release lane: produce the self-contained desktop payload via
-# tools/publish-release.ps1, code-sign it when a certificate is provided, and
-# attach it to a GitHub Release (draft) when the run is triggered by a v* tag.
+# tools/publish-release.ps1, code-sign it with Azure Artifact Signing (formerly
+# Trusted Signing), and attach it to a draft GitHub Release on a v* tag.
 #
-# Signing setup (repository secrets):
-#   PAGEFORGE_CERT_PFX_B64    - base64 of the .pfx code-signing certificate.
-#   PAGEFORGE_CERT_PASSWORD   - password for that .pfx.
-# If those secrets are absent the payload is still built and uploaded as a build
-# artifact, but it is NOT signed and no GitHub Release is created (a signed
-# release is the Phase 7 exit gate).
+# Signing setup — Azure Artifact Signing, via OIDC (no key material in GitHub):
+#   secrets:   AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
+#   variables: AZURE_SIGNING_ENDPOINT, AZURE_SIGNING_ACCOUNT,
+#              AZURE_CERT_PROFILE
+# The app registration needs the "Trusted Signing Certificate Profile Signer"
+# role on the signing account, and a federated credential for this repository.
+# See CONTRIBUTING.md for the full setup walkthrough.
+#
+# If the signing configuration is absent the payload is still built and uploaded
+# as an unsigned build artifact, but NO GitHub Release is created — publishing an
+# unsigned build is never acceptable (Phase 7 exit gate).
 
 name: release
 
@@ -30,69 +35,109 @@ env:
   DOTNET_NOLOGO: 'true'
   DOTNET_CLI_TELEMETRY_OPTOUT: 'true'
 
+permissions:
+  contents: read
+  id-token: write # required for the OIDC login to Azure
+
 jobs:
   build-and-sign:
     name: Publish + sign desktop payload
     runs-on: windows-latest
+    outputs:
+      signed: ${{ steps.sign-check.outputs.signed }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
 
+      - name: Resolve version
+        id: ver
+        shell: pwsh
+        run: |
+          $ver = "${{ github.event.inputs.version }}"
+          if ([string]::IsNullOrWhiteSpace($ver)) {
+            $ver = "${{ github.ref_name }}" -replace '^v',''
+          }
+          if ([string]::IsNullOrWhiteSpace($ver)) { $ver = "0.0.0-beta" }
+          "version=$ver" >> $env:GITHUB_OUTPUT
+
+      - name: Is signing configured?
+        id: sign-check
+        shell: pwsh
+        env:
+          CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+        run: |
+          $configured = -not [string]::IsNullOrWhiteSpace($env:CLIENT_ID)
+          "signed=$($configured.ToString().ToLower())" >> $env:GITHUB_OUTPUT
+          if (-not $configured) {
+            Write-Warning "AZURE_CLIENT_ID is not set - building an UNSIGNED preview artifact; no release will be created."
+          }
+
       - name: Build native MuPDF shim
         shell: pwsh
         run: ./native/build-mupdf.ps1
 
-      - name: Publish release payload
+      # Stage the payload but do NOT zip it yet: signing rewrites the .exe in
+      # place, so the zip is built afterwards from the signed folder.
+      - name: Publish release payload (staged, unzipped)
         shell: pwsh
-        run: |
-          $ver = "${{ github.event.inputs.version }}"
-          if ([string]::IsNullOrWhiteSpace($ver)) {
-            $ver = "${{ github.ref_name }}" -replace '^v',''
-          }
-          if ([string]::IsNullOrWhiteSpace($ver)) { $ver = "0.0.0-beta" }
-          powershell -ExecutionPolicy Bypass -File tools/publish-release.ps1 -Version $ver -SkipApi
+        run: >
+          powershell -ExecutionPolicy Bypass -File tools/publish-release.ps1
+          -Version ${{ steps.ver.outputs.version }} -SkipApi -NoZip
 
-      - name: Decode signing certificate
-        id: decode-cert
-        if: ${{ secrets.PAGEFORGE_CERT_PFX_B64 != '' }}
+      - name: Azure login (OIDC)
+        if: steps.sign-check.outputs.signed == 'true'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Sign desktop payload (Azure Artifact Signing)
+        if: steps.sign-check.outputs.signed == 'true'
+        uses: azure/artifact-signing-action@v2
+        with:
+          endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ vars.AZURE_CERT_PROFILE }}
+          files-folder: ${{ github.workspace }}\artifacts\release\PageForge-${{ steps.ver.outputs.version }}
+          files-folder-filter: exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      # -RequireSignature makes the script verify every shipped .exe with
+      # `signtool verify /pa` BEFORE it builds the zip, so a signing step that
+      # silently no-ops can never produce a published "signed" release.
+      - name: Package signed payload
+        if: steps.sign-check.outputs.signed == 'true'
         shell: pwsh
-        run: |
-          $pfx = Join-Path $env:RUNNER_TEMP "pageforge.pfx"
-          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:PAGEFORGE_CERT_PFX_B64))
-          Write-Host "cert decoded to $pfx"
-          "pfx=$pfx" >> $env:GITHUB_OUTPUT
+        run: >
+          powershell -ExecutionPolicy Bypass -File tools/publish-release.ps1
+          -Version ${{ steps.ver.outputs.version }} -SkipApi -ZipOnly -RequireSignature
 
-      - name: Sign desktop payload
-        if: ${{ steps.decode-cert.outputs.pfx != '' }}
+      - name: Package unsigned preview
+        if: steps.sign-check.outputs.signed != 'true'
         shell: pwsh
-        env:
-          PAGEFORGE_CERT_PFX: ${{ steps.decode-cert.outputs.pfx }}
-          PAGEFORGE_CERT_PASSWORD: ${{ secrets.PAGEFORGE_CERT_PASSWORD }}
-          PAGEFORGE_TSA_URL: "http://timestamp.digicert.com"
-        run: |
-          # Re-run the publish script in sign mode: it signs the exe now that the
-          # .pfx + password are present (see tools/publish-release.ps1 step 5).
-          $ver = "${{ github.event.inputs.version }}"
-          if ([string]::IsNullOrWhiteSpace($ver)) {
-            $ver = "${{ github.ref_name }}" -replace '^v',''
-          }
-          if ([string]::IsNullOrWhiteSpace($ver)) { $ver = "0.0.0-beta" }
-          powershell -ExecutionPolicy Bypass -File tools/publish-release.ps1 -Version $ver -SkipApi
+        run: >
+          powershell -ExecutionPolicy Bypass -File tools/publish-release.ps1
+          -Version ${{ steps.ver.outputs.version }} -SkipApi -ZipOnly
 
-      - name: Upload build artifact (unsigned or signed preview)
+      - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: pageforge-release
-          path: artifacts/release/
+          path: artifacts/release/*.zip
           if-no-files-found: error
 
   publish-release:
     name: Attach to GitHub Release (signed v* tag only)
     runs-on: ubuntu-latest
     needs: [build-and-sign]
-    if: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.PAGEFORGE_CERT_PFX_B64 != '' }}
+    permissions:
+      contents: write # creating the release
+    if: ${{ startsWith(github.ref, 'refs/tags/v') && needs.build-and-sign.outputs.signed == 'true' }}
     steps:
       - uses: actions/download-artifact@v4
         with:
