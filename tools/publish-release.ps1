@@ -52,12 +52,6 @@ Write-Host "publishing desktop app (self-contained win-x64, folder layout) ..." 
     -c Release -r win-x64 --self-contained true -o $desktopDir
 if ($LASTEXITCODE -ne 0) { throw "desktop publish failed." }
 
-# --- 2b. zip the desktop folder for distribution ----------------------------
-$desktopZip = Join-Path $relRoot "pageforge-$Version-win-x64.zip"
-if (Test-Path $desktopZip) { Remove-Item $desktopZip -Force }
-Compress-Archive -Path (Join-Path $desktopDir "*") -DestinationPath $desktopZip
-Write-Host "desktop payload zipped: $desktopZip" -ForegroundColor Green
-
 # --- 3. publish the hosted API (framework-dependent, portable; deploys via docker) --
 if (-not $SkipApi) {
     Write-Host "publishing hosted API (framework-dependent, portable) ..." -ForegroundColor Cyan
@@ -99,7 +93,7 @@ if ($pfx -and (Test-Path $pfx)) {
     $pass  = $env:PAGEFORGE_CERT_PASSWORD
     $tsUri = $env:PAGEFORGE_TSA_URL
     if (-not $tsUri) { $tsUri = "http://timestamp.digicert.com" }
-    $signArgs = @("/sha1", $pfx, "/p", $pass, "/tr", $tsUri, "/td", "sha256", "/fd", "sha256")
+    $signArgs = @("/f", $pfx, "/p", $pass, "/tr", $tsUri, "/td", "sha256", "/fd", "sha256")
 } elseif ($env:PAGEFORGE_ATS_ENDPOINT) {
     # Azure Trusted Signing via signtool /fdecoded or /io; requires AzureSignTool.
     Write-Host "Azure Trusted Signing configured — use AzureSignTool for ATS signing." -ForegroundColor Yellow
@@ -144,10 +138,26 @@ if ($signArgs.Count -gt 0 -and $signtoolPath) {
     Write-Warning "Trusted Signing profile to sign. Do not publish an unsigned payload."
 }
 
+# --- 6. zip the desktop folder for distribution -----------------------------
+# Zipping happens AFTER signing: signtool rewrites the .exe in place, so a zip
+# built earlier would ship an unsigned binary inside a "signed" release.
+$desktopZip = Join-Path $relRoot "pageforge-$Version-win-x64.zip"
+if (Test-Path $desktopZip) { Remove-Item $desktopZip -Force }
+Compress-Archive -Path (Join-Path $desktopDir "*") -DestinationPath $desktopZip
+Write-Host "desktop payload zipped: $desktopZip" -ForegroundColor Green
+
 Write-Host ""
 Write-Host "Release staged at: $relRoot" -ForegroundColor Green
-if ($signtoolPath) {
-    Write-Host "Signed payload ready — upload to your release host." -ForegroundColor Green
+if ($signArgs.Count -gt 0 -and $signtoolPath) {
+    # Prove the signature actually took: a release must never ship an exe that
+    # signtool cannot verify against a trusted chain.
+    foreach ($exe in $exes) {
+        if (Test-Path $exe) {
+            & $signtoolPath verify /pa /v $exe
+            if ($LASTEXITCODE -ne 0) { throw "signature verification failed: $exe" }
+        }
+    }
+    Write-Host "Signed payload verified — upload to your release host." -ForegroundColor Green
 } else {
     Write-Warning "Re-run with a certificate before publishing the release."
 }
