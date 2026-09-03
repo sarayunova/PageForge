@@ -4,7 +4,7 @@
 source-offer endpoint live, signed installers published. Exit gate = **AGPL
 compliance verified end to end**.
 
-Last updated: 2026-09-03. Resume from "Next session starts here" at the bottom.
+Last updated: 2026-09-04. Resume from "Next session starts here" near the bottom.
 
 ## Repository is live
 
@@ -124,23 +124,164 @@ Pushed as `3277d07..7637770 master -> main`.
    emulation. A native build (shim cross-build + second release lane) is
    post-beta. **This question is now answered — do not ask it again.**
 
+## CI had never once passed — seven defects (2026-09-04 session)
+
+`gh` is now authenticated (`gh auth login`, device flow), which is what made all
+of this visible. **Before this session CI had never been green on a single
+commit.** Every run died in 15–24s at the first job, so the managed, fidelity
+and WinUI lanes were being *skipped, not passing* — the byte-identical render
+proof, the fidelity corpus and the signing pipeline had never executed on real
+infrastructure even once.
+
+Almost none of it could reproduce locally: the native build step only runs
+against a freshly extracted tree, and this dev machine has a warm `native/out`
+with artifacts left over from earlier builds.
+
+Fixed, in the order each one unmasked the next:
+
+1. `468dafa` **vcvars discovery.** `build-mupdf.ps1` looked for `vcvars64.bat`
+   under a hardcoded `...\Microsoft Visual Studio\2022\{BuildTools,Enterprise}`.
+   The runner image does not match those literals. Now uses `vswhere` (fixed
+   install path, any VS version/edition) with a recursive glob fallback and a
+   diagnostic dump of what *is* installed when discovery fails.
+2. `ef22d69` **`bin2coff.vcxproj` patching, three defects.** A `-replace` spread
+   over continuation lines parses as three operands under pwsh 7 and throws; the
+   replacement anchored on the `Release|Win32` *opening tag* and would have
+   nested the new x64 element inside it, producing malformed XML; and the
+   idempotency guard checked `Include="Release|x64"` (double quotes) against
+   inserted text using single quotes, so it could never match its own output.
+   The `PlatformToolset` v143 upgrade also moved out of the x64 branch — nested
+   inside it, it never ran on a tree that already had x64, **which is why the
+   local working tree is still on v142**.
+3. `e6280bb` **The hang.** `Invoke-MsBuild` wrote its batch script to a file
+   named `pageforge-mupdf-msbuild.log` and handed it to `cmd /c`. Because the
+   extension is `.log`, Windows dispatches it by *file association* rather than
+   executing it, and on a headless runner that never returns — one run sat there
+   for over an hour and had to be cancelled. Verified locally: identical bytes
+   as `.log` hang, as `.cmd` exit immediately. Same commit stopped piping
+   msbuild output to `Out-Null` (which is why the hour was silent) and switched
+   the exit check from `$?`-after-a-pipeline to `$LASTEXITCODE`, which had been
+   letting real compile failures pass.
+4. `f6c7afd` **`bin2coff` is a host tool.** `bin2coff.targets` invokes it as the
+   literal path `Release\bin2coff.exe` whatever platform is being built. It was
+   never built explicitly, so under `Platform=x64` it landed in `x64\Release\`.
+   `Invoke-MsBuild` now takes `-Platform` (default x64) and bin2coff is built
+   Win32 before the library loop, then asserted present. Invisible locally
+   because a stale `Release\bin2coff.exe` sits in the working tree.
+5. `0f551bf` **sodochandler.** The 1.28.3 tarball ships
+   `platform/win32/sodochandler.vcxproj` but omits `thirdparty/so` entirely. The
+   existing patch read only `libmutool.vcxproj` and matched only a *self-closing*
+   `<ProjectReference ... />`, so the paired
+   `<ProjectReference>…</ProjectReference>` form was left in place. Now scans
+   every vcxproj, handles both spellings, and throws if a file mentions
+   sodochandler but the pattern misses.
+6. `6028a1f` **Artifact unpack path.** Both consumer jobs downloaded
+   `native-shim` into `native/out/PageForge.MuPdfShim/Release`, but
+   `upload-artifact` roots an archive at the *least common ancestor* of its
+   inputs — and this artifact holds the shim DLL and `mutool.exe`, whose common
+   ancestor is `native/out`. The payload therefore landed a level too deep.
+   Both steps now unpack at `native/out`. Confirmed by downloading the real
+   artifact and listing it.
+
+### Result
+
+`468dafa`..`0f551bf` took the native lane from a 15-second faceplant to **green
+in 8m25s** — MuPDF, Tesseract, Leptonica, HarfBuzz, ZXing and the shim all
+building on real infrastructure for the first time. The managed lane then
+reached build + tests before failing on the render proof, which is what
+`6028a1f` addresses. As of that commit the run was still in flight.
+
+### A theme worth its own pass: steps that report success while doing nothing
+
+Three instances found so far, and they are the reason so much of this stayed
+hidden behind green checks:
+
+- the Phase 7 Azure signing branch that printed a note, left `$signArgs` empty
+  and produced an unsigned payload (fixed last session);
+- the sodochandler patch, whose guard fired and whose regex matched nothing, and
+  which then printed `removed sodochandler ProjectReference` regardless;
+- `PageForge.MuPdfInterop.csproj`, which copies the shim DLL only under
+  `Condition="Exists(...)"`. With the DLL at the wrong path the copy was skipped
+  silently, the build and unit tests still passed, and **that green "Test" step
+  never exercised the real engine at all.**
+
+Recommend an explicit sweep for this pattern — every `Condition="Exists(...)"`,
+every catch that logs and continues, every patch step whose guard and whose
+matcher can disagree. Each one can hide a real gap behind a passing build.
+
+### CI environment notes
+
+- Jobs now carry `timeout-minutes` (60/45/30). They previously inherited
+  GitHub's 360-minute default, which is how the hang burned an hour unnoticed.
+- The `Node.js 20 is deprecated` message GitHub emails out is a **warning, not a
+  failure**. All four `actions/*` pins are far behind: `checkout` v4→v7.0.1,
+  `setup-dotnet` v4→v6.0.0, `upload-artifact` v4→v7.0.1, `download-artifact`
+  v4→v8.0.1. Deliberately NOT bumped mid-repair so that a red run had only one
+  candidate cause; do it as its own commit, reading each project's
+  breaking-change notes (v4→v8 on download-artifact is not a free ride).
+- `main` has **no branch protection and no rulesets** (confirmed via `gh api`),
+  and `main` is the default branch. `git push origin master:main` publishes
+  straight to a public default branch with nothing in the way.
+- Repo visibility is **public, verified** by an unauthenticated GitHub API read.
+  That closes the Phase 7 question of whether the AGPL source offer is actually
+  reachable by strangers.
+
 ## Next session starts here — open gaps, ranked
 
-1. **Read the CI result for `7637770`.** This is the first run with the WinUI
-   lane enforcing, and it is expected to go red — the lane was originally
-   excused because the runner image may lack the UWP/MSIX build tasks. If it is
-   an image/tooling gap rather than a code defect, the fix is to install the
-   workload in the lane (`dotnet workload install` / the Windows App SDK
-   tasks), not to re-add `continue-on-error`.
-2. **Phase 6 exit evidence.** `tools/loadtest/` exists but no recorded run
-   against TSD targets, and no WCAG 2.1 AA audit artifact. Now that WPF is the
-   declared product target, a WPF accessibility audit finally counts as real
-   evidence rather than something that would not transfer — so this is
-   unblocked and is the largest remaining substantive gap.
-3. **Azure Artifact Signing setup** — still the only hard Phase 7 blocker, and
-   it needs the maintainer (steps unchanged, above). Until it is done, tagging
+1. **Drive CI to fully green.** The native lane passes; the managed lane's
+   render proof is the current frontier and `6028a1f` was in flight when this
+   note was written — check it first. Two things are still entirely unproven
+   because no run has ever reached them: the **byte-identical engine/mutool
+   render compare**, and the **WinUI lane**, which is now enforcing and has
+   never actually executed. Expect the WinUI lane to fail on missing UWP/MSIX
+   build tasks in the runner image; if so the fix is to install the workload in
+   the lane, **not** to restore `continue-on-error`.
+2. **Sweep for "reports success while doing nothing".** See the theme section
+   above — three found so far, and each hid a real gap behind a green check.
+   Start with `Condition="Exists(...)"` in the csproj files, then any patch step
+   whose guard and matcher can disagree, then catches that log and continue.
+   This is ranked second because it undermines the trustworthiness of every
+   other green result below it.
+3. **Bump the `actions/*` pins** (`checkout` v4→v7, `setup-dotnet` v4→v6,
+   `upload-artifact` v4→v7, `download-artifact` v4→v8) as their own commit, once
+   CI is green so breakage is attributable. This also clears the Node 20
+   deprecation warning GitHub keeps emailing about.
+4. **Phase 6 exit evidence.** `tools/loadtest/` exists but has no recorded run
+   against TSD targets, and there is no WCAG 2.1 AA audit artifact. Now that WPF
+   is the declared product target (TSD §12.1), a WPF accessibility audit counts
+   as real evidence. Largest remaining *substantive* gap.
+5. **Azure Artifact Signing setup** — the only hard Phase 7 blocker that needs
+   the maintainer personally (steps unchanged, above). Until it is done, tagging
    produces an unsigned preview artifact and no release.
-4. **API excluded from releases** (`-SkipApi`). Fine if hosted deploys are
-   separate, but nothing states so; one sentence in the README would close it.
-5. **Tag `v0.1.0-beta`** once (1) and (3) are settled.
+6. **API excluded from releases** (`-SkipApi`). Fine if hosted deploys are
+   separate, but nothing states so; one sentence in the README closes it.
+7. **Tag `v0.1.0-beta`** once (1) and (5) are settled.
 
+**Do not re-ask** the WinUI-shell or ARM64 questions: both were decided this
+session and are recorded in TSD §12.1.
+
+## Unresolved: auto-mode config write
+
+A refreshed `autoMode.environment` block was drafted for
+`~/.claude/settings.json` (verified repo visibility, default branch, no branch
+protection, WPF-not-WinUI, `gh` state, local build constraints). **It could not
+be applied** — the auto-mode classifier blocks writes to `~/.claude/settings.json`
+from both Bash and the edit tool, which is a sensible guard on the file that
+governs auto mode. The draft was left at the session scratchpad path and the
+user was asked to paste it in or add a permission rule. Ask again if it still
+carries the stale "`.NET 8 / WinUI`" description.
+
+
+## Environment notes
+- Build/test must EXCLUDE `src/PageForge.App` locally (see AGENTS.md).
+- Suites: Core 154, Fidelity 48, Api 47 — all passing as of `f82c5e9`.
+- `gh` is **authenticated** as of the 2026-09-04 session (`gh auth login`,
+  browser device flow). CI status, branch protection and artifact contents are
+  all readable now; earlier notes saying otherwise are obsolete.
+- This dev machine has a **warm `native/out`** — a prebuilt shim DLL, an
+  extracted MuPDF tree, and a stale `Release\bin2coff.exe`. That warm state is
+  why five separate native-build defects could never reproduce here. When
+  something passes locally but fails in CI, suspect leftover artifacts first,
+  and consider deleting `native/out` to reproduce a clean checkout.
+- The repo has no `.gitattributes`, so every text write warns about LF -> CRLF.
+  Harmless, but expect the noise on each commit.
