@@ -40,7 +40,7 @@ their licenses are documented in `THIRD-PARTY-NOTICES.md`.
 | `src/PageForge.Core` | Portable engine-agnostic domain model and interfaces |
 | `src/PageForge.MuPdfInterop` | Managed bindings over the native MuPDF shim |
 | `native/PageForge.MuPdfShim` | C shim (`pageforge_mupdf.dll`) over MuPDF 1.28.3 |
-| `src/PageForge.App` | WinUI 3 shell (builds only in CI's `winui-build` lane) |
+| `src/PageForge.App` | WinUI 3 spike, page-one render only (builds only in CI's `winui-build` lane). The shipping shell for the v0.1 beta is `src/PageForge.App.Wpf` — see TSD §12.1 |
 | `src/PageForge.App.Wpf` | Runnable desktop proof (net8.0-windows, x64) with a `--smoke` headless mode |
 | `services/PageForge.Api` | Hosted API (accounts, sync, billing, e-sign, team review, batch OCR) |
 | `tests/` | Core, Fidelity, and Api test suites (`PageForge.*.Tests`) |

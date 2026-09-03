@@ -41,7 +41,7 @@ layer is strictly additive — it must never gate core viewing or editing.
 
 | Layer | Technology | Rationale |
 |---|---|---|
-| Desktop UI | WinUI 3 (Windows App SDK), C#/.NET 8, MVVM via CommunityToolkit.Mvvm | Modern native Windows UI; see §12 spike for the WPF fallback trigger |
+| Desktop UI | **WPF, C#/.NET 8, MVVM** for the v0.1 beta; WinUI 3 (Windows App SDK) remains the post-beta target | The §12 Phase 0 spike gate was resolved in favour of the WPF fallback — see §12.1. `src/PageForge.App.Wpf` is the shipping shell; `src/PageForge.App` is the retained WinUI spike |
 | PDF engine | MuPDF (AGPLv3) via a custom C# binding layer | Only free engine with genuine content-editing primitives |
 | Local OCR | Tesseract OCR (Apache 2.0), bundled | Keeps FR-OCR fully offline |
 | Local persistence | SQLite (metadata, recents, edit journal) + plain filesystem for documents | Documents are never locked into a proprietary container |
@@ -177,7 +177,7 @@ connected before development begins.
 
 | Phase | Focus | Key deliverables | Exit criteria | Est. duration |
 |---|---|---|---|---|
-| 0 — Foundation | Repo scaffolding, CI skeleton, MuPDF binding spike, WinUI 3-vs-WPF integration spike | A minimal WinUI 3 app rendering one PDF page via MuPDF | Spike proves MuPDF renders correctly through the chosen binding on x64 and ARM64, or the WPF fallback decision is made | 2–3 weeks |
+| 0 — Foundation | Repo scaffolding, CI skeleton, MuPDF binding spike, WinUI 3-vs-WPF integration spike | A minimal WinUI 3 app rendering one PDF page via MuPDF | **Met via the fallback branch (see §12.1):** the WPF fallback decision was made, and MuPDF rendering is proven on x64. ARM64 is deferred past the beta | 2–3 weeks |
 | 1 — MVP viewer & organizer | FR-VIEW, FR-PAGE, FR-ANNOT | Working viewer, annotator, and page organizer | Internal dogfood on real documents with zero crashes across the fidelity corpus | 4–6 weeks |
 | 2 — Content editing core | FR-EDIT, undo/redo, font-fidelity system | Text/image editing with overflow and font-fidelity handling | Fidelity regression suite passes on the full corpus; a real contract survives an edit-and-reopen-in-Acrobat-Reader test | 6–10 weeks (hardest phase) |
 | 3 — Forms & local OCR | FR-FORM, FR-OCR (local), FR-SEC | Forms fill/create, local OCR, redaction, encryption | Forms and OCR output pass the fidelity suite | 3–4 weeks |
@@ -187,11 +187,36 @@ connected before development begins.
 | 7 — Public beta & open-source launch | CONTRIBUTING.md, community governance, source-offer endpoint live, signed installers published | Public repository live, beta build installable | AGPL compliance verified end to end | 2–3 weeks |
 | 8 — GA & post-launch iteration | Incorporate beta feedback | v2 backlog (e.g. delta sync, near-real-time review) | Ongoing | — |
 
+### 12.1 Amendments recorded for the v0.1 beta
+
+Two Phase 0 exit criteria were written before the code existed and are amended
+here rather than quietly shipped against. Both amendments are scoped to the
+v0.1 beta; neither cancels the original goal.
+
+**Shipping shell: WPF, not WinUI 3.** The Phase 0 spike gate allowed either
+"MuPDF renders through the chosen binding" or "the WPF fallback decision is
+made". The fallback was taken. All product UI — viewer, annotations, page
+organizer, object editing, forms, redaction, OCR and protection — lives in
+`src/PageForge.App.Wpf`, and that is what release builds package.
+`src/PageForge.App` is retained as the WinUI 3 spike: it renders page one of a
+sample document through the same engine, proving the App -> Interop -> Core ->
+shim -> MuPDF path on the Windows App SDK. Its CI lane is enforcing, so the
+spike cannot rot while the port waits. Porting the shell to WinUI 3 is
+post-beta work and is tracked as such, not as a beta blocker.
+
+**Architecture: x64 for the beta, ARM64 deferred.** The Phase 0 text named x64
+and ARM64. Only x64 is built and proven: `tools/publish-release.ps1` publishes
+`-r win-x64`, and there is no ARM64 evidence anywhere in the repo, including
+for the native MuPDF shim, which is the substantial part of the work. ARM64
+Windows runs the x64 build under emulation — functional, slower — so the beta
+ships x64 only and a native ARM64 build (shim cross-build plus a second release
+lane) is post-beta work. TRD §6 "Platform" is amended to match.
+
 ## 13. Risk register
 
 | Risk | Mitigation |
 |---|---|
-| WinUI 3 + MuPDF binding immaturity | Phase 0 spike gate; WPF fallback path kept viable through Phase 1 |
+| WinUI 3 + MuPDF binding immaturity | Phase 0 spike gate; WPF fallback path kept viable through Phase 1. **Resolved: the fallback was taken — see §12.1** |
 | Content-editing fidelity gaps | Fidelity regression corpus enforced in CI from Phase 2 onward |
 | AGPL network-use obligation for hosted services | Source-offer endpoint built as a Phase 4 requirement, not an afterthought |
 | Scope creep into full page reflow | Explicitly out of scope per the TRD; box-bounded reflow only |

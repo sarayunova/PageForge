@@ -104,7 +104,7 @@ edition.
 |---|---|
 | Offline-first | All FR-VIEW / FR-ANNOT / FR-EDIT / FR-FORM / FR-PAGE / FR-OCR(local) / FR-SEC features function with no network connection. |
 | Performance | Open a 100-page text document in under 1.5s on reference hardware; render a visible page within 150ms during scroll. |
-| Platform | Windows 10 version 1809 (build 17763) and later, and Windows 11; x64 and ARM64. |
+| Platform | Windows 10 version 1809 (build 17763) and later, and Windows 11; x64 and ARM64. **v0.1 beta ships x64 only** — ARM64 runs it under emulation and a native ARM64 build is deferred post-beta (TSD §12.1). |
 | Accessibility | Desktop UI targets WCAG 2.1 AA where applicable to native apps; editing operations must not strip existing PDF/UA structure. |
 | Licensing | Entire application source is published under AGPLv3; MuPDF attribution retained per its license terms. |
 | Security | Hosted API traffic over TLS 1.2+; documents at rest in hosted storage encrypted with AES-256; authentication via an OAuth2/OIDC-compatible flow. |
@@ -113,7 +113,7 @@ edition.
 
 ## 7. Constraints and known risks
 
-- WinUI 3 and the chosen MuPDF .NET binding are both less mature than WPF/native alternatives; a WPF fallback path must remain viable through Phase 1 of development (see TSD).
+- WinUI 3 and the chosen MuPDF .NET binding are both less mature than WPF/native alternatives; a WPF fallback path must remain viable through Phase 1 of development (see TSD). **This risk materialized: the v0.1 beta ships the WPF shell, with WinUI 3 retained as a spike and its port deferred post-beta (TSD §12.1).**
 - Reflowing existing PDF text is bounded to the original object's box; whole-page reflow across independent objects is explicitly out of scope for v1.
 - AGPLv3 requires that any network-accessible deployment (including the hosted services) offer corresponding source to interacting users; the hosted services must implement a source-offer mechanism from Phase 4 onward.
 

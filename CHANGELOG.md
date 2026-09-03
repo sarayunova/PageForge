@@ -53,7 +53,8 @@ version heading when the tag is pushed.
 
 ### Known limitations
 
-- Releases currently ship the WPF proof shell; the WinUI shell in
-  `src/PageForge.App` is the intended product target and is still being brought
-  up to parity.
-- Release builds are `win-x64` only; ARM64 is not yet published.
+- The beta ships the WPF shell. `src/PageForge.App` is a WinUI 3 spike that
+  renders one page; porting the UI to WinUI 3 is post-beta work. Recorded as an
+  amendment in TSD §12.1.
+- Release builds are `win-x64` only. ARM64 Windows runs them under emulation; a
+  native ARM64 build is deferred post-beta (TSD §12.1).
