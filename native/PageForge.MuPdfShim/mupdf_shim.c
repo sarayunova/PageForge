@@ -5285,6 +5285,325 @@ int pf_ocr_pdf(pf_context context, pf_document document,
 }
 
 /*
+ * XML-escaping helper for building Office Open XML parts: escapes the five
+ * characters significant in both element text and attribute values and drops
+ * horizontal tabs, which the OOXML text model otherwise rejects.
+ */
+static void pf_append_xml_escaped(fz_context *ctx, fz_buffer *buf, const char *s)
+{
+	const unsigned char *p = (const unsigned char *)s;
+	for (; *p != '\0'; ++p)
+	{
+		unsigned char c = *p;
+		switch (c)
+		{
+		case '&': fz_append_string(ctx, buf, "&amp;"); break;
+		case '<': fz_append_string(ctx, buf, "&lt;"); break;
+		case '>': fz_append_string(ctx, buf, "&gt;"); break;
+		case '"': fz_append_string(ctx, buf, "&quot;"); break;
+		case '\'': fz_append_string(ctx, buf, "&apos;"); break;
+		default:
+			if (c != '\t')
+			{
+				fz_append_byte(ctx, buf, c);
+			}
+			break;
+		}
+	}
+}
+
+/*
+ * FR-OCR-03: convert every page of the open document into a .docx container
+ * whose body holds, for each page, the Tesseract-recognised text followed by a
+ * PNG raster of the page. The OCR device re-runs Tesseract on an internal copy
+ * of the page, so the open document is NOT modified and nothing leaves the
+ * machine. The .docx (a ZIP) is assembled with MuPDF's own zip writer:
+ *   [Content_Types].xml, _rels/.rels, word/document.xml,
+ *   word/_rels/document.xml.rels, word/styles.xml, word/media/imageN.png.
+ * The layout is minimal but the container is standards-valid Office Open XML.
+ *
+ * language_utf8/datadir_utf8 have the same semantics as pf_ocr_pdf. Returns
+ * PF_OK/PF_ERR (message in pf_last_error) and writes the OCR'd page count to
+ * *out_page_count.
+ */
+int pf_ocr_docx(pf_context context, pf_document document,
+                const char *out_path_utf8, const char *language_utf8,
+                const char *datadir_utf8, int *out_page_count)
+{
+	fz_context *ctx = (fz_context *)context;
+	fz_document *doc = (fz_document *)document;
+	fz_zip_writer *zip = NULL;
+	fz_buffer *docxml = NULL;
+	fz_buffer *rels = NULL;
+	fz_buffer *relout = NULL;
+	fz_buffer *cat = NULL;
+	fz_buffer *styles = NULL;
+	const char *lang = (language_utf8 != NULL && language_utf8[0] != '\0') ? language_utf8 : "eng";
+	const char *datadir = (datadir_utf8 != NULL && datadir_utf8[0] != '\0') ? datadir_utf8 : NULL;
+	int status = PF_ERR;
+	int count;
+	int page;
+	int relid = 0;
+
+	if (ctx == NULL || doc == NULL || out_path_utf8 == NULL)
+	{
+		return PF_ERR;
+	}
+	if (out_page_count != NULL)
+	{
+		*out_page_count = 0;
+	}
+	if (strlen(out_path_utf8) == 0)
+	{
+		record_error("pf_ocr_docx: empty output path");
+		return PF_ERR;
+	}
+
+	count = fz_count_pages(ctx, doc);
+	if (count < 1)
+	{
+		record_error("pf_ocr_docx: document has no pages");
+		return PF_ERR;
+	}
+
+	fz_var(zip);
+	fz_var(docxml);
+	fz_var(rels);
+	fz_var(relout);
+	fz_var(cat);
+	fz_var(styles);
+
+	fz_try(ctx)
+	{
+		/* [Content_Types].xml */
+		cat = fz_new_buffer(ctx, 512);
+		fz_append_string(ctx, cat,
+			"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+			"<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">"
+			"<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>"
+			"<Default Extension=\"xml\" ContentType=\"application/xml\"/>"
+			"<Default Extension=\"png\" ContentType=\"image/png\"/>"
+			"<Override PartName=\"/word/document.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\"/>"
+			"<Override PartName=\"/word/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml\"/>"
+			"</Types>");
+
+		/* word/styles.xml (one minimal default paragraph style). */
+		styles = fz_new_buffer(ctx, 512);
+		fz_append_string(ctx, styles,
+			"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+			"<w:styles xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">"
+			"<w:style w:type=\"paragraph\" w:default=\"1\" w:styleId=\"Normal\">"
+			"<w:name w:val=\"Normal\"/>"
+			"<w:rPr><w:rFonts w:ascii=\"Calibri\" w:hAnsi=\"Calibri\" w:cs=\"Calibri\"/>"
+			"<w:sz w:val=\"24\"/></w:rPr>"
+			"</w:style></w:styles>");
+
+		/* word/document.xml body opener. */
+		docxml = fz_new_buffer(ctx, 1024);
+		fz_append_string(ctx, docxml,
+			"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+			"<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" "
+			"xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" "
+			"xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" "
+			"xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" "
+			"xmlns:pic=\"http://schemas.openxmlformats.org/drawingml/2006/picture\">"
+			"<w:body>");
+
+		/* word/document.xml.rels opener (image rels appended per page). */
+		rels = fz_new_buffer(ctx, 256);
+		fz_append_string(ctx, rels,
+			"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+			"<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">");
+
+		/* Open the container up front so media entries can be added below. */
+		zip = fz_new_zip_writer(ctx, out_path_utf8);
+
+		for (page = 0; page < count; page++)
+		{
+			fz_page *fpage = NULL;
+			fz_pixmap *pix = NULL;
+			fz_stext_page *stext = NULL;
+			fz_device *ontotext = NULL;
+			fz_device *ocrdev = NULL;
+			fz_buffer *body = NULL;
+			fz_buffer *img = NULL;
+			fz_matrix ctm;
+			fz_rect mediabox;
+			fz_stext_block *block;
+			int did_emit_text = 0;
+
+			fz_var(fpage);
+			fz_var(pix);
+			fz_var(stext);
+			fz_var(ontotext);
+			fz_var(ocrdev);
+			fz_var(body);
+			fz_var(img);
+
+			fz_try(ctx)
+			{
+				relid++;
+				fpage = fz_load_page(ctx, doc, page);
+				mediabox = fz_bound_page(ctx, fpage);
+				ctm = fz_scale(PF_OCR_DPI / 72.0f, PF_OCR_DPI / 72.0f);
+
+				/* OCR this page into a structured-text page. */
+				stext = fz_new_stext_page(ctx, mediabox);
+				ontotext = fz_new_stext_device(ctx, stext, NULL);
+				ocrdev = fz_new_ocr_device(ctx, ontotext, ctm, mediabox, 1, lang, datadir, NULL, NULL);
+				fz_run_page(ctx, fpage, ocrdev, ctm, NULL);
+
+				/* Body for this page: heading, image, then recognised text. */
+				body = fz_new_buffer(ctx, 256);
+				fz_append_string(ctx, body,
+					"<w:p><w:pPr><w:pStyle w:val=\"Normal\"/><w:bidi/><w:rPr><w:b/></w:rPr></w:pPr>"
+					"<w:r><w:t>Page ");
+				fz_append_printf(ctx, body, "%d", page + 1);
+				fz_append_string(ctx, body, "</w:t></w:r></w:p>");
+
+				/* Inline image referencing the media part added below. */
+				fz_append_printf(ctx, body,
+					"<w:p><w:r><w:drawing><wp:inline distT=\"0\" distB=\"0\" distL=\"0\" distR=\"0\">"
+					"<wp:extent cx=\"%ld\" cy=\"%ld\"/>"
+					"<wp:docPr id=\"%d\" name=\"Page%d\"/>"
+					"<wp:cNvGraphicFramePr/>"
+					"<a:graphic><a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/picture\">"
+					"<pic:pic><pic:nvPicPr><pic:cNvPr id=\"%d\" name=\"Page%d\"/>"
+					"<pic:cNvPicPr/></pic:nvPicPr>"
+					"<pic:blipFill><a:blip r:embed=\"rId%d\"/><a:srcRect/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>"
+					"<pic:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"%ld\" cy=\"%ld\"/></a:xfrm>"
+					"<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></pic:spPr>"
+					"</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>",
+					(long)(mediabox.x1 - mediabox.x0) * 36, (long)(mediabox.y1 - mediabox.y0) * 36,
+					relid, page + 1,
+					relid, page + 1,
+					relid,
+					(long)(mediabox.x1 - mediabox.x0) * 36, (long)(mediabox.y1 - mediabox.y0) * 36);
+
+				/* Fold recognised text into paragraphs (one per stext block). */
+				for (block = stext->first_block; block != NULL; block = block->next)
+				{
+					fz_stext_line *line;
+					if (block->type != FZ_STEXT_BLOCK_TEXT)
+					{
+						continue;
+					}
+					fz_append_string(ctx, body, "<w:p><w:r><w:t xml:space=\"preserve\">");
+					for (line = block->u.t.first_line; line != NULL; line = line->next)
+					{
+						fz_stext_char *ch;
+						for (ch = line->first_char; ch != NULL; ch = ch->next)
+						{
+							char utf8[8];
+							size_t n = fz_runetochar(utf8, ch->c);
+							if (n > 0)
+							{
+								utf8[n] = '\0';
+								pf_append_xml_escaped(ctx, body, utf8);
+							}
+						}
+						if (line->next != NULL)
+						{
+							fz_append_string(ctx, body, " ");
+						}
+					}
+					fz_append_string(ctx, body, "</w:t></w:r></w:p>");
+					did_emit_text = 1;
+				}
+
+				/* Render the ORIGINAL (crisper) page image to PNG bytes. */
+				pix = fz_new_pixmap_from_page(ctx, fpage, ctm, fz_device_rgb(ctx), 0);
+				img = fz_new_buffer_from_pixmap_as_png(ctx, pix, fz_default_color_params);
+
+				/* Emit <w:t> fallback note when OCR yielded no text. */
+				if (!did_emit_text)
+				{
+					fz_append_string(ctx, body,
+						"<w:p><w:r><w:t>No text was recognised on this page.</w:t></w:r></w:p>");
+				}
+
+				/* Collect the body; hold image for the next step. */
+				fz_append_buffer(ctx, docxml, body);
+				fz_drop_buffer(ctx, body); body = NULL;
+
+				/* Image relationship + refs + media part. */
+				fz_append_printf(ctx, rels,
+					"<Relationship Id=\"rId%d\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"media/image%d.png\"/>",
+					relid, relid);
+				{
+					char path[80];
+					snprintf(path, sizeof(path), "word/media/image%d.png", relid);
+					fz_write_zip_entry(ctx, zip, path, img, 1);
+				}
+			}
+			fz_always(ctx)
+			{
+				fz_drop_buffer(ctx, img); img = NULL;
+				fz_drop_buffer(ctx, body); body = NULL;
+				fz_drop_device(ctx, ocrdev); ocrdev = NULL;
+				fz_drop_device(ctx, ontotext); ontotext = NULL;
+				fz_drop_stext_page(ctx, stext); stext = NULL;
+				fz_drop_pixmap(ctx, pix); pix = NULL;
+				fz_drop_page(ctx, (fz_page *)fpage); fpage = NULL;
+			}
+			fz_catch(ctx)
+			{
+				caught_message(ctx);
+				fz_rethrow(ctx);
+			}
+		}
+
+		/* Close out the parts and the zip container itself. */
+		fz_append_string(ctx, rels, "</Relationships>");
+		fz_append_string(ctx, docxml,
+			"<w:sectPr><w:pgSz w:w=\"12240\" w:h=\"15840\"/></w:sectPr>"
+			"</w:body></w:document>");
+
+		fz_write_zip_entry(ctx, zip, "word/document.xml", docxml, 1);
+		fz_write_zip_entry(ctx, zip, "word/styles.xml", styles, 1);
+		fz_write_zip_entry(ctx, zip, "word/_rels/document.xml.rels", rels, 1);
+		{
+			relout = fz_new_buffer(ctx, 256);
+			fz_append_string(ctx, relout,
+				"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+				"<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
+				"<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"word/document.xml\"/>"
+				"</Relationships>");
+			fz_write_zip_entry(ctx, zip, "_rels/.rels", relout, 1);
+		}
+		fz_write_zip_entry(ctx, zip, "[Content_Types].xml", cat, 1);
+
+		fz_close_zip_writer(ctx, zip);
+		fz_drop_zip_writer(ctx, zip);
+		zip = NULL;
+
+		status = PF_OK;
+		if (out_page_count != NULL)
+		{
+			*out_page_count = count;
+		}
+	}
+	fz_always(ctx)
+	{
+		fz_drop_buffer(ctx, relout); relout = NULL;
+		fz_drop_buffer(ctx, rels); rels = NULL;
+		fz_drop_buffer(ctx, docxml); docxml = NULL;
+		fz_drop_buffer(ctx, styles); styles = NULL;
+		fz_drop_buffer(ctx, cat); cat = NULL;
+	}
+	fz_catch(ctx)
+	{
+		caught_message(ctx);
+		if (zip != NULL)
+		{
+			fz_drop_zip_writer(ctx, zip);
+		}
+	}
+
+	return status;
+}
+
+/*
  * FR-SEC-01: password-protect the open document by writing a fresh encrypted
  * copy. RFC 9506/ISO 32000-2 "standard security handler" via MuPDF: the
  * password strings (each at most 127 UTF-8 bytes to fit the PDF 128-byte

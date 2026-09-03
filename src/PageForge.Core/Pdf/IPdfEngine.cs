@@ -341,6 +341,27 @@ public interface IPdfEngine : IAsyncDisposable
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Runs local OCR over the whole open document and writes a new <c>.docx</c>
+    /// container to <paramref name="outputPath"/> (FR-OCR-03): each page is
+    /// rendered to a PNG and the Tesseract-recognized text is embedded beneath
+    /// it, so the output carries both the visual scan and searchable/selectable
+    /// text. The open document is left open and unmodified; the container is a
+    /// minimal but standards-valid Office Open XML file produced entirely
+    /// locally with MuPDF's zip writer.
+    ///
+    /// Pass <c>null</c> for <paramref name="options"/> to use the defaults (see
+    /// <see cref="OcrOptions"/>). The output file must not already exist.
+    ///
+    /// Throws when the engine has no open document, the output path is invalid,
+    /// or recognition fails. Returns the number of pages written and the
+    /// effective language/model on success.
+    /// </summary>
+    ValueTask<OcrResult> OcrToDocxAsync(
+        string outputPath,
+        OcrOptions? options = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Applies PDF standard security (FR-SEC-01): writes a fresh encrypted copy
     /// of the open document to <paramref name="outputPath"/>. The open document
     /// is left open and unmodified; the copy is what carries the security

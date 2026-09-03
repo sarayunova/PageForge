@@ -1137,6 +1137,43 @@ public sealed class MuPdfEngine : IPdfEngine
         }
     }
 
+    public ValueTask<OcrResult> OcrToDocxAsync(
+        string outputPath, OcrOptions? options, CancellationToken cancellationToken = default)
+        => OcrToDocxCoreAsync(outputPath, options, cancellationToken);
+
+    private async ValueTask<OcrResult> OcrToDocxCoreAsync(
+        string outputPath, OcrOptions? options, CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(outputPath);
+
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            RequireDocument();
+
+            string language = string.IsNullOrWhiteSpace(options?.Language) ? "eng" : options.Language!;
+            string? dataDirectory = ResolveOcrDataDirectory(options?.DataDirectory);
+
+            if (MuPdfShimBindings.pf_ocr_docx(
+                    _context, _document,
+                    Utf8Z(Path.GetFullPath(outputPath)),
+                    Utf8Z(language),
+                    dataDirectory is null ? null : Utf8Z(dataDirectory),
+                    out int pageCount)
+                != MuPdfShimBindings.PfOk)
+            {
+                TryDeleteFile(Path.GetFullPath(outputPath));
+                throw new InvalidOperationException($"Failed to run OCR to DOCX: {LastError()}");
+            }
+
+            return new OcrResult(pageCount, Path.GetFullPath(outputPath), language, dataDirectory ?? string.Empty);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     /// <summary>
     /// Returns the first existing directory able to supply
     /// "&lt;language&gt;.traineddata", or null so the native side falls back to

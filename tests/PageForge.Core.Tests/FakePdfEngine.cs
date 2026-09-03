@@ -564,6 +564,24 @@ internal sealed class FakePdfEngine : IPdfEngine
         return result;
     }
 
+    /// <summary>Writes a fake DOCX artifact (ZIP magic) and records the job (FR-OCR-03).</summary>
+    public async ValueTask<OcrResult> OcrToDocxAsync(
+        string outputPath, OcrOptions? options, CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        await Task.Yield();
+        byte[] zipMagic = { 0x50, 0x4B, 0x03, 0x04 }; // PK\x03\x04
+        await File.WriteAllBytesAsync(outputPath, zipMagic, cancellationToken);
+        LastOcr = (outputPath, options);
+        var result = new OcrResult(
+            _pageCount,
+            outputPath,
+            string.IsNullOrWhiteSpace(options?.Language) ? "eng" : options.Language!,
+            options?.DataDirectory ?? string.Empty);
+        OcrOutputs.Add(result);
+        return result;
+    }
+
     /// <summary>Paths of every <see cref="SaveEncryptedAsync"/> artifact, oldest first (FR-SEC-01).</summary>
     public List<string> EncryptedOutputs { get; } = new();
 

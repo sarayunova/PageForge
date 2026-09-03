@@ -12,12 +12,13 @@ namespace PageForge.Api.Services;
 /// <summary>
 /// Real, engine-backed OCR processor (FR-BATCH-01 "live"). Fetches a job item's
 /// source document version from the blob store, runs local OCR via the shared
-/// MuPDF+Tesseract engine to produce a searchable PDF, and returns the artifact
-/// bytes for persistence as a new document version.
+/// MuPDF+Tesseract engine to produce a searchable PDF (or a .docx carrying the
+/// recognized text plus page images), and returns the artifact bytes for
+/// persistence as a new document version.
 ///
-/// Only <see cref="OcrTargetFormat.SearchablePdf"/> is currently produced by the
-/// local engine; the other <see cref="OcrTargetFormat"/> conversion targets are
-/// reported as unsupported rather than silently succeeding.
+/// <see cref="OcrTargetFormat.SearchablePdf"/> and <see cref="OcrTargetFormat.Docx"/>
+/// are produced by the local engine; the other <see cref="OcrTargetFormat"/>
+/// targets are reported as unsupported rather than silently succeeding.
 /// </summary>
 public sealed class MuPdfOcrJobProcessor : IOcrJobProcessor
 {
@@ -33,12 +34,13 @@ public sealed class MuPdfOcrJobProcessor : IOcrJobProcessor
     public async Task<OcrItemResult> ProcessAsync(
         OcrJob job, OcrJobItem item, DocumentVersion version, CancellationToken cancellationToken)
     {
-        if (job.TargetFormat != OcrTargetFormat.SearchablePdf)
+        if (job.TargetFormat != OcrTargetFormat.SearchablePdf &&
+            job.TargetFormat != OcrTargetFormat.Docx)
         {
             return new OcrItemResult(
                 0,
-                $"The local engine currently supports only SearchablePdf output; " +
-                $"conversion to {job.TargetFormat} is not yet available.");
+                $"The local engine currently supports only SearchablePdf and Docx " +
+                $"output; conversion to {job.TargetFormat} is not yet available.");
         }
 
         string? sourcePath = null;
@@ -50,14 +52,23 @@ public sealed class MuPdfOcrJobProcessor : IOcrJobProcessor
 
             string workDir = Path.Combine(Path.GetTempPath(), "pageforge-ocr");
             Directory.CreateDirectory(workDir);
-            targetPath = Path.Combine(workDir, $"ocr-{item.Id:N}.pdf");
+            string extension = job.TargetFormat == OcrTargetFormat.Docx ? ".docx" : ".pdf";
+            targetPath = Path.Combine(workDir, $"ocr-{item.Id:N}{extension}");
 
             var engine = MuPdfEngine.Create();
             try
             {
                 await engine.OpenAsync(sourcePath, cancellationToken);
-                OcrResult ocr = await engine.OcrToPdfAsync(targetPath, null, cancellationToken);
-                ocrResult = ocr;
+                if (job.TargetFormat == OcrTargetFormat.Docx)
+                {
+                    OcrResult ocr = await engine.OcrToDocxAsync(targetPath, null, cancellationToken);
+                    ocrResult = ocr;
+                }
+                else
+                {
+                    OcrResult ocr = await engine.OcrToPdfAsync(targetPath, null, cancellationToken);
+                    ocrResult = ocr;
+                }
             }
             finally
             {
@@ -68,10 +79,13 @@ public sealed class MuPdfOcrJobProcessor : IOcrJobProcessor
             }
 
             byte[] content = await ReadFileWithRetryAsync(targetPath, cancellationToken);
+            string contentType = job.TargetFormat == OcrTargetFormat.Docx
+                ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                : "application/pdf";
             return new OcrItemResult(
                 ocrResult!.PageCount,
                 ErrorMessage: null,
-                Output: new OcrOutput(content, $"ocr-{item.Id:N}.pdf", "application/pdf"));
+                Output: new OcrOutput(content, $"ocr-{item.Id:N}{extension}", contentType));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

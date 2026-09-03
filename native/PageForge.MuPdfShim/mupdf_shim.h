@@ -399,6 +399,22 @@ PF_EXPORT int pf_ocr_pdf(pf_context context, pf_document document,
                          const char *datadir_utf8,
                          int *out_page_count);
 
+// Converts every page of the open document into a .docx container at
+// out_path_utf8: each page is rendered to a PNG and the Tesseract-recognised
+// text is embedded beneath it, so the output carries both the visual scan and
+// the searchable/selectable text. The open document is NOT modified. The
+// container is a minimal but standards-valid Office Open XML file written with
+// MuPDF's own zip writer; no hosted service or third-party writer is used.
+//
+// language_utf8 / datadir_utf8 have the same semantics as pf_ocr_pdf. Returns
+// PF_OK/PF_ERR (message in pf_last_error) and writes the OCR'd page count to
+// *out_page_count.
+PF_EXPORT int pf_ocr_docx(pf_context context, pf_document document,
+                          const char *out_path_utf8,
+                          const char *language_utf8,
+                          const char *datadir_utf8,
+                          int *out_page_count);
+
 // ---------------------------------------------------------------------------
 // FR-SEC-01 password protection primitives. protect writes a fresh encrypted
 // copy; authenticate answers "does this password open the (encrypted) open

@@ -122,6 +122,12 @@ internal static class MuPdfShimBindings
         out int outPageCount);
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int pf_ocr_docx(
+        nint context, nint document,
+        [In] byte[] outPathUtf8, [In] byte[]? languageUtf8, [In] byte[]? datadirUtf8,
+        out int outPageCount);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     internal static extern int pf_save_encrypted(
         nint context, nint document,
         [In] byte[] outPathUtf8, [In] byte[]? opwdUtf8, [In] byte[]? upwdUtf8,

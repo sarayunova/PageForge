@@ -81,6 +81,50 @@ public sealed class OcrNativeEngineTests : IDisposable
         Assert.StartsWith("%PDF", Encoding.ASCII.GetString(body.AsSpan(0, Math.Min(4, body.Length))));
     }
 
+    [Fact]
+    public async Task Ocr_job_persists_a_downloadable_docx()
+    {
+        if (!File.Exists(Path.Combine(AppContext.BaseDirectory, "pageforge_mupdf.dll"))
+            || !File.Exists(Path.Combine(AppContext.BaseDirectory, "tessdata", "eng.traineddata")))
+        {
+            return;
+        }
+
+        string token = await RegisterAsync("ocr-docx@example.com", "Native", "pw");
+        Guid versionId = await PushFixtureVersionAsync(token);
+
+        Guid jobId = await SubmitJobAsync(token, versionId, targetFormat: "docx");
+        JsonElement done = await WaitForStatusAsync(token, jobId, "Completed", TimeSpan.FromSeconds(30));
+
+        Assert.Equal("Docx", done.GetProperty("targetFormat").GetString());
+        Assert.True(done.GetProperty("pagesProcessed").GetInt32() > 0);
+
+        JsonElement item = done.GetProperty("items")[0];
+        Assert.Equal(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            item.GetProperty("outputContentType").GetString());
+        Assert.NotEqual(Guid.Empty, item.GetProperty("outputVersionId").GetGuid());
+
+        Guid itemId = item.GetProperty("id").GetGuid();
+        using var dl = new HttpRequestMessage(HttpMethod.Get,
+            $"/api/v1/ocr-jobs/{jobId}/items/{itemId}/result");
+        dl.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        using HttpResponseMessage download = await _client.SendAsync(dl);
+        Assert.Equal(HttpStatusCode.OK, download.StatusCode);
+        byte[] body = await download.Content.ReadAsByteArrayAsync();
+        Assert.True(body.Length > 0, "Downloaded DOCX must not be empty.");
+
+        // A .docx is a ZIP: it must carry the OOXML package parts and at least
+        // one embedded page image.
+        using var zip = new System.IO.Compression.ZipArchive(
+            new MemoryStream(body), System.IO.Compression.ZipArchiveMode.Read);
+        var names = zip.Entries.Select(e => e.FullName).ToHashSet();
+        Assert.Contains("[Content_Types].xml", names);
+        Assert.Contains("word/document.xml", names);
+        Assert.Contains("word/_rels/document.xml.rels", names);
+        Assert.Contains(names, n => n.StartsWith("word/media/image1", StringComparison.OrdinalIgnoreCase));
+    }
+
     // --- Helpers ------------------------------------------------------------
 
     private async Task<JsonElement> WaitForStatusAsync(
@@ -131,7 +175,7 @@ public sealed class OcrNativeEngineTests : IDisposable
         return versions.RootElement[0].GetProperty("id").GetGuid();
     }
 
-    private async Task<Guid> SubmitJobAsync(string token, Guid versionId)
+    private async Task<Guid> SubmitJobAsync(string token, Guid versionId, string targetFormat = "searchablePdf")
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/ocr-jobs");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
@@ -140,7 +184,7 @@ public sealed class OcrNativeEngineTests : IDisposable
             {
                 documentVersionIds = new[] { versionId },
                 jobType = "ocr",
-                targetFormat = "searchablePdf"
+                targetFormat
             }, _json), Encoding.UTF8, "application/json");
 
         HttpResponseMessage response = await _client.SendAsync(request);
