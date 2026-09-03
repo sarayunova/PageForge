@@ -100,7 +100,6 @@ jobs:
     name: WinUI shell build
     runs-on: windows-latest
     needs: [managed-build]
-    continue-on-error: true # Phase 0: image must carry UWP/MSIX build tasks; revisit with target env
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
