@@ -1,3 +1,6 @@
+<!-- Copyright (c) 2026 LiVi Software Company
+     SPDX-License-Identifier: AGPL-3.0-only
+     This file is part of PageForge. See LICENSE for the full license text. -->
 <Window x:Class="PageForge.App.Wpf.Views.ProtectDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -10,10 +13,10 @@
                    TextWrapping="Wrap" Margin="0,0,0,10" Foreground="#bbb" />
 
         <TextBlock Text="Open password (required to open the copy)" />
-        <PasswordBox x:Name="OpenPasswordBox" Margin="0,2,0,8" PasswordChanged="Passwords_Changed" />
+        <PasswordBox x:Name="OpenPasswordBox" AutomationProperties.Name="Open password" Margin="0,2,0,8" PasswordChanged="Passwords_Changed" />
 
         <TextBlock Text="Permissions password (optional; unlock everything, lets you change permissions)" />
-        <PasswordBox x:Name="OwnerPasswordBox" Margin="0,2,0,8" PasswordChanged="Passwords_Changed" />
+        <PasswordBox x:Name="OwnerPasswordBox" AutomationProperties.Name="Permissions password" Margin="0,2,0,8" PasswordChanged="Passwords_Changed" />
 
         <TextBlock Text="Encryption" />
         <ComboBox x:Name="MethodCombo" Margin="0,2,0,10" SelectedIndex="0">

@@ -1,3 +1,6 @@
+<!-- Copyright (c) 2026 LiVi Software Company
+     SPDX-License-Identifier: AGPL-3.0-only
+     This file is part of PageForge. See LICENSE for the full license text. -->
 <UserControl x:Class="PageForge.App.Wpf.Views.RedactView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
@@ -13,7 +16,7 @@
                            VerticalAlignment="Center" Margin="0,0,10,0" />
                 <TextBlock x:Name="HintText" Text="Drag a box over content to remove; Apply deletes the covered text and paints it black (undoable)."
                            Foreground="#bbb" VerticalAlignment="Center" Margin="0,0,10,0" />
-                <Button Content="↩ Undo" Click="Undo_Click" Padding="8,3"
+                <Button Content="↩ Undo" AutomationProperties.Name="Undo redaction" Click="Undo_Click" Padding="8,3"
                         ToolTip="Undo the last redaction apply (restores the covered content from a snapshot)" />
                 <Separator Margin="6,0" Width="1" Background="#555" />
                 <Button Content="Save redacted…" Click="SaveRedacted_Click" Padding="8,3"
