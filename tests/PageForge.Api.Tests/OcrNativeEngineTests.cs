@@ -6,7 +6,15 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.DependencyInjection;
+using PageForge.Api.Data;
+using PageForge.Api.Services;
+using PageForge.Api.Services.Email;
 
 namespace PageForge.Api.Tests;
 
@@ -26,8 +34,7 @@ public sealed class OcrNativeEngineTests : IDisposable
 
     public OcrNativeEngineTests()
     {
-        _factory = new PageForgeApiFactory().WithWebHostBuilder(builder =>
-            builder.UseSetting("Ocr:EnableNativeEngine", "true"));
+        _factory = new NativeEngineIsolatedFactory();
         _client = _factory.CreateClient();
     }
 
@@ -156,5 +163,63 @@ public sealed class OcrNativeEngineTests : IDisposable
             Assert.Equal(expected.Value, response.StatusCode);
         string content = await response.Content.ReadAsStringAsync();
         return JsonDocument.Parse(content);
+    }
+}
+
+/// <summary>
+/// Isolated host for the real-engine OCR test. Uses its own
+/// <see cref="InMemoryDatabaseRoot"/> and DB name so workers from the shared
+/// <see cref="PageForgeApiFactory"/> store (which run the no-op processor) can
+/// never see or mis-process this test's jobs. Without this isolation a no-op
+/// worker, sharing the static store and the process-wide completion lock, can
+/// complete a native job with no output and the download/content-type asserts
+/// flake. Enables the native engine via <c>Ocr:EnableNativeEngine</c>.
+/// </summary>
+public sealed class NativeEngineIsolatedFactory : WebApplicationFactory<Program>
+{
+    private static readonly InMemoryDatabaseRoot _root = new();
+    private static readonly string _dbName = "pageforge-native-" + Guid.NewGuid().ToString("N");
+
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        builder.UseEnvironment("Testing");
+        builder.UseSetting("Ocr:EnableNativeEngine", "true");
+
+        builder.ConfigureServices(services =>
+        {
+            ServiceDescriptor? db = services.SingleOrDefault(
+                d => d.ServiceType == typeof(DbContextOptions<AppDbContext>));
+            if (db is not null) services.Remove(db);
+
+            services.AddDbContext<AppDbContext>(options =>
+                options.UseInMemoryDatabase(_dbName, _root)
+                    .ConfigureWarnings(w =>
+                        w.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning)));
+
+            ServiceDescriptor? blob = services.SingleOrDefault(
+                d => d.ServiceType == typeof(IBlobStorage));
+            if (blob is not null) services.Remove(blob);
+            services.AddSingleton<IBlobStorage, FakeBlobStorage>();
+            builder.UseSetting("Sync:Endpoint", "");
+            builder.UseSetting("Sync:AccessKey", "");
+            builder.UseSetting("Sync:SecretKey", "");
+
+            ServiceDescriptor? email = services.SingleOrDefault(
+                d => d.ServiceType == typeof(IEmailSender));
+            if (email is not null) services.Remove(email);
+            services.AddSingleton<IEmailSender, RecordingEmailSender>();
+            builder.UseSetting("Email:Provider", "none");
+
+            builder.UseSetting("Jwt:Key", PageForgeApiFactory.TestJwtKey);
+            builder.UseSetting("Jwt:Issuer", PageForgeApiFactory.Issuer);
+            builder.UseSetting("Jwt:Audience", PageForgeApiFactory.Audience);
+            builder.UseSetting("Jwt:AccessExpiryMinutes", "30");
+            builder.UseSetting("Database:AutoMigrate", "false");
+
+            ServiceProvider sp = services.BuildServiceProvider();
+            using IServiceScope scope = sp.CreateScope();
+            var ctx = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            ctx.Database.EnsureCreated();
+        });
     }
 }
