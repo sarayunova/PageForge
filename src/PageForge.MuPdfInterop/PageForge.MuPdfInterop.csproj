@@ -18,4 +18,17 @@
           Condition="Exists('..\..\native\out\PageForge.MuPdfShim\Release\pageforge_mupdf.dll')" />
   </ItemGroup>
 
+
+  <!-- The payload copies above are conditional so the managed projects still
+       build on a machine that has not built the native shim yet. That silence is
+       dangerous in CI: with the file missing the copy is skipped, the build still
+       succeeds, and everything downstream runs against no engine. That is exactly
+       what happened while the native artifact was being unpacked to the wrong
+       path - the suites reported green without the engine present.
+       Set PAGEFORGE_REQUIRE_NATIVE=1 (ci.yml does) to make the payload mandatory. -->
+  <Target Name="PageForgeVerifyNativePayload" BeforeTargets="Build"
+          Condition="'$(PAGEFORGE_REQUIRE_NATIVE)' != '' and '$(PAGEFORGE_REQUIRE_NATIVE)' != '0'">
+    <Error Condition="!Exists('$(MSBuildThisFileDirectory)..\..\native\out\PageForge.MuPdfShim\Release\pageforge_mupdf.dll')"
+           Text="PAGEFORGE_REQUIRE_NATIVE is set but native/out/PageForge.MuPdfShim/Release/pageforge_mupdf.dll is missing. Building would silently produce an output with no PDF engine." />
+  </Target>
 </Project>
