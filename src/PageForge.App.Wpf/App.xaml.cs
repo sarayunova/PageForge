@@ -37,6 +37,27 @@ public partial class App : Application
     }
 
     /// <summary>
+    /// Records a failed proof without ever clearing a failure recorded earlier.
+    ///
+    /// Each proof used to assign <see cref="Environment.ExitCode"/> directly, including
+    /// assigning 0 on success. A later passing proof therefore overwrote an earlier
+    /// failure and --smoke could exit 0 with proofs broken. The corpus dogfood proof
+    /// carried a comment saying it ran last so a crash would "dominate the process exit
+    /// code" - a workaround for this masking rather than a fix for it.
+    ///
+    /// The first failure now wins and sticks. Success assigns nothing, because the
+    /// default exit code is already 0.
+    /// </summary>
+    /// <param name="code">2 for a precondition/setup failure, 1 for a failed proof.</param>
+    private static void FailProof(int code = 1)
+    {
+        if (Environment.ExitCode == 0)
+        {
+            Environment.ExitCode = code;
+        }
+    }
+
+    /// <summary>
     /// Renders page 1 of the sample document through the real IPdfEngine and
     /// writes the PNG to artifacts/ so the /smoke command can verify it byte-for-byte.
     /// </summary>
@@ -48,7 +69,7 @@ public partial class App : Application
             if (pdfPath is null)
             {
                 Console.Error.WriteLine("sample document not found");
-                Environment.ExitCode = 2;
+                FailProof(2);
                 return;
             }
 
@@ -63,12 +84,11 @@ public partial class App : Application
             await File.WriteAllBytesAsync(outPath, page.PngBytes);
 
             Console.WriteLine($"rendered {info.DisplayName} p1 {page.WidthPixels}x{page.HeightPixels} px -> {outPath}");
-            Environment.ExitCode = 0;
         }
         catch (Exception ex)
         {
             Console.Error.WriteLine($"render failed: {ex.Message}");
-            Environment.ExitCode = 1;
+            FailProof();
         }
     }
 
@@ -86,7 +106,7 @@ public partial class App : Application
             if (pdfPath is null)
             {
                 Console.Error.WriteLine("sample document not found");
-                Environment.ExitCode = 2;
+                FailProof(2);
                 return;
             }
 
@@ -118,12 +138,11 @@ public partial class App : Application
                 Console.WriteLine($"viewer proof: pages={vm.PageCount} outline={vm.Outline.Items.Count} searchHits={hits.Count}");
             }
 
-            Environment.ExitCode = 0;
         }
         catch (Exception ex)
         {
             Console.Error.WriteLine($"viewer proof failed: {ex.Message}");
-            Environment.ExitCode = 1;
+            FailProof();
         }
     }
 
@@ -188,7 +207,7 @@ public partial class App : Application
             if (pagesPath is null)
             {
                 Console.Error.WriteLine("sample-pages3.pdf not found");
-                Environment.ExitCode = 2;
+                FailProof(2);
                 return;
             }
 
@@ -228,12 +247,11 @@ public partial class App : Application
                 }
             }
 
-            Environment.ExitCode = 0;
         }
         catch (Exception ex)
         {
             Console.Error.WriteLine($"organizer proof failed: {ex.Message}");
-            Environment.ExitCode = 1;
+            FailProof();
         }
     }
 
@@ -253,7 +271,7 @@ public partial class App : Application
             if (pagesPath is null)
             {
                 Console.Error.WriteLine("sample-pages3.pdf not found");
-                Environment.ExitCode = 2;
+                FailProof(2);
                 return;
             }
 
@@ -313,18 +331,17 @@ public partial class App : Application
                     if (!highlightGone || !inkKept || !noteKept)
                     {
                         Console.Error.WriteLine("annotation proof: flatten did not preserve expected annotations");
-                        Environment.ExitCode = 1;
+                        FailProof();
                         return;
                     }
                 }
             }
 
-            Environment.ExitCode = 0;
         }
         catch (Exception ex)
         {
             Console.Error.WriteLine($"annotation proof failed: {ex.Message}");
-            Environment.ExitCode = 1;
+            FailProof();
         }
     }
 
@@ -346,7 +363,7 @@ public partial class App : Application
             if (!File.Exists(src))
             {
                 Console.Error.WriteLine("contract-multipage.pdf not found");
-                Environment.ExitCode = 2;
+                FailProof(2);
                 return;
             }
 
@@ -419,17 +436,16 @@ public partial class App : Application
                 if (!survived)
                 {
                     Console.Error.WriteLine("edit proof: change did not survive reopen");
-                    Environment.ExitCode = 1;
+                    FailProof();
                     return;
                 }
             }
 
-            Environment.ExitCode = 0;
         }
         catch (Exception ex)
         {
             Console.Error.WriteLine($"edit proof failed: {ex.Message}");
-            Environment.ExitCode = 1;
+            FailProof();
         }
     }
 
@@ -450,7 +466,7 @@ public partial class App : Application
             if (corpusDir is null || !Directory.Exists(corpusDir))
             {
                 Console.Error.WriteLine("corpus dir not found");
-                Environment.ExitCode = 2;
+                FailProof(2);
                 return;
             }
 
@@ -459,7 +475,7 @@ public partial class App : Application
             if (corpus.Length == 0)
             {
                 Console.Error.WriteLine("corpus dir is empty");
-                Environment.ExitCode = 2;
+                FailProof(2);
                 return;
             }
 
@@ -564,7 +580,7 @@ public partial class App : Application
         catch (Exception ex)
         {
             Console.Error.WriteLine($"corpus dogfood proof failed: {ex.Message}");
-            Environment.ExitCode = 1;
+            FailProof();
         }
     }
 }
