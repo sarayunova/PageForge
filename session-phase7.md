@@ -231,23 +231,99 @@ the proof at all. With the wrong number of pngs on disk the old
 nothing. `5f85744` closes that path by asserting each expected file exists
 before hashing.
 
-### A theme worth its own pass: steps that report success while doing nothing
+## The "reports success while doing nothing" sweep (2026-09-04)
 
-Three instances found so far, and they are the reason so much of this stayed
-hidden behind green checks:
+Nine instances found. Four were provably hiding a real problem; the rest were
+structural hazards removed before they could. Ranked by what they concealed.
 
-- the Phase 7 Azure signing branch that printed a note, left `$signArgs` empty
-  and produced an unsigned payload (fixed last session);
-- the sodochandler patch, whose guard fired and whose regex matched nothing, and
-  which then printed `removed sodochandler ProjectReference` regardless;
-- `PageForge.MuPdfInterop.csproj`, which copies the shim DLL only under
-  `Condition="Exists(...)"`. With the DLL at the wrong path the copy was skipped
-  silently, the build and unit tests still passed, and **that green "Test" step
-  never exercised the real engine at all.**
+### Confirmed to have hidden something real
 
-Recommend an explicit sweep for this pattern — every `Condition="Exists(...)"`,
-every catch that logs and continues, every patch step whose guard and whose
-matcher can disagree. Each one can hide a real gap behind a passing build.
+1. **`093e256` — CI swallowed test failures.** A pwsh step takes its exit code
+   from the *last* command, and a failing native command neither stops the
+   script nor fails the step. Three `dotnet test` calls in sequence reported
+   only whether the third passed. Run 33817621227 shipped a green check with
+   `PageForge.Fidelity.Tests` at **Failed: 1, Passed: 47**. The managed *build*
+   loop above it had the identical defect, so a project could fail to compile
+   and still show green. Both now check `$LASTEXITCODE` per item and name every
+   failure.
+2. **`093e256` — the corpus was being corrupted on checkout.** What the
+   swallowed failure was hiding: no `.gitattributes` existed, so git's content
+   heuristic classified five of six committed PDFs as text and, with
+   `core.autocrlf=true` (the Windows default, hosted runners included), rewrote
+   LF to CRLF *inside* them. That is also why hosted runs logged "cannot
+   recognize xref format / trying to repair broken xref" for every corpus
+   document and local runs never did — MuPDF was silently repairing damaged
+   files on every open. After the fix that warning count is **0**.
+   One manifest hash had to be re-pinned: `form-application.pdf` had been
+   recorded from an already-mangled working copy, so it could only ever have
+   matched a corrupted checkout. Verified with mutool that every corpus blob
+   opens cleanly at its expected page count before changing it.
+3. **`123c4c4` — three OCR tests passed without running.** They returned early
+   when the native toolchain was absent, commented "so the suite stays green".
+   xunit 2.5.3 has no runtime skip, so an early return reports **passed**.
+   Before the native lane went green the shim was never in CI either, so all
+   three reported passing on every run without executing one assertion — the
+   suite advertised live MuPDF+Tesseract coverage it was not providing.
+4. **`441066a` — `Condition="Exists(...)"` skipped the engine silently.**
+   `PageForge.MuPdfInterop` and `PageForge.Api` copy the shim DLL (and the Api,
+   tessdata) only if present. While the native artifact was unpacking to the
+   wrong path that condition was false, the copy was skipped, the build passed,
+   and the suites ran with no engine at all.
+
+### Structural hazards removed (not observed hiding anything)
+
+5. **`d8dc96c` — `--smoke` exit codes were overwritable.** Every proof assigned
+   `Environment.ExitCode` directly, including `0` on success, so a later pass
+   could clear an earlier failure. The dogfood proof carried a comment about
+   running last so a crash would "dominate the process exit code" — a
+   workaround for the masking rather than a fix. Failures now go through
+   `FailProof()`, first-failure-wins. **Scope honestly:** an A/B could not be
+   constructed (every early proof shares the same sample document, and the
+   original binary exited non-zero on the same scenario), so this is a hazard
+   removed, not a caught bug.
+6. **`5f85744` — the byte-compare could pass vacuously.** It hashed every png in
+   `artifacts/` and required them all equal, which can never hold since two are
+   renders of deliberately modified pages. Run 33814499028's render proof
+   reported success with no RenderSpike output and no byte-identical line in the
+   log at all — it passed having produced no proof. Now compares named files and
+   asserts each exists.
+7. **`0f551bf` — a patch step that printed a success it never performed.** The
+   sodochandler guard fired while its regex matched nothing, wrote the file back
+   unchanged, and printed "removed sodochandler ProjectReference" regardless. It
+   now throws when a file mentions sodochandler and the pattern misses.
+8. **`e6280bb` — msbuild output was piped to `Out-Null`** and the exit check
+   tested `$?` after a pipeline, which reports the pipeline rather than msbuild.
+   Real compile failures could pass, and an hour-long hang produced no output.
+9. **Pre-existing (fixed the previous session)** — the Azure signing branch that
+   printed a note, left `$signArgs` empty and produced an unsigned payload.
+
+### Verified armed, not merely green
+
+`PAGEFORGE_REQUIRE_NATIVE: 1` was confirmed present in the managed job's
+environment in run 33821037007. That matters: both new guards are no-ops when
+the variable is unset, so a green run alone would not have proved they work.
+They passed because the payload is genuinely there.
+
+Every fix in this sweep was verified in **both** directions — that it passes on
+the healthy case and still fails when handed a broken one. Making a check laxer
+is how a green build gets manufactured, so a fix that only demonstrates "it
+passes now" proves nothing.
+
+### Top remaining sweep item — deliberately not fixed
+
+`tools/generate-corpus.ps1` sets `$ErrorActionPreference = 'Continue'`, makes
+**nine** mutool invocations each redirecting stderr to `$null`, and checks
+`$LASTEXITCODE` **zero** times. It can therefore emit a silently broken corpus,
+which is how a bad hash gets pinned into the manifest in the first place.
+
+It was left alone on purpose: its output paths are hardcoded to
+`tools/sample-pdf/corpus` and `golden` with no override, and its own header says
+re-running changes every hash. The only way to exercise a fix would be to
+regenerate and re-pin the artifacts this session just stabilized. **Do it in two
+steps:** first add an `-OutDir` parameter so the script can run against a
+throwaway directory, verify it reproduces the committed bytes, and only then add
+the exit-code checks. `tools/publish-release.ps1` is already clean — five
+invocations, five checks.
 
 ### CI environment notes
 
@@ -268,19 +344,18 @@ matcher can disagree. Each one can hide a real gap behind a passing build.
 
 ## Next session starts here — open gaps, ranked
 
-1. **Keep CI green — it now is, and that is new and fragile.** All three lanes
-   passed on `e09d0e3` (run 33817621227). Nothing before this session had ever
-   been verified on real infrastructure, so treat the next few runs as the real
-   test of whether it holds. If a lane goes red, read the error rather than
-   assuming a flake: every failure this session was a genuine defect, and none
-   were flaky.
-2. **Sweep for "reports success while doing nothing".** See the theme section
-   above — four found so far, including one CI run that reported a green render
-   proof while producing no proof at all. Each hid a real gap behind a green check.
-   Start with `Condition="Exists(...)"` in the csproj files, then any patch step
-   whose guard and matcher can disagree, then catches that log and continue.
-   This is ranked second because it undermines the trustworthiness of every
-   other green result below it.
+1. **Keep CI green — it now is, and that is new.** All three lanes have passed
+   on four consecutive commits (`e09d0e3` through `d8dc96c`), the last of them
+   with the test-failure swallowing fixed, so the green is now trustworthy in a
+   way the earlier one was not. If a lane goes red, read the error rather than
+   assuming a flake: every failure this session was a genuine defect and not one
+   was flaky.
+2. **Finish the "reports success while doing nothing" sweep.** Nine instances
+   found and fixed — see the sweep section above. One item is knowingly left:
+   `tools/generate-corpus.ps1` has nine unchecked mutool invocations, and fixing
+   it safely needs an `-OutDir` parameter added first so it can be exercised
+   without regenerating the committed corpus. Details and the recommended
+   two-step approach are in that section.
 3. **Bump the `actions/*` pins** (`checkout` v4→v7, `setup-dotnet` v4→v6,
    `upload-artifact` v4→v7, `download-artifact` v4→v8) as their own commit, once
    CI is green so breakage is attributable. This also clears the Node 20
