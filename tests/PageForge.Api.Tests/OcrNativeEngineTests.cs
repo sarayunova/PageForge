@@ -44,15 +44,38 @@ public sealed class OcrNativeEngineTests : IDisposable
         _factory.Dispose();
     }
 
+    /// <summary>True when the vendored native OCR toolchain is in the test output.</summary>
+    private static bool NativeToolchainPresent =>
+        File.Exists(Path.Combine(AppContext.BaseDirectory, "pageforge_mupdf.dll"))
+        && File.Exists(Path.Combine(AppContext.BaseDirectory, "tessdata", "eng.traineddata"));
+
+    /// <summary>
+    /// Guard for the live-engine tests below. xunit 2.5.3 has no runtime skip, so on a
+    /// developer machine without the native toolchain these tests can only return early —
+    /// which reports them as PASSED. That is exactly how they escaped notice: before the
+    /// native CI lane went green the shim was never present in CI either, so all three
+    /// "passed" on every run without executing a single assertion.
+    ///
+    /// Setting PAGEFORGE_REQUIRE_NATIVE=1, as CI does, turns a missing toolchain into an
+    /// explicit failure instead, so these tests can never silently vanish there again.
+    /// </summary>
+    private static bool SkipWithoutNativeToolchain()
+    {
+        if (NativeToolchainPresent) { return false; }
+
+        string? required = Environment.GetEnvironmentVariable("PAGEFORGE_REQUIRE_NATIVE");
+        Assert.True(
+            string.IsNullOrEmpty(required) || required == "0",
+            $"PAGEFORGE_REQUIRE_NATIVE is set, but the native OCR toolchain is missing from "
+            + $"{AppContext.BaseDirectory}. Expected pageforge_mupdf.dll and "
+            + "tessdata/eng.traineddata. These tests must not be skipped in CI.");
+        return true;
+    }
+
     [Fact]
     public async Task Ocr_job_persists_a_downloadable_searchable_pdf()
     {
-        // Skip on hosts without the native OCR toolchain so the suite stays green.
-        if (!File.Exists(Path.Combine(AppContext.BaseDirectory, "pageforge_mupdf.dll"))
-            || !File.Exists(Path.Combine(AppContext.BaseDirectory, "tessdata", "eng.traineddata")))
-        {
-            return;
-        }
+        if (SkipWithoutNativeToolchain()) { return; }
 
         string token = await RegisterAsync("ocr-native@example.com", "Native", "pw");
         Guid versionId = await PushFixtureVersionAsync(token);
@@ -84,11 +107,7 @@ public sealed class OcrNativeEngineTests : IDisposable
     [Fact]
     public async Task Ocr_job_persists_a_downloadable_docx()
     {
-        if (!File.Exists(Path.Combine(AppContext.BaseDirectory, "pageforge_mupdf.dll"))
-            || !File.Exists(Path.Combine(AppContext.BaseDirectory, "tessdata", "eng.traineddata")))
-        {
-            return;
-        }
+        if (SkipWithoutNativeToolchain()) { return; }
 
         string token = await RegisterAsync("ocr-docx@example.com", "Native", "pw");
         Guid versionId = await PushFixtureVersionAsync(token);
@@ -128,11 +147,7 @@ public sealed class OcrNativeEngineTests : IDisposable
     [Fact]
     public async Task Ocr_job_persists_a_downloadable_png_zip()
     {
-        if (!File.Exists(Path.Combine(AppContext.BaseDirectory, "pageforge_mupdf.dll"))
-            || !File.Exists(Path.Combine(AppContext.BaseDirectory, "tessdata", "eng.traineddata")))
-        {
-            return;
-        }
+        if (SkipWithoutNativeToolchain()) { return; }
 
         string token = await RegisterAsync("ocr-png@example.com", "Native", "pw");
         Guid versionId = await PushFixtureVersionAsync(token);

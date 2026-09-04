@@ -51,6 +51,11 @@ jobs:
       # The public repository the AGPL source offer points at. Derived from the
       # running repo so a fork advertises its own source, not upstream's.
       PAGEFORGE_REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+      # The native lane always publishes the shim and tessdata to this job, so a
+      # missing toolchain here is a real failure, not a reason to skip. Without
+      # this the live-engine OCR tests return early and report as PASSED - which
+      # is what they did on every CI run before the native lane went green.
+      PAGEFORGE_REQUIRE_NATIVE: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
