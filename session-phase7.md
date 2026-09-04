@@ -1,10 +1,11 @@
 # Phase 7 — Public beta & open-source launch: status & open items
 
-**Phase 7 focus (TSD §12 row 7):** CONTRIBUTING.md, community governance,
+# Phase 7 — Public beta & open-source launch: status & open items
 source-offer endpoint live, signed installers published. Exit gate = **AGPL
 compliance verified end to end**.
 
 Last updated: 2026-09-04. Resume from "Next session starts here" near the bottom.
+Signing is ON HOLD by the maintainer until the week of 2026-09-08 — see that section before acting on it.
 
 ## Repository is live
 
@@ -83,7 +84,61 @@ trust-chain link is exactly what a real Azure certificate supplies. The cert,
 `.pfx` and dry-run payload were deleted afterwards. Deliberately did NOT install
 an untrusted root to force a green run.
 
-## The only remaining Phase 7 blocker (needs the maintainer)
+## Signing: ON HOLD by the maintainer (2026-09-04, revisit the week of 2026-09-08)
+
+The maintainer has deliberately parked the signing decision, to be revisited
+next week. **Do not start implementing either path, and do not re-ask the
+question unprompted** — bring them the options below when they raise it.
+
+### Current behaviour if a tag were pushed today
+
+`release.yml` fails safe, so nothing bad happens — but nothing useful does
+either. With `AZURE_CLIENT_ID` unset, `sign-check` emits `signed=false`, the
+Azure login / sign / `-RequireSignature` package steps are all skipped, an
+unsigned preview zip is built and uploaded as a **workflow artifact** (90-day
+expiry, GitHub login required to fetch), and the `publish-release` job is
+skipped outright because it requires `signed == 'true'`.
+
+Net effect: **tagging `v0.1.0-beta` today creates no GitHub Release and no
+public download.** For an AGPL project whose Phase 7 gate is public
+reachability, that is the real cost — larger than the SmartScreen warnings.
+
+### The two options, when they come back to it
+
+**A — configure Azure Artifact Signing.** ~$10/month, OIDC so no key material in
+the repo, and the only reason it is viable at all: public CAs have not issued
+exportable `.pfx` files since June 2023 (keys must sit on FIPS hardware), so the
+original `PAGEFORGE_CERT_PFX_B64` design could never have held a production
+certificate. The long pole is identity validation — individual ≈3 business days,
+business needs 3+ years of verifiable history — so that is the item to start
+first. Full steps are in CONTRIBUTING.md and in the blocker section above.
+
+**B — ship the beta unsigned.** Defensible for an open-source beta and unblocks
+distribution immediately. Requires three changes, and the third is not optional:
+
+1. Relax the `publish-release` job's `if` so a release is created when
+   `signed != 'true'`.
+2. Expect users to hit SmartScreen "Windows protected your PC / Unknown
+   publisher", possible Defender quarantine, Edge/Chrome download warnings or
+   blocks, and outright refusal under WDAC/AppLocker. Document it in the release
+   notes and README.
+3. **Fix the release-notes body, which currently states `code-signed`
+   unconditionally.** Publishing unsigned without changing it would ship a
+   release page making a false security claim — the same "reports success while
+   doing nothing" pattern as the rest of this session's sweep, except in
+   user-facing text. This is latent but harmless today only because no release
+   can currently be created at all.
+
+Either way, Phase 7's written exit criterion says "signed installers published",
+so choosing B means amending it in TSD §12.1 alongside the WPF-shell and
+x64-only amendments rather than letting it slide.
+
+Worth telling them either way: a brand-new certificate carries no SmartScreen
+reputation, so early downloads warn even *with* signing. Signing buys a real
+publisher name instead of "Unknown", and reputation that accrues over time — not
+a clean first-run experience on day one.
+
+## Azure signing setup — the steps, if option A is chosen (needs the maintainer)
 
 Azure setup — walkthrough is in CONTRIBUTING.md:
 
@@ -364,12 +419,20 @@ invocations, five checks.
    against TSD targets, and there is no WCAG 2.1 AA audit artifact. Now that WPF
    is the declared product target (TSD §12.1), a WPF accessibility audit counts
    as real evidence. Largest remaining *substantive* gap.
-5. **Azure Artifact Signing setup** — the only hard Phase 7 blocker that needs
-   the maintainer personally (steps unchanged, above). Until it is done, tagging
-   produces an unsigned preview artifact and no release.
+5. **Signing — ON HOLD, revisit the week of 2026-09-08.** The maintainer parked
+   the decision deliberately. Do not start either path and do not re-ask
+   unprompted; the two options, their consequences, and the release-notes bug
+   that option B must fix are written up in the "Signing: ON HOLD" section above.
+   Until then tagging produces an unsigned workflow artifact and no release,
+   which is a safe failure mode.
 6. **API excluded from releases** (`-SkipApi`). Fine if hosted deploys are
    separate, but nothing states so; one sentence in the README closes it.
-7. **Tag `v0.1.0-beta`** once (1) and (5) are settled.
+   **Unanswered — this question was put to the maintainer and not yet answered.**
+7. **WCAG 2.1 AA audit scope — unanswered.** Asked what standard of artifact is
+   wanted (documented self-assessment against the checklist, automated tooling
+   output, or something customer-facing); the answer changes the size of the job
+   materially. Ask again before starting item 4.
+8. **Tag `v0.1.0-beta`** once (1) and (5) are settled.
 
 **Do not re-ask** the WinUI-shell or ARM64 questions: both were decided this
 session and are recorded in TSD §12.1.
