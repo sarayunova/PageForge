@@ -46,8 +46,8 @@ jobs:
     outputs:
       signed: ${{ steps.sign-check.outputs.signed }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 8.0.x
 
@@ -125,7 +125,7 @@ jobs:
           -Version ${{ steps.ver.outputs.version }} -SkipApi -ZipOnly
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pageforge-release
           path: artifacts/release/*.zip
@@ -139,7 +139,7 @@ jobs:
       contents: write # creating the release
     if: ${{ startsWith(github.ref, 'refs/tags/v') && needs.build-and-sign.outputs.signed == 'true' }}
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: pageforge-release
           path: artifacts/release
