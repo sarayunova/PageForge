@@ -9,7 +9,7 @@
 
 PageForge is an open-source (AGPLv3) **PDF viewer, editor, and document platform for Windows** by LiVi Software Company — marketed as an Adobe Acrobat alternative. It is a genuine "two halves" product: a **fully-offline desktop app** (view, annotate, edit text/objects, fill forms, redact, encrypt, OCR, sign) plus an **optional hosted ASP.NET Core API** (accounts/billing, sync, e-sign, team review, batch OCR). The v0.1 beta repository is substantially built: all three CI lanes were made green for the first time in the project's history on 2026-09-04, and the repo is live and public at `github.com/sarayunova/PageForge`, in sync with `origin/main` (working tree clean).
 
-The project is unusually disciplined for an agent-built codebase: a TRD/TSD/verification-playbook trio of "source-of-truth" documents, an artifact-layer verification workflow, a byte-pinned fidelity corpus, and a ruthless post-hoc "reports success while doing nothing" sweep that found nine silent-failure defects. The sign-or-not decision was resolved on 2026-09-12 in favour of shipping the beta unsigned until signing is configured; remaining open items are Phase 6 evidence (load-test run + WCAG audit artifact) and the WPF-not-WinUI shell decision record.
+The project is unusually disciplined for an agent-built codebase: a TRD/TSD/verification-playbook trio of "source-of-truth" documents, an artifact-layer verification workflow, a byte-pinned fidelity corpus, and a ruthless post-hoc "reports success while doing nothing" sweep that found nine silent-failure defects and was completed on 2026-09-12. The sign-or-not decision was resolved on 2026-09-12 in favour of shipping the beta unsigned until signing is configured; remaining open items are Phase 6 evidence (load-test run + WCAG audit artifact) and the WPF-not-WinUI shell decision record.
 
 ## 2. Codebase at a glance
 
@@ -64,7 +64,7 @@ Applied FR coverage (with verification evidence):
 1. **Signing — RESOLVED (2026-09-12):** ship unsigned until Azure Artifact Signing is configured. `release.yml` gate relaxed, release notes made truthful (+ SmartScreen warnings), TSD §12.1 amended, handoff/docs updated. The Azure path still needs the maintainer's account + identity validation (individual ≈3 business days, business 3+ years) before signed installers take over distribution.
 2. **Phase 6 exit evidence missing** — `tools/loadtest/` (real k6-adjacent harness exists) has no recorded run against TSD targets; no WCAG 2.1 AA audit artifact.
 3. **Shell is WPF, not WinUI** — `PageForge.App.Wpf` (~3.9k lines, all product UI) is the shipping shell; `PageForge.App` is a 168-line WinUI spike kept from rotting by the enforcing CI lane. Porting is post-beta (TSD §12.1 amendment). x64 only; ARM64 deferred.
-4. **Known deliberately-unfixed** — `tools/generate-corpus.ps1` has 9 unchecked `mutool` invocations (a silent-broken-corpus hazard); fix needs an `-OutDir` switch first.
+4. **Sweep's last item — DONE (2026-09-12)** — `tools/generate-corpus.ps1` gained an `-OutDir` switch and all nine unchecked `mutool` invocations are now guarded by `Assert-Mutool`. The `-OutDir` verification caught a real drift (form-application's hand-rolled xref writer emitted CRLF against an LF-pinned blob); the writer was normalized to LF, and all four PDFs + four goldens now regenerate byte-identical to the manifest pins. Verified in both directions: success path reproduces pins (exit 0), and a failing `mutool` now aborts loudly (exit 1) instead of silently continuing.
 5. Minor: `main` has **no branch protection**; actions pins were bumped; `.gitattributes` added now; `docs/fidelity-corpus.md` referenced but missing.
 
 ## 8. Observations / assessment
@@ -76,7 +76,7 @@ Applied FR coverage (with verification evidence):
 ## 9. Recommended next steps (priority order)
 
 1. ~~Resolve the signing decision~~ **DONE (2026-09-12)** — option B (ship unsigned) implemented across `release.yml`, TSD §12.1, README/CONTRIBUTING/CHANGELOG and the handoff; tagging `v0.1.0-beta` now produces an unsigned draft release. Tag once CI stays green.
-2. Add an `-OutDir` switch to `tools/generate-corpus.ps1`, then add the exit-code checks to finish the last "reports success while doing nothing" sweep item.
+2. ~~Add an `-OutDir` switch to `tools/generate-corpus.ps1`, then add the exit-code checks~~ **DONE (2026-09-12)** — sweep complete; see §7.4. Generator and release scripts both now check every native invocation.
 3. Produce Phase 6 exit evidence: a recorded load-test run against TSD targets and a WCAG 2.1 AA audit artifact (confirm the desired artifact format with the maintainer first).
 4. Add branch protection / rulesets on `main`.
 5. Record the `-SkipApi` rationale in the README so hosted deploys are not treated as an accidental gap.

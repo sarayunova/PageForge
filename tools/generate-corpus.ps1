@@ -6,10 +6,12 @@
 # dogfood the viewer/organizer/annotator on real documents with zero crashes).
 #
 # Produces four deterministic realistic PDFs (contracts, forms, scans,
-# multi-column, Unicode) into tools/sample-pdf/corpus/ and a golden page-1
-# render for each into tools/sample-pdf/golden/, plus a machine-readable
+# multi-column, Unicode) into <OutDir>/corpus/ and a golden page-1
+# render for each into <OutDir>/golden/, plus a machine-readable
 # manifest (names, sha256, page counts, expected page-0 size) that the
-# fidelity harness and CI consume.
+# fidelity harness and CI consume. OutDir defaults to tools/sample-pdf;
+# pass -OutDir to point at a throwaway directory (regeneration changes
+# every hash, so never re-run against the committed default casually).
 #
 # Determinism: all PDFs are generated with fixed content and no timestamps,
 # using `mutool create -O reproducible` so the committed bytes stay pinned.
@@ -19,7 +21,8 @@
 # -MutoolPath to override.
 
 param(
-    [string]$MutoolPath = ''
+    [string]$MutoolPath = '',
+    [string]$OutDir = ''
 )
 
 $ErrorActionPreference = 'Continue'
@@ -30,8 +33,22 @@ if (-not $MutoolPath) {
     $MutoolPath = $candidates | Select-Object -First 1 -ExpandProperty FullName
 }
 
-$outCorpus = Join-Path $PSScriptRoot 'sample-pdf\corpus'
-$outGolden = Join-Path $PSScriptRoot 'sample-pdf\golden'
+# Every mutool invocation below is followed by Assert-Mutool: $ErrorActionPreference
+# is 'Continue', so a failing native command would otherwise be swallowed and we
+# could silently pin a broken corpus into the manifest.
+function Assert-Mutool {
+    param([string]$What)
+    if ($LASTEXITCODE -ne 0) {
+        throw "mutool $What FAILED (exit code $LASTEXITCODE)"
+    }
+}
+
+if (-not $OutDir) {
+    $OutDir = Join-Path $PSScriptRoot 'sample-pdf'
+}
+
+$outCorpus = Join-Path $OutDir 'corpus'
+$outGolden = Join-Path $OutDir 'golden'
 New-Item -ItemType Directory -Path $outCorpus -Force | Out-Null
 New-Item -ItemType Directory -Path $outGolden -Force | Out-Null
 
@@ -60,6 +77,7 @@ function Draw-Golden {
     param($Name, $PdfPath)
     $golden = Join-Path $outGolden ($Name.Replace('.pdf', '.p1.png'))
     & $MutoolPath draw -o $golden -r 96 $PdfPath 2>$null
+    Assert-Mutool "draw golden for $Name"
     if (-not (Test-Path $golden)) { throw "golden render failed for $Name" }
 }
 
@@ -133,6 +151,7 @@ BT /F2 12 Tf 72 456 Td (Name: _______________________________ Date: ________) Tj
     $out = Join-Path $outCorpus 'contract-multipage.pdf'
     & $MutoolPath create -O reproducible,garbage -o $out `
         (Join-Path $c 'p1.txt') (Join-Path $c 'p2a.txt') (Join-Path $c 'p2b.txt') (Join-Path $c 'p3.txt') 2>$null
+    Assert-Mutool "create contract-multipage.pdf"
     return $out
 }
 
@@ -169,18 +188,21 @@ function New-Form {
         Append-Bytes "endobj`n"
     }
     $xrefStart = $bytes.Count
-    Append-Bytes "xref`r`n"
+    # LF line endings throughout: the committed corpus blobs are LF-normalized
+    # (git autocrlf used to mangle PDFs; .gitattributes now keeps them binary),
+    # so an LF-only writer is the only one that reproduces the pinned bytes.
+    Append-Bytes "xref`n"
     $count = $objects.Count + 1
-    Append-Bytes "0 $count`r`n"
-    Append-Bytes "0000000000 65535 f`r`n"
+    Append-Bytes "0 $count`n"
+    Append-Bytes "0000000000 65535 f`n"
     for ($i = 0; $i -lt $objects.Count; $i++) {
-        Append-Bytes ("{0:d10} 00000 n`r`n" -f $offsets[$i])
+        Append-Bytes ("{0:d10} 00000 n`n" -f $offsets[$i])
     }
-    Append-Bytes "trailer`r`n"
-    Append-Bytes "<< /Size $count /Root 1 0 R >>`r`n"
-    Append-Bytes "startxref`r`n"
-    Append-Bytes "$xrefStart`r`n"
-    Append-Bytes "%%EOF`r`n"
+    Append-Bytes "trailer`n"
+    Append-Bytes "<< /Size $count /Root 1 0 R >>`n"
+    Append-Bytes "startxref`n"
+    Append-Bytes "$xrefStart`n"
+    Append-Bytes "%%EOF`n"
     $out = Join-Path $outCorpus 'form-application.pdf'
     [System.IO.File]::WriteAllBytes($out, $bytes.ToArray())
     return $out
@@ -215,11 +237,15 @@ BT /F1 16 Tf 72 700 Td (SCANNED PAGE TWO) Tj ET
     $pageA = Join-Path $s 'srca.pdf'
     $pageB = Join-Path $s 'srcb.pdf'
     & $MutoolPath create -O reproducible -o $pageA $srcA 2>$null
+    Assert-Mutool "create scan src page A"
     & $MutoolPath create -O reproducible -o $pageB $srcB 2>$null
+    Assert-Mutool "create scan src page B"
     $imgA = Join-Path $s 'scan1.png'
     $imgB = Join-Path $s 'scan2.png'
     & $MutoolPath draw -o $imgA -r 150 $pageA 2>$null
+    Assert-Mutool "draw scan source image A"
     & $MutoolPath draw -o $imgB -r 150 $pageB 2>$null
+    Assert-Mutool "draw scan source image B"
     # Image pages: full-page image, no text.
     $ctA = Join-Path $s 'img1.txt'
     $ctB = Join-Path $s 'img2.txt'
@@ -235,11 +261,13 @@ q 612 0 0 792 0 0 cm /IMG Do Q
 "@ | Set-Content $ctB -Encoding Ascii
     $out = Join-Path $outCorpus 'scan-letters.pdf'
     & $MutoolPath create -O reproducible,garbage -o $out $ctA $ctB 2>$null
+    Assert-Mutool "create raw scan-letters.pdf"
     # Image streams are embedded raw (huge); compress them via clean -z -i
     # (deterministic). Also regenerate goldens from the compressed doc.
     $raw = Join-Path $s 'scan-raw.pdf'
     Copy-Item $out $raw -Force
     & $MutoolPath clean -z -i -g $raw $out 2>$null
+    Assert-Mutool "clean-compress scan-letters.pdf"
     return $out
 }
 
@@ -282,6 +310,7 @@ function New-Unicode {
     Write-Bytes $f2 $s2
     $out = Join-Path $outCorpus 'unicode-multilingual.pdf'
     & $MutoolPath create -O reproducible,garbage -o $out $f1 $f2 2>$null
+    Assert-Mutool "create unicode-multilingual.pdf"
     return $out
 }
 

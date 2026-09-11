@@ -375,21 +375,30 @@ the healthy case and still fails when handed a broken one. Making a check laxer
 is how a green build gets manufactured, so a fix that only demonstrates "it
 passes now" proves nothing.
 
-### Top remaining sweep item — deliberately not fixed
+### Top remaining sweep item — now fixed (2026-09-12)
 
-`tools/generate-corpus.ps1` sets `$ErrorActionPreference = 'Continue'`, makes
-**nine** mutool invocations each redirecting stderr to `$null`, and checks
-`$LASTEXITCODE` **zero** times. It can therefore emit a silently broken corpus,
-which is how a bad hash gets pinned into the manifest in the first place.
+`tools/generate-corpus.ps1` used to set `$ErrorActionPreference = 'Continue'`,
+make **nine** mutool invocations each redirecting stderr to `$null`, and check
+`$LASTEXITCODE` **zero** times — able to emit a silently broken corpus, which is
+how a bad hash gets pinned into the manifest in the first place.
 
-It was left alone on purpose: its output paths are hardcoded to
-`tools/sample-pdf/corpus` and `golden` with no override, and its own header says
-re-running changes every hash. The only way to exercise a fix would be to
-regenerate and re-pin the artifacts this session just stabilized. **Do it in two
-steps:** first add an `-OutDir` parameter so the script can run against a
-throwaway directory, verify it reproduces the committed bytes, and only then add
-the exit-code checks. `tools/publish-release.ps1` is already clean — five
-invocations, five checks.
+It was left alone after the sweep because its output paths were hardcoded to
+`tools/sample-pdf/corpus` and `golden` with no override. **Resolved in the
+recommended two steps:**
+
+1. Added an `-OutDir` parameter (defaults to `tools/sample-pdf`); the script now
+   runs against a throwaway directory and was verified to reproduce the
+   committed bytes **before** any checks were added. That verification caught a
+   real drift: `form-application.pdf` regenerated 16 bytes longer because the
+   hand-rolled writer emitted CRLF in the xref/trailer while the pinned blob
+   (re-pinned in the autocrlf fix above) is LF-normalized. The writer now emits
+   LF throughout, and all four PDFs + four goldens regenerate **byte-identical**
+   to the manifest pins.
+2. Added `Assert-Mutool` after all nine invocations. Verified both directions:
+   success path regenerates all pins byte-identically (exit 0), and a failing
+   `mutool` now aborts with `mutool <op> FAILED (exit code N)` and exit 1 instead
+   of silently moving on. `tools/publish-release.ps1` was already clean — five
+   invocations, five checks; both scripts are now even.
 
 ### CI environment notes
 
@@ -416,12 +425,13 @@ invocations, five checks.
    way the earlier one was not. If a lane goes red, read the error rather than
    assuming a flake: every failure this session was a genuine defect and not one
    was flaky.
-2. **Finish the "reports success while doing nothing" sweep.** Nine instances
-   found and fixed — see the sweep section above. One item is knowingly left:
-   `tools/generate-corpus.ps1` has nine unchecked mutool invocations, and fixing
-   it safely needs an `-OutDir` parameter added first so it can be exercised
-   without regenerating the committed corpus. Details and the recommended
-   two-step approach are in that section.
+2. **Finish the "reports success while doing nothing" sweep — DONE (2026-09-12).**
+   Nine instances found and fixed — see the sweep section above. The last one,
+   `tools/generate-corpus.ps1`'s nine unchecked mutool invocations, is now fixed
+   via the documented two steps: `-OutDir` added and verified to reproduce the
+   pinned bytes (which caught and fixed an LF/CRLF drift in the form-application
+   writer), then all nine calls wrapped in `Assert-Mutool`. Both generator and
+   release scripts are now even. No remaining items in this sweep.
 3. **Bump the `actions/*` pins** (`checkout` v4→v7, `setup-dotnet` v4→v6,
    `upload-artifact` v4→v7, `download-artifact` v4→v8) as their own commit, once
    CI is green so breakage is attributable. This also clears the Node 20
@@ -473,5 +483,7 @@ carries the stale "`.NET 8 / WinUI`" description.
   why five separate native-build defects could never reproduce here. When
   something passes locally but fails in CI, suspect leftover artifacts first,
   and consider deleting `native/out` to reproduce a clean checkout.
-- The repo has no `.gitattributes`, so every text write warns about LF -> CRLF.
-  Harmless, but expect the noise on each commit.
+- `.gitattributes` marks all binary payloads (`.pdf`, `.png`, images, binaries)
+  as `binary` so autocrlf can never mangle committed corpus bytes again. Text
+  writes (`.md`/`.yml`/`.ps1`) still warn about LF -> CRLF on every commit —
+  harmless, expect the noise.
