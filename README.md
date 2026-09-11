@@ -77,6 +77,19 @@ license, the public repository URL, and the exact commit SHA in production
 (`PAGEFORGE_COMMIT_SHA`). CI verifies the endpoint reports the deployed SHA. See
 `CONTRIBUTING.md` for the pre-commit/license checklist.
 
+## Downloads & beta releases
+
+Beta builds are published as draft GitHub Releases from `v*` tags. Until code
+signing is configured they ship **unsigned** (decision recorded in TSD §12.1),
+so Windows SmartScreen may show "Windows protected your PC / Unknown publisher",
+Microsoft Defender may quarantine the binary until you choose "More info → Run
+anyway", and Edge/Chrome may warn on download — this is expected for an unsigned
+open-source beta and does not mean the file is malicious. For extra assurance,
+cross-check the zip's SHA-256 against the release run's build artifact.
+
+Signed installers (via Azure Artifact Signing) become the distribution path once
+the signing setup in `CONTRIBUTING.md` is in place.
+
 ## Contributing
 
 See `CONTRIBUTING.md` for the developer workflow and `CODE_OF_CONDUCT.md` for

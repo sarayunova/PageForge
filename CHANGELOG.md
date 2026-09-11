@@ -46,9 +46,12 @@ version heading when the tag is pushed.
   corresponding source as the licence requires. CI exports the repository URL,
   so a fork advertises its own source rather than this one.
 - Community governance: contribution guide, code of conduct and security policy.
-- Signed release pipeline (`tools/publish-release.ps1` plus the `release`
-  workflow) using Azure Artifact Signing over OIDC, with a
-  `-RequireSignature` gate that refuses to package an unsigned binary.
+- Release pipeline (`tools/publish-release.ps1` plus the `release` workflow).
+  Azure Artifact Signing over OIDC is the preferred path, with a
+  `-RequireSignature` gate that refuses to package an unsigned binary **when
+  signing is configured**. Until signing is configured, `v*` tags ship an
+  unsigned beta with release notes that say so and warn about SmartScreen
+  "unknown publisher" prompts — decided 2026-09-12, recorded in TSD §12.1.
 - Third-party notices for the vendored native dependencies.
 
 ### Known limitations
@@ -56,5 +59,8 @@ version heading when the tag is pushed.
 - The beta ships the WPF shell. `src/PageForge.App` is a WinUI 3 spike that
   renders one page; porting the UI to WinUI 3 is post-beta work. Recorded as an
   amendment in TSD §12.1.
+- Beta releases are unsigned until Azure Artifact Signing is configured
+  (TSD §12.1); Windows SmartScreen, Defender and browsers may warn "unknown
+  publisher" on first download.
 - Release builds are `win-x64` only. ARM64 Windows runs them under emulation; a
   native ARM64 build is deferred post-beta (TSD §12.1).

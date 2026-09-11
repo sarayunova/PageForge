@@ -14,9 +14,13 @@
 # role on the signing account, and a federated credential for this repository.
 # See CONTRIBUTING.md for the full setup walkthrough.
 #
-# If the signing configuration is absent the payload is still built and uploaded
-# as an unsigned build artifact, but NO GitHub Release is created — publishing an
-# unsigned build is never acceptable (Phase 7 exit gate).
+# Distribution policy (decided 2026-09-12, see session-phase7.md): Azure Artifact
+# Signing remains the preferred, fully-gated path when configured. Until then,
+# v* tags DO create a draft release with an UNSIGNED payload — an unsigned beta
+# is better than no beta. The release notes state the signing status truthfully
+# (see the "Compose release notes" step) and never claim "code-signed". TSD §12.1
+# was amended accordingly; the signed path becomes the distribution path once the
+# signing secrets/variables exist.
 
 name: release
 
@@ -71,7 +75,7 @@ jobs:
           $configured = -not [string]::IsNullOrWhiteSpace($env:CLIENT_ID)
           "signed=$($configured.ToString().ToLower())" >> $env:GITHUB_OUTPUT
           if (-not $configured) {
-            Write-Warning "AZURE_CLIENT_ID is not set - building an UNSIGNED preview artifact; no release will be created."
+            Write-Warning "AZURE_CLIENT_ID is not set - building an UNSIGNED payload; the v* tag releases as an unsigned beta."
           }
 
       - name: Build native MuPDF shim
@@ -117,7 +121,7 @@ jobs:
           powershell -ExecutionPolicy Bypass -File tools/publish-release.ps1
           -Version ${{ steps.ver.outputs.version }} -SkipApi -ZipOnly -RequireSignature
 
-      - name: Package unsigned preview
+      - name: Package unsigned payload
         if: steps.sign-check.outputs.signed != 'true'
         shell: pwsh
         run: >
@@ -132,17 +136,45 @@ jobs:
           if-no-files-found: error
 
   publish-release:
-    name: Attach to GitHub Release (signed v* tag only)
+    name: Attach to GitHub Release (v* tag)
     runs-on: ubuntu-latest
     needs: [build-and-sign]
     permissions:
       contents: write # creating the release
-    if: ${{ startsWith(github.ref, 'refs/tags/v') && needs.build-and-sign.outputs.signed == 'true' }}
+    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
     steps:
       - uses: actions/download-artifact@v8
         with:
           name: pageforge-release
           path: artifacts/release
+
+      - name: Compose release notes
+        id: release-body
+        shell: bash
+        env:
+          SIGNED: ${{ needs.build-and-sign.outputs.signed }}
+        run: |
+          {
+            echo "PageForge release ${{ github.ref_name }}."
+            echo ""
+            echo "## Desktop"
+            echo ""
+            if [ "$SIGNED" = "true" ]; then
+              echo "- \`pageforge-${{ github.ref_name }}-win-x64.zip\` — self-contained (no runtime install needed), code-signed via Azure Artifact Signing."
+            else
+              echo "- \`pageforge-${{ github.ref_name }}-win-x64.zip\` — self-contained (no runtime install needed). **Not code-signed in this build.**"
+              echo ""
+              echo "## Windows security prompts"
+              echo ""
+              echo "This beta is released unsigned, so Windows SmartScreen may show \"Windows protected your PC / Unknown publisher\", Microsoft Defender may quarantine the binary until you choose \"More info > Run anyway\", and Edge/Chrome may warn about the download. This is expected for an unsigned open-source beta and does not mean the file is malicious — cross-check the asset SHA-256 against this run's build output if you want extra assurance."
+              echo ""
+              echo "Signed builds with an established publisher identity will replace these warnings once Azure Artifact Signing is configured."
+            fi
+            echo ""
+            echo "## Verification"
+            echo ""
+            echo "This release was produced by the \`release\` workflow and passes the managed-build lane (Core/Fidelity/Api tests + fidelity render proof) before tagging. See CONTRIBUTING.md for the AGPL checklist and THIRD-PARTY-NOTICES.md for component licenses."
+          } > release-body.md
       - name: Create draft GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -150,15 +182,4 @@ jobs:
           name: PageForge ${{ github.ref_name }}
           draft: true
           files: artifacts/release/*.zip
-          body: |
-            PageForge release ${{ github.ref_name }}.
-
-            ## Desktop
-            - `pageforge-${{ github.ref_name }}-win-x64.zip` — self-contained
-              (no runtime install needed), code-signed.
-
-            ## Verification
-            This release was produced by the `release` workflow and passes the
-            managed-build lane (Core/Fidelity/Api tests + fidelity render proof)
-            before tagging. See CONTRIBUTING.md for the AGPL checklist and
-            THIRD-PARTY-NOTICES.md for component licenses.
+          body_path: release-body.md

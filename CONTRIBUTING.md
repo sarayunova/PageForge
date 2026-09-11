@@ -109,25 +109,32 @@ release.
 
 1. builds the native shim, then stages the desktop payload **unzipped**
    (`publish-release.ps1 -NoZip`);
-2. logs in to Azure with OIDC and signs the staged executables;
-3. re-runs `publish-release.ps1 -ZipOnly -RequireSignature`, which verifies
-   every executable with `signtool verify /pa` **before** building the zip, then
+2. **if signing is configured** (secrets `AZURE_CLIENT_ID` etc. are set), logs in
+   to Azure with OIDC, signs the staged executables, then re-runs
+   `publish-release.ps1 -ZipOnly -RequireSignature`, which verifies every
+   executable with `signtool verify /pa` **before** building the zip, then
    packages it;
-4. attaches the zip to a **draft** GitHub Release for manual review.
+3. **if signing is not configured**, packages the payload unsigned (`-ZipOnly`)
+   — an unsigned beta ships rather than a signing-pipeline hold-up;
+4. attaches the zip to a **draft** GitHub Release for manual review, with release
+   notes that state the signing status truthfully (they say "Not code-signed in
+   this build" for unsigned payloads) and document the SmartScreen / Defender /
+   browser "unknown publisher" warnings, so a released beta is never
+   misrepresented as signed.
 
-Ordering matters: signtool rewrites the `.exe` in place, so a zip built before
-signing would ship an unsigned binary inside a nominally signed release. The
-`-RequireSignature` verification is what makes a silently skipped signing step
-fail the build instead of shipping.
+The distribution policy is recorded in TSD §12.1: the v0.1 beta ships unsigned
+until Azure Artifact Signing is configured; signed installers take over as the
+distribution path once the signing setup below exists.
 
-If `AZURE_CLIENT_ID` is unset the workflow still builds and uploads an
-**unsigned preview artifact**, but creates no release — an unsigned build is
-never published.
+Ordering matters for the signed path: signtool rewrites the `.exe` in place, so
+a zip built before signing would ship an unsigned binary inside a nominally
+signed release. The `-RequireSignature` verification is what makes a silently
+skipped signing step fail the build instead of shipping. Note also that a newly
+issued certificate has no SmartScreen reputation; early signed downloads may
+still warn until reputation accrues.
 
-Note that a newly issued certificate has no SmartScreen reputation; early
-downloads may still warn until reputation accrues.
-
-Prereqs to make `release.yml` fully live (Phase 7 exit criterion):
+Prereqs to enable the **signed** release path (the Azure Artifact Signing
+distribution path):
 
 - An Azure Artifact Signing account with a validated identity and a certificate
   profile, plus the app registration and role assignment above.

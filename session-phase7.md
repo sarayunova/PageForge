@@ -1,11 +1,10 @@
 # Phase 7 — Public beta & open-source launch: status & open items
+source-offer endpoint live, installers published (code-signed once Azure Artifact
+Signing is configured — amended per TSD §12.1). Exit gate = **AGPL compliance
+verified end to end**.
 
-# Phase 7 — Public beta & open-source launch: status & open items
-source-offer endpoint live, signed installers published. Exit gate = **AGPL
-compliance verified end to end**.
-
-Last updated: 2026-09-04. Resume from "Next session starts here" near the bottom.
-Signing is ON HOLD by the maintainer until the week of 2026-09-08 — see that section before acting on it.
+Last updated: 2026-09-12. The signing decision is MADE — see "Signing: RESOLVED"
+below; read "Next session starts here" near the bottom before acting.
 
 ## Repository is live
 
@@ -65,8 +64,10 @@ gained three switches:
   zipping; fail rather than package an unsigned one
 
 `release.yml` runs: stage (`-NoZip`) → Azure login → sign → package
-(`-ZipOnly -RequireSignature`) → draft release. Unconfigured, it still uploads
-an unsigned preview artifact and creates no release.
+(`-ZipOnly -RequireSignature`) → draft release. Unconfigured (decided
+2026-09-12) it packages the payload unsigned and still creates the draft release
+— see "Signing: RESOLVED" below before interpreting anything in this section as
+current behaviour.
 
 The `.pfx` path is retained for self-signed / internal-CA dry runs only. Public
 CAs have not issued exportable `.pfx` files since June 2023, so the original
@@ -84,26 +85,36 @@ trust-chain link is exactly what a real Azure certificate supplies. The cert,
 `.pfx` and dry-run payload were deleted afterwards. Deliberately did NOT install
 an untrusted root to force a green run.
 
-## Signing: ON HOLD by the maintainer (2026-09-04, revisit the week of 2026-09-08)
+## Signing: how the "no release" failure mode was found (2026-09-04)
 
-The maintainer has deliberately parked the signing decision, to be revisited
-next week. **Do not start implementing either path, and do not re-ask the
-question unprompted** — bring them the options below when they raise it.
+The analysis originally ended with the signing decision parked by the
+maintainer. The fail-safe behaviour at that time: with `AZURE_CLIENT_ID`
+unset, `sign-check` emits `signed=false`, the Azure login / sign /
+`-RequireSignature` package steps are all skipped, an unsigned preview zip is
+built and uploaded as a **workflow artifact** (90-day expiry, GitHub login
+required to fetch), and the `publish-release` job is skipped outright because it
+requires `signed == 'true'`.
 
-### Current behaviour if a tag were pushed today
-
-`release.yml` fails safe, so nothing bad happens — but nothing useful does
-either. With `AZURE_CLIENT_ID` unset, `sign-check` emits `signed=false`, the
-Azure login / sign / `-RequireSignature` package steps are all skipped, an
-unsigned preview zip is built and uploaded as a **workflow artifact** (90-day
-expiry, GitHub login required to fetch), and the `publish-release` job is
-skipped outright because it requires `signed == 'true'`.
-
-Net effect: **tagging `v0.1.0-beta` today creates no GitHub Release and no
+Net effect back then: **tagging `v0.1.0-beta` created no GitHub Release and no
 public download.** For an AGPL project whose Phase 7 gate is public
-reachability, that is the real cost — larger than the SmartScreen warnings.
+reachability, that was the real cost — larger than the SmartScreen warnings.
 
-### The two options, when they come back to it
+That is no longer the behaviour — see "Signing: RESOLVED" below.
+
+### Signing: RESOLVED (2026-09-12) — option B chosen
+
+**Decision: ship the beta unsigned** until Azure Artifact Signing is configured.
+All three option-B changes landed 2026-09-12: `release.yml`'s `publish-release`
+gate was relaxed so any `v*` tag creates a draft release, the release-notes body
+now states the signing status truthfully (using `body_path` composed from the
+`sign-check` output) and documents the SmartScreen / Defender / browser
+"unknown publisher" warnings, and TSD §12.1 was amended alongside
+README/CONTRIBUTING/CHANGELOG. Option A below stays railed and is the
+distribution path once the maintainer completes the Azure setup — no further
+code changes are needed on that path, only the account/identity work, which this
+workflow cannot do.
+
+### The two options, for the record
 
 **A — configure Azure Artifact Signing.** ~$10/month, OIDC so no key material in
 the repo, and the only reason it is viable at all: public CAs have not issued
@@ -419,12 +430,12 @@ invocations, five checks.
    against TSD targets, and there is no WCAG 2.1 AA audit artifact. Now that WPF
    is the declared product target (TSD §12.1), a WPF accessibility audit counts
    as real evidence. Largest remaining *substantive* gap.
-5. **Signing — ON HOLD, revisit the week of 2026-09-08.** The maintainer parked
-   the decision deliberately. Do not start either path and do not re-ask
-   unprompted; the two options, their consequences, and the release-notes bug
-   that option B must fix are written up in the "Signing: ON HOLD" section above.
-   Until then tagging produces an unsigned workflow artifact and no release,
-   which is a safe failure mode.
+5. **Signing — RESOLVED (option B, 2026-09-12).** Decided: ship the beta
+   unsigned until Azure Artifact Signing is configured. The change landed in
+   `release.yml` (gate relaxed, truthful release notes) + the TSD §12.1 amendment
+   + README/CONTRIBUTING/CHANGELOG. `v*` tags now create unsigned draft
+   releases — expected and documented. If the maintainer later completes the
+   Azure setup, sign a release and verify the notes flip to "code-signed".
 6. **API excluded from releases** (`-SkipApi`). Fine if hosted deploys are
    separate, but nothing states so; one sentence in the README closes it.
    **Unanswered — this question was put to the maintainer and not yet answered.**
@@ -432,7 +443,8 @@ invocations, five checks.
    wanted (documented self-assessment against the checklist, automated tooling
    output, or something customer-facing); the answer changes the size of the job
    materially. Ask again before starting item 4.
-8. **Tag `v0.1.0-beta`** once (1) and (5) are settled.
+8. **Tag `v0.1.0-beta`** once (1) is settled — the signing decision is made
+   (option B), so tagging immediately produces an unsigned draft release.
 
 **Do not re-ask** the WinUI-shell or ARM64 questions: both were decided this
 session and are recorded in TSD §12.1.

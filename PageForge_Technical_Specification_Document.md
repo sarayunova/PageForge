@@ -190,8 +190,9 @@ connected before development begins.
 ### 12.1 Amendments recorded for the v0.1 beta
 
 Two Phase 0 exit criteria were written before the code existed and are amended
-here rather than quietly shipped against. Both amendments are scoped to the
-v0.1 beta; neither cancels the original goal.
+here rather than quietly shipped against, and a Phase 7 exit criterion is
+amended the same way. All amendments are scoped to the v0.1 beta; none cancels
+the original goal.
 
 **Shipping shell: WPF, not WinUI 3.** The Phase 0 spike gate allowed either
 "MuPDF renders through the chosen binding" or "the WPF fallback decision is
@@ -211,6 +212,20 @@ for the native MuPDF shim, which is the substantial part of the work. ARM64
 Windows runs the x64 build under emulation — functional, slower — so the beta
 ships x64 only and a native ARM64 build (shim cross-build plus a second release
 lane) is post-beta work. TRD §6 "Platform" is amended to match.
+
+**Distribution: unsigned beta until signing is configured.** The Phase 7 exit
+criterion says "signed installers published". That assumed Azure Artifact
+Signing would be set up before the beta tag; it was not, and waiting on it holds
+the beta hostage to an external identity-validation process (3+ business days to
+3+ years). Decision (2026-09-12): the v0.1 beta ships **unsigned** — an unsigned
+beta is shippable, a withheld beta is not. `release.yml` now creates a draft
+GitHub Release on any `v*` tag; when the Azure signing secrets/variables exist,
+the same workflow code-signs and the payload is packaged with
+`-RequireSignature` (signtool verification before zipping). The release notes
+state the signing status truthfully and document the resulting SmartScreen /
+Defender / browser "unknown publisher" warnings; the "signed installers
+published" criterion is amended to "installers published (code-signed when code
+signing is configured)".
 
 ## 13. Risk register
 
