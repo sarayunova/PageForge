@@ -3,6 +3,7 @@
 // This file is part of PageForge. See LICENSE for the full license text.
 
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Shapes;
@@ -58,6 +59,7 @@ public partial class FormFillView : UserControl
         {
             int pageIndex = _vm.Core.CurrentPage;
             _scale = _vm.RenderDpi / 72.0;
+            AutomationProperties.SetName(PageImage, $"Form fill page {pageIndex + 1}");
 
             PdfPageRegion region = _vm.Core.PageSizes[Math.Min(pageIndex, _vm.Core.PageCount - 1)];
             _pixelW = region.WidthPt * _scale;
@@ -98,7 +100,7 @@ public partial class FormFillView : UserControl
                 Text = _justFlattened
                     ? "This page has no form fields left — the form has been flattened."
                     : "This page has no fillable form fields.",
-                Foreground = Brushes.Gray,
+                Foreground = new SolidColorBrush(Color.FromRgb(0xb0, 0xb0, 0xb0)),
                 Margin = new Thickness(8),
                 TextWrapping = TextWrapping.Wrap,
             };
@@ -157,7 +159,7 @@ public partial class FormFillView : UserControl
         var kindTag = new TextBlock
         {
             Text = field.Kind.ToString(),
-            Foreground = Brushes.Gray,
+            Foreground = new SolidColorBrush(Color.FromRgb(0xb0, 0xb0, 0xb0)),
             FontSize = 10,
             Margin = new Thickness(0, 0, 0, 4),
         };
@@ -176,6 +178,7 @@ public partial class FormFillView : UserControl
                 VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(0, 0, 8, 0),
             };
+            AutomationProperties.SetName(check, field.Label);
             check.Checked += async (_, _) => await SetFieldAsync(field.Id, "Yes");
             check.Unchecked += async (_, _) => await SetFieldAsync(field.Id, "Off");
             row.Children.Add(check);
@@ -189,7 +192,9 @@ public partial class FormFillView : UserControl
                 VerticalContentAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(0, 0, 6, 0),
             };
+            AutomationProperties.SetName(box, $"{field.Label} value");
             var set = new Button { Content = "Set", Padding = new Thickness(8, 2, 8, 2) };
+            AutomationProperties.SetName(set, $"Set {field.Label}");
             set.Click += async (_, _) => await SetFieldAsync(field.Id, box.Text);
             row.Children.Add(box);
             row.Children.Add(set);
@@ -197,6 +202,7 @@ public partial class FormFillView : UserControl
 
         stack.Children.Add(row);
         card.Child = stack;
+        AutomationProperties.SetName(card, $"{field.Label} ({field.Kind})");
         return card;
     }
 
@@ -317,6 +323,7 @@ public partial class FormFillView : UserControl
             Margin = new Thickness(0, 0, 0, 6),
         });
         var nameBox = new TextBox { Width = 330 };
+        AutomationProperties.SetName(nameBox, "Field name");
         grid.Children.Add(nameBox);
 
         var buttons = new StackPanel

@@ -153,4 +153,35 @@ public static class PageImageBehavior
             };
         }
     }
+
+    /// <summary>
+    /// Renders a page's accessible text layer (WCAG 1.1.1) as soon as its slot
+    /// is realized on screen. Attach with
+    /// <c>behaviors:PageImageBehavior.EnsureTextOnLoad="True"</c> on the overlay
+    /// TextBlock; the DataContext must be a <see cref="PageSlotViewModel"/>.
+    /// </summary>
+    public static readonly DependencyProperty EnsureTextOnLoadProperty =
+        DependencyProperty.RegisterAttached(
+            "EnsureTextOnLoad",
+            typeof(bool),
+            typeof(PageImageBehavior),
+            new PropertyMetadata(false, OnEnsureTextOnLoadChanged));
+
+    public static bool GetEnsureTextOnLoad(DependencyObject obj) => (bool)obj.GetValue(EnsureTextOnLoadProperty);
+
+    public static void SetEnsureTextOnLoad(DependencyObject obj, bool value) => obj.SetValue(EnsureTextOnLoadProperty, value);
+
+    private static void OnEnsureTextOnLoadChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is FrameworkElement element)
+        {
+            element.Loaded += async (_, _) =>
+            {
+                if (element.DataContext is PageSlotViewModel slot)
+                {
+                    await slot.EnsureAccessibleTextAsync();
+                }
+            };
+        }
+    }
 }

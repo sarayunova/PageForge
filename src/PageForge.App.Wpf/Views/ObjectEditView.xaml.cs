@@ -3,6 +3,7 @@
 // This file is part of PageForge. See LICENSE for the full license text.
 
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -49,12 +50,16 @@ public partial class ObjectEditView : UserControl
     private PdfRect _dragStartBounds;
     private bool _dragging;
 
+    /// <summary>Keyboard-driven bounds while no Enter has committed them yet.</summary>
+    private PdfRect? _pendingBounds;
+
     public ObjectEditView()
     {
         InitializeComponent();
         Overlay.MouseLeftButtonDown += Overlay_MouseLeftButtonDown;
         Overlay.MouseMove += Overlay_MouseMove;
         Overlay.MouseLeftButtonUp += Overlay_MouseLeftButtonUp;
+        PreviewKeyDown += ObjectEditView_PreviewKeyDown;
     }
 
     /// <summary>Binds this surface to a document tab and (re)loads the current page.</summary>
@@ -78,6 +83,7 @@ public partial class ObjectEditView : UserControl
         {
             int pageIndex = _vm.Core.CurrentPage;
             _scale = _vm.RenderDpi / 72.0;
+            AutomationProperties.SetName(PageImage, $"Object edit page {pageIndex + 1}");
 
             PdfPageRegion region = _vm.Core.PageSizes[Math.Min(pageIndex, _vm.Core.PageCount - 1)];
             _pixelW = region.WidthPt * _scale;
@@ -162,8 +168,14 @@ public partial class ObjectEditView : UserControl
             return;
         }
 
+        _pendingBounds = null;
         _selected = box;
         ReplaceButton.IsEnabled = box is not null;
+        if (box is not null)
+        {
+            Overlay.Focus();
+        }
+
         RedrawSelectionVisuals();
     }
 
@@ -365,10 +377,24 @@ public partial class ObjectEditView : UserControl
         PdfRect target = ScreenBoxToPdf(_selected.Screen);
         string id = _selected.Obj.Id;
         Select(_selected);
+        await CommitMoveResizeAsync(id, _selected.Screen);
+    }
+
+    /// <summary>Commits the on-screen selection bounds to the engine through the
+    /// FR-EDIT-05 command stack (shared by the mouse-drag and keyboard paths).</summary>
+    private async Task CommitMoveResizeAsync(string id, Rect screenBounds)
+    {
+        if (_vm is null || _selected is null)
+        {
+            return;
+        }
+
+        PdfRect target = ScreenBoxToPdf(screenBounds);
         try
         {
             await _vm.MoveResizeObjectAsync(id, target).ConfigureAwait(true);
             ReplaceButton.IsEnabled = true;
+            Status("Moved/resized the selected object (undo available).");
         }
         catch (Exception ex)
         {
@@ -378,6 +404,118 @@ public partial class ObjectEditView : UserControl
         {
             Refresh();
         }
+    }
+
+    /// <summary>Keyboard path for object selection/move/resize (WCAG 2.1.1):
+    /// Tab cycles the objects, arrows nudge the selection (Shift ⇒ 8 pt steps),
+    /// Ctrl+arrows resize from the bottom-right corner, Enter commits, Esc cancels.</summary>
+    private void ObjectEditView_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (_vm is null || _busy)
+        {
+            return;
+        }
+
+        if (!Overlay.IsKeyboardFocusWithin)
+        {
+            return;
+        }
+
+        if (e.Key == Key.Tab)
+        {
+            if (_boxes.Count == 0)
+            {
+                return;
+            }
+
+            bool forward = (Keyboard.Modifiers & ModifierKeys.Shift) == 0;
+            int index = _selected is null
+                ? (forward ? _boxes.Count - 1 : 0)
+                : (_boxes.IndexOf(_selected) + (forward ? 1 : -1) + _boxes.Count) % _boxes.Count;
+            Select(_boxes[index]);
+            e.Handled = true;
+            return;
+        }
+
+        if (_selected is null)
+        {
+            return;
+        }
+
+        if (e.Key == Key.Escape)
+        {
+            CancelKeyboardEdit();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Enter)
+        {
+            CommitKeyboardEdit();
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key is not (Key.Left or Key.Right or Key.Up or Key.Down))
+        {
+            return;
+        }
+
+        bool resize = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
+        double step = (Keyboard.Modifiers & ModifierKeys.Shift) != 0 ? 8.0 : 1.0;
+        double dx = e.Key is Key.Left ? -step : e.Key is Key.Right ? step : 0;
+        double dy = e.Key is Key.Up ? step : e.Key is Key.Down ? -step : 0;
+        ApplyKeyboardNudge(resize, dx, dy);
+        e.Handled = true;
+    }
+
+    private void ApplyKeyboardNudge(bool resize, double dxPdf, double dyPdf)
+    {
+        PdfRect source = _pendingBounds ?? _selected!.Obj.Bounds;
+        PdfRect next = resize
+            ? new PdfRect(source.X0, source.Y0, source.X1 + dxPdf, source.Y1 + dyPdf)
+            : new PdfRect(source.X0 + dxPdf, source.Y0 + dyPdf, source.X1 + dxPdf, source.Y1 + dyPdf);
+
+        if (next.X1 <= next.X0 || next.Y1 <= next.Y0)
+        {
+            return;
+        }
+
+        _pendingBounds = next;
+        ApplyBoundsToScreen(next);
+    }
+
+    private void ApplyBoundsToScreen(PdfRect pdf)
+    {
+        Rect screen = PdfBoxToScreen(pdf);
+        _selected!.Screen = screen;
+        Canvas.SetLeft(_selected.Visual, screen.X);
+        Canvas.SetTop(_selected.Visual, screen.Y);
+        _selected.Visual.Width = screen.Width;
+        _selected.Visual.Height = screen.Height;
+        RedrawSelectionVisuals();
+    }
+
+    private async void CommitKeyboardEdit()
+    {
+        if (_selected is null || _vm is null || _pendingBounds is null)
+        {
+            return;
+        }
+
+        _pendingBounds = null;
+        await CommitMoveResizeAsync(_selected.Obj.Id, _selected.Screen);
+    }
+
+    private void CancelKeyboardEdit()
+    {
+        _pendingBounds = null;
+        if (_selected is not null)
+        {
+            ApplyBoundsToScreen(_selected.Obj.Bounds);
+        }
+
+        Select(null);
     }
 
     private async void Replace_Click(object sender, RoutedEventArgs e)

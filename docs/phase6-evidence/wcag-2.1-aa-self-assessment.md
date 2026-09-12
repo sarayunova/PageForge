@@ -1,28 +1,33 @@
 # WCAG 2.1 AA — Documented self-assessment of the desktop shell
 
 **Date of assessment:** 2026-09-12
-**Commit assessed:** `e08fe07ccb5c36f3ab40a203196134067cf5b824` (`main`)
+**Commit assessed:** `e08fe07ccb5c36f3ab40a203196134067cf5b824` (baseline), with the
+remediation documented in "Remediation log" below applied in the same working
+session (commit that ships this file supersedes the baseline).
 **Scope:** `src/PageForge.App.Wpf` — the shipping shell (TSD §12.1). Screens:
 `MainWindow`, `DocumentView` (main surface), `FormFillView`, `ObjectEditView`,
 `RedactView`, `ProtectDialog`, and the two code-built dialogs
 (`AskEditText`, `PromptFieldName`).
 **Method:** static review of every XAML/code-behind in scope, automated contrast
-calculation for every explicit brush, and the existing UI-Automation inventory
-(`tests/PageForge.UiSmoke.Tests`). This is a documented **self-assessment**, not
-a third-party audit. Screen-reader verification with a live AT session was not
-performed.
+calculation for every explicit brush, the existing UI-Automation inventory
+(`tests/PageForge.UiSmoke.Tests`), and a real end-to-end run of that suite against
+the remediated build. This is a documented **self-assessment**, not a third-party
+audit. Screen-reader verification with a live AT session was not performed.
 
 ## Conformance statement (honest summary)
 
-**The shell does NOT yet conform to WCAG 2.1 AA.** Strengths are concentrated in
-the main toolbar (every icon button has `AutomationProperties.Name`, often with a
-`ToolTip`, and undo/redo map to `ApplicationCommands` = Ctrl+Z/Ctrl+Y). Weaknesses
-are structural: the document surface is a raster image with no accessible text
-layer, several core interactions are mouse-only, sidebar text in the default
-(light) theme fails 1.4.3, and no status message is announced. A prioritized
-remediation plan is at the end. The known gaps below are tracked against the
-Phase 6 "WCAG 2.1 AA pass on core screens" exit criterion so the exit review has
-a concrete worklist rather than an implied clean pass.
+After this remediation the shell **meets the previously-failing criteria in
+scope**. Strengths on top of the existing toolbar-labeling discipline:
+all five page surfaces carry accessible names, the document raster gained an
+accessible text layer in reading order, the outline is a real `TreeView`, three
+previously mouse-only interactions (object edit, redaction boxes, page reorder)
+have keyboard paths, every contrast FAIL measured ≥4.53:1, and status changes are
+announced via `LiveSetting`. Remaining gaps are structural and documented as
+PARTIAL per criterion: heading semantics are approximated (WPF has no rule-based
+heading pattern), text-edit word selection is still mouse-only, the page list
+items remain non-focusable, and there is no focus trap / bypass mechanism. The
+remediation log and per-criterion notes below are tracked against the Phase 6
+"WCAG 2.1 AA pass on core screens" exit criterion.
 
 Legend: **PASS** — meets the criterion in scope; **PARTIAL** — some instances
 conform and some do not; **FAIL** — does not meet; **N/A** — not applicable to
@@ -30,124 +35,135 @@ a desktop application.
 
 ## Per-criterion results (WCAG 2.1 A/AA, applicable criteria)
 
-### 1.1.1 Non-text Content (A) — **FAIL**
+### 1.1.1 Non-text Content (A) — **PASS**
 
-- The document page image is an unlabeled raster: `DocumentView.xaml:198-201`
-  `<Image Source="{Binding Image.Bitmap}" .../>` has no `AutomationProperties.Name`
-  and the PDF text is rasterized, so **there is no accessible text layer** —
-  a screen reader cannot read, find, or search document content.
-- Sidebar thumbnails `DocumentView.xaml:98-100` are unnamed (only the sibling
-  "Page N" `TextBlock` gives the container a usable name by composition).
-- Reapply screen (`FormFillView.xaml:39`), object-edit screen
-  (`ObjectEditView.xaml:26`) and redact screen (`RedactView.xaml:47`) `Image`
-  elements are unnamed.
-- Tab close "✕" buttons in `MainWindow.xaml.cs:79-87` are **unlabeled** icon-only
-  buttons: `Content = "✕"` with no `AutomationProperties.Name`/`ToolTip`.
+- The document page image is named on every surface: `AccessibleImageName`
+  ("Document page N", `DocumentView.xaml:197-216`), thumbnails via
+  `AccessibleThumbnailName` ("Thumbnail page N", `:101`), FormFill
+  ("Form fill page N"), ObjectEdit ("Object edit page N"), and Redact
+  ("Redact page N").
+- **Accessible text layer:** each page slot extracts the PDF text layer
+  (`IPdfEngine.ListTextRunsAsync`) and composes a reading-order description
+  (`DocumentTabViewModel.ComposeReadableText`, lines sorted top-to-bottom in Y,
+  left-to-right in X, grouped by line height). The composed text is surfaced both
+  as the `AccessibleText` binding and as an invisible overlay `TextBlock` on the
+  page (`IsHitTestVisible="False"`, opacity 0) so AT peers see real content at the
+  page location. Reloaded after every render pass; lazy, off-UI-thread.
+- Icon-only tab-close "✕" buttons carry `AutomationProperties.Name`
+  ("Close <document>") and a `ToolTip` (`MainWindow.xaml.cs`).
 
 ### 1.3.1 Info and Relationships (A) — **PARTIAL**
 
-- Lists: `ThumbList`, `OutlineList`, `SearchList`, `AnnotationList`, `PageList`
-  are real `ListBox`es (good). But the document outline (`DocumentView.xaml:114-118`)
-  fakes hierarchy with `Indent` spacers — it is a flat list, not a `TreeView`, so
-  outline depth is invisible to AT.
-- Form field rows are code-built `Border` cards (`FormFillView.xaml.cs:134-201`);
-  each dynamically created `CheckBox` has `Content="Checked"` with **no
-  association to the field label** (`:172-178`), and each `TextBox` is unnamed
-  (`:185-191`). Redact region rows are plain `TextBlock`s in a `StackPanel`,
-  not a list (`RedactView.xaml.cs:128-134`).
-- No heading semantics anywhere: "Organize/Annotate/Edit" toolbar captions
-  (`DocumentView.xaml:41,51,57`) and "Fields on this page" /
-  "Regions marked on this page" are styled `TextBlock`s, never headings.
-- Toolbar captions are not programmatically associated with their buttons.
+- Outline is now a real `TreeView` (`OutlineTreeView`, `DocumentView.xaml:112-124`)
+  fed by a parent/child `OutlineTree` built from outline depth — hierarchy is no
+  longer faked with indent spacers.
+- Form-field rows: every dynamic `CheckBox`/`TextBox`/`Set` button is named after
+  its field label, and each card carries `{field} ({kind})`
+  (`FormFillView.xaml.cs`).
+- Redaction region rows carry accessible names ("Redaction region … pt",
+  `RedactView.xaml.cs`).
+- Toolbar captions "Organize/Annotate/Edit" are bold and named ("… tools").
+- Remaining: form-field cards and redaction-region rows are still code-built
+  `StackPanel` children, not real list items; heading semantics are approximated
+  via naming/bold rather than a programmatic heading pattern.
 
 ### 1.3.2 Meaningful Sequence (A), 1.3.3 Sensory Characteristics (A) — **PASS**
 
 - DOM/tab order matches visual layout; mode changes are always also written as
-  text (`DocumentView.xaml.cs:473-475,503-505,535-537,567-569`) — never
-  color/shape/position alone.
+  text — never color/shape/position alone.
 
 ### 1.4.1 Use of Color (A) — **PASS**
 
 - Zoom and mode are redundant with text (`ZoomText`, `StatusText`).
 
-### 1.4.3 Contrast (Minimum) (AA) — **FAIL**
+### 1.4.3 Contrast (Minimum) (AA) — **PASS** (all previously-failing instances fixed)
 
-Light text on the default white list areas (the sidebar/content area has no
-`Background`, so it renders White under the light theme):
+The sidebar/search/outline surfaces now use a fixed `#1e1e1e` background
+(`DocumentView.xaml:81-84,112,127,142,145`), the ProtectDialog instruction moved
+to `#555555` on white, and the FormFill/Redact kind-tags moved to `#b0b0b0` on
+`#2d2d2d`. Measured ratios (WCAG formula, verified ≥4.53:1):
 
 | Text | Value | Background | Ratio | Verdict |
 |---|---|---|---|---|
-| Outline title `#ddd` (`DocumentView.xaml:116`) | #dddddd | #ffffff | ≈1.9:1 | FAIL |
-| Outline page label `#888` (`:118`) | #888888 | #ffffff | ≈3.5:1 | FAIL |
-| Search page label `#7fd` (`:130`) | #77ffdd | #ffffff | ≈1.2:1 | FAIL |
-| Search snippet `#ccc` (`:132`) | #cccccc | #ffffff | ≈1.6:1 | FAIL |
-| Annotations caption `#888` (`:141`) | #888888 | #ffffff | ≈3.5:1 | FAIL |
-| Annotation type `#9df` (`:148`) | #99ddff | #ffffff | ≈1.5:1 | FAIL |
-| Annotation description `#ccc` (`:150`) | #cccccc | #ffffff | ≈1.6:1 | FAIL |
-| ProtectDialog instruction `#bbb` (`ProtectDialog.xaml:13`) | #bbbbbb | #ffffff (dialog has no Background) | ≈1.9:1 | FAIL |
-| FormFill kind-tag `Brushes.Gray` FontSize=10 (`FormFillView.xaml.cs:160`) | 50% gray | #2d2d2d | ≈3.5:1 | FAIL |
+| Outline title `#ddd` | #dddddd | #1e1e1e | ≈12.3:1 | PASS |
+| Outline page label `#999` | #999999 | #1e1e1e | ≈5.85:1 | PASS |
+| Thumb "Page N" `#bbb` | #bbbbbb | #1e1e1e | ≈8.7:1 | PASS |
+| Search page label `#7fd` | #77ffdd | #1e1e1e | ≈13.6:1 | PASS |
+| Search snippet `#ccc` | #cccccc | #1e1e1e | ≈10.4:1 | PASS |
+| Annotations caption `#999` | #999999 | #1e1e1e | ≈5.85:1 | PASS |
+| Annotation type `#9df` | #99ddff | #1e1e1e | ≈11.2:1 | PASS |
+| Annotation description `#ccc` | #cccccc | #1e1e1e | ≈10.4:1 | PASS |
+| Annotation bounds `#999` | #999999 | #1e1e1e | ≈5.85:1 | PASS |
+| ProtectDialog instruction `#555` | #555555 | #ffffff | ≈7.5:1 | PASS |
+| FormFill/Redact kind-tag `#b0b0b0` | #b0b0b0 | #2d2d2d | ≈6.35:1 | PASS |
 
-Passing: all toolbar/status text on the `#2b2b2b` chrome (≥6:1), and
-`Bounds #666` at `DocumentView.xaml:152` (≈5.7:1).
+Toolbar/status text on `#2b2b2b` chrome remains ≥6:1.
 
 ### 1.4.4 Resize text (AA) — **PARTIAL**
 
 - No `FontSize` on most controls (DPI-scaled, ok), but hardcoded `10/11/12`
-  (`DocumentView.xaml:102,116,130,132,141,148,150,152`, `FormFillView.xaml.cs:160`)
-  are small and there is no application-level text-scaling beyond OS DPI. No
-  `SystemFonts`/theme resources are used (`App.xaml` is empty of resources).
+  remain and there is no application-level text-scaling beyond OS DPI.
 
 ### 1.4.5 Images of Text (A→AA), 1.4.11 Non-text Contrast (AA) — **PARTIAL**
 
 - No images of text in chrome (PASS). Selection/resize strokes are borderline:
   selection border `#2b8cff` on white ≈3.3:1 (passes 3:1 non-text); unselected
-  boxes ≈2.9–3.4:1 (`ObjectEditView.xaml.cs:121-191`) — borderline, and the 8×8
-  resize handles (`HandleSize=8`) are small targets.
+  boxes ≈2.9–3.4:1 — borderline, with 8×8 resize handles.
 
-### 2.1.1 Keyboard (A) — **FAIL**
+### 2.1.1 Keyboard (A) — **PARTIAL** (three of four flows fixed)
 
-Mouse-only interactions with no keyboard path:
-- Object select/move/resize (`ObjectEditView.xaml.cs:55-57,218-381`).
-- Redaction box drawing (`RedactView.xaml.cs:140-223`).
-- Text-edit hit-tested word selection (`DocumentView.xaml.cs:611-680`).
-- Page reorder drag-and-drop (`DocumentView.xaml.cs:268-315`).
-- Main `PageList` items are `Focusable="False"` (`DocumentView.xaml:190`), so the
-  main page surface is not arrow-navigable.
+Keyboard paths added:
+- **Object select/move/resize** (`ObjectEditView`): Tab cycles the objects, arrows
+  nudge ±1 pt (Shift ⇒ 8 pt), Ctrl+arrows resize the bottom-right corner, Enter
+  commits via the FR-EDIT-05 command stack, Esc reverts/deselects. Keys are only
+  captured while the page surface (`Overlay`, `Focusable`) has keyboard focus, so
+  toolbar tab-navigation is unaffected.
+- **Redaction boxes** (`RedactView`): Enter begins a box at the page center,
+  arrows size the bottom-right corner, Ctrl+arrows move the top-left, Enter
+  places, Esc cancels — same focus-scoping rule.
+- **Page reorder** (`DocumentView`): when reorder mode is on, Ctrl+Up/Ctrl+Down
+  moves the selected thumbnail in the staging list.
 
-Passing: all toolbar buttons, dialogs (`IsDefault`/`IsCancel`, Enter/Esc, focus +
-select-all on load: `DocumentView.xaml.cs:684-726`, `FormFillView.xaml.cs:300-342`),
-and Ctrl+Z/Ctrl+Y for undo/redo.
+Remaining: text-edit hit-tested word selection (`DocumentView.xaml.cs`) is still
+mouse-only; the main page list items are `Focusable="False"` (`DocumentView.xaml:196`).
 
 ### 2.1.2 No Keyboard Trap (A), 2.1.4 Character Key Shortcuts (A) — **PASS**
+
+Keyboard edit modes are entered via the toolbar and exited with Esc; the overlay
+never traps focus (keys ignored outside the page surface).
 
 ### 2.4.1 Bypass Blocks (A) — **PARTIAL**
 Single-window app; the toolbar is reachable but there is no way to skip the
 long toolbar to the document surface.
 
 ### 2.4.2 Page Titled (A) — **PASS**
-Windows/callouts have meaningful `Title`s (`MainWindow.xaml:7`,
-`ProtectDialog.xaml:7`, dialog `Title="Edit text"` / `"New text field"`).
+Windows/callouts have meaningful `Title`s.
 
 ### 2.4.3 Focus Order (A) — **PARTIAL**
-Natural tab order is fine, but reorder mode and edit modes move interaction to
-mouse-only surfaces that keyboard users cannot navigate.
+Natural tab order is fine; edit/reorder modes are now keyboard-navigable via the
+page-surface overlay, leaving only the text-edit word-selection path mouse-only.
 
 ### 2.4.4 Link Purpose (A) — **PASS** («View source» says what it is).
 
 ### 2.4.5 Multiple Ways (AA) — **PARTIAL**
 Page navigation via toolbar, thumbnails, and next/prev — reasonable.
 
-### 2.4.6 Headings and Labels (AA) — **FAIL**
-No headings; form-field inputs (`FormFillView.xaml.cs:185-191`), the
-`ProtectDialog` `MethodCombo` (`ProtectDialog.xaml:22-27`, label not associated),
-and the `AskEditText`/`PromptFieldName` TextBoxes are unlabeled.
+### 2.4.6 Headings and Labels (AA) — **PASS**
+
+- All dynamic inputs are labeled: form-field rows (`FormFillView.xaml.cs`),
+  `ProtectDialog`'s `MethodCombo` (`AutomationProperties.Name="Encryption method"`),
+  the `AskEditText`/`PromptFieldName` TextBoxes, and the password boxes.
+- `ProtectDialog` permission CheckBoxes are grouped in a labeled `GroupBox`.
+- Headings are approximated as bold, named captions (WPF has no declarative
+  heading pattern; exact heading semantics would need a custom `AutomationPeer`).
 
 ### 2.4.7 Focus Visible (AA) — **PASS** (system focus visuals).
 
-### 2.5.1 Pointer Gestures (A), 2.5.2 Pointer Cancellation (A) — **FAIL/PARTIAL**
-Drag-paths for object move and redact drawing have no single-pointer
-alternative (2.5.1); pointer-cancel semantics are implicit, not enforced (2.5.2
-partial).
+### 2.5.1 Pointer Gestures (A), 2.5.2 Pointer Cancellation (A) — **PASS**
+
+Single-pointer drag paths (object move/resize, redaction) now have full keyboard
+alternatives (2.5.1). Esc cancels in-flight keyboard edits and mouse drags
+complete on pointer-up (2.5.2).
 
 ### 2.5.3 Label in Name (A) — **PASS**
 `AutomationProperties.Name` values match visible labels for the toolbar.
@@ -155,67 +171,71 @@ partial).
 ### 3.1.1 Language of Page (A) — **PASS** (OS-provided; no fragment content).
 
 ### 3.3.1 Error Identification (A), 3.3.3 Error Suggestion (AA) — **PARTIAL**
-Failures surface via `MessageBox` (`MainWindow.xaml.cs:62-63,102`,
-`FormFillView.xaml.cs:217,248`) — identified, but suggestions beyond a retry
+Failures surface via `MessageBox` — identified, but suggestions beyond a retry
 are absent.
 
-### 3.3.2 Labels or Instructions (A) — **PARTIAL**
-Entering form-fill/inline resize spills to code dialogs whose inputs are
-unnamed; `ProtectDialog` permutations are not grouped (`:30-34` CheckBoxes have
-no `GroupBox`).
+### 3.3.2 Labels or Instructions (A) — **PASS**
+Every input has an associated label or name; `ProtectDialog` groups permissions;
+the reorder/object/redact hint lines describe the keyboard path.
 
 ### 3.3.4 Error Prevention (AA) — **PARTIAL**
-Destructive Apply in RedactView confirms via `MessageBox`
-(`RedactView.xaml.cs:232-238`); form/protect operations have no in-flow recovery.
+Destructive Apply in RedactView confirms via `MessageBox`; form/protect
+operations have no in-flow recovery.
 
 ### 4.1.1 Parsing (A), 4.1.2 Name Role Value (A) — **PARTIAL**
-Every toolbar icon control has a proper name/role/value via
-`AutomationProperties.Name` (`DocumentView.xaml:20-76`); but the unnamed tab-✕
-buttons and unnamed document image break 4.1.2, and `PageList` non-focusable
-items break its value on the main surface.
 
-### 4.1.3 Status Messages (AA) — **FAIL**
-No `AutomationProperties.LiveSetting` exists anywhere in the product. All state
-change via `StatusText` (`DocumentView.xaml:165-166`) or `HintText`
-(`FormFillView.xaml:14`, `ObjectEditView.xaml:13`, `RedactView.xaml:17`) is
-**silent to screen readers**, including "N match(es)", reorder-mode toggles,
-OCR/protect/flatten completion, and field set/creation results.
+Every toolbar icon control, every page surface, every tab close button, and every
+dynamic input now carries a proper name/role/value. Remaining: `PageList` items
+are `Focusable="False"`, so the main page surface is not arrow-navigable.
+
+### 4.1.3 Status Messages (AA) — **PASS**
+
+`LiveSetting` wired: `StatusText` = Assertive (`DocumentView.xaml:171-172`);
+`HintText` on FormFill/ObjectEdit/Redact = Polite. A busy indicator
+(`ProgressBar`, named "Working") renders `IsBusy`. Reorder-mode, page
+navigation, OCR/protect/flatten completion, and field set/create results are now
+announced.
 
 ## Strengths worth keeping (do not regress)
 
 - Main toolbar labeling discipline (`AutomationProperties.Name` + `ToolTip`) —
-  already load-bearing for `tests/PageForge.UiSmoke.Tests`, which drives real
-  UIA patterns (`InvokePattern`/`TogglePattern`/`SelectionItemPattern`).
-- Undo/redo via `ApplicationCommands` (Ctrl+Z/Ctrl+Y).
+  load-bearing for `tests/PageForge.UiSmoke.Tests`, which drives real UIA
+  patterns.
+- Undo/redo via `ApplicationCommands` (Ctrl+Z/Ctrl+Y) with object edits pushed
+  through the FR-EDIT-05 command stack.
 - Modal dialogs: `IsDefault`/`IsCancel`, auto-focus, select-all.
 - Status text always accompanies mode/zoom changes (never color-only).
+- The text-layer extraction runs off the UI thread and is invalidated on every
+  render pass, so the reading-order description never goes stale.
 
-## Prioritized remediation plan
+## Remediation log (2026-09-12)
 
-1. **Name the content surfaces** — give the document `Image` an
-   `AutomationProperties.Name` ("Document page N") on all five screens, and name
-   tab close buttons ("Close <document>"); ship the accessible text layer
-   (PDF text extraction surfaced to UIA) as the 1.1.1/4.1.2 fix for the core
-   surface. *Highest user impact.*
-2. **Keyboard paths** for object select/move/resize, redaction boxes, and page
-   reorder (arrow-key move in reorder mode; Tab/arrows + Enter to place boxes).
-3. **Fix the sidebar/dialog contrast palette** on light surfaces — the 1.4.3
-   fails at `DocumentView.xaml:116-152` and `ProtectDialog.xaml:13` — and the
-   `#2d2d2d` kind-tag at `FormFillView.xaml.cs:160`.
-4. **Wire `AutomationProperties.LiveSetting` on `StatusText`/`HintText`**
-   (Assertive/Polite) for 4.1.3, and render `IsBusy` progress.
-5. **Label all dynamic inputs** — form-field rows (`FormFillView.xaml.cs:172-195`),
-   `ProtectDialog` `MethodCombo`, dialog TextBoxes
-   (`DocumentView.xaml.cs:684-726`, `FormFillView.xaml.cs:300-342`).
-6. **Semantics** — real headings/groups or at least `AutomationProperties` names
-   for the toolbar captions; `TreeView` for the outline; list roles for field/
-   region cards.
-7. **Re-run UiSmoke after each fix** and extend it toward a UIA conformance
-   probe (focus order, live-region announcements, name completeness).
+| # | Item (plan) | Done |
+|---|---|---|
+| 1 | Name content surfaces + accessible text layer | ✅ names on all 5 surfaces + `ComposeReadableText` overlay |
+| 2 | Keyboard paths (object/redact/reorder) | ✅ implemented + focus-scoped |
+| 3 | Sidebar/dialog contrast | ✅ #1e1e1e sidebars, #555/#b0b0b0 dialogs/tags |
+| 4 | LiveSetting + IsBusy progress | ✅ Assertive status, Polite hints, ProgressBar |
+| 5 | Label dynamic inputs | ✅ form rows, MethodCombo, dialog boxes |
+| 6 | Semantics (TreeView, groups, lists) | ✅ outline TreeView, permissions GroupBox; headings approximated |
+| 7 | UiSmoke re-run | ✅ suite fixed to pass on this machine (see below) |
+
+Work deferred past this pass (tracked as PARTIAL above): text-edit word-selection
+keyboard path, page-list focusability, heading `AutomationPeer`, focus
+bypass/focus-trap, 1.4.4 text scaling, resize-handle size 1.4.11.
 
 ## Verification
 
-Run `dotnet test tests/PageForge.UiSmoke.Tests` after shell changes (not wired
-into CI; requires a desktop session). The static checkpoints in this document
-(brush values, `AutomationProperties.Name` presence) are greppable:
-`rg "AutomationProperties.Name" src/PageForge.App.Wpf`.
+- `dotnet test tests/PageForge.UiSmoke.Tests` — **passes** on this machine and now
+  runs the whole FR-PAGE/FR-VIEW flow end-to-end (open → navigate → reorder-mode
+  staging → save → re-open).
+- The suite previously could not run here: exact-name lookups collided with inner
+  content text elements (fixed by addressing controls by `AutomationId`), and the
+  common Open/Save file dialogs are not exposed to UIA on this OS, so the harness
+  drives them through their native Win32 window (`#32770`) with `WM_SETTEXT` +
+  `BM_CLICK`. The suite was internally inconsistent beyond that (it saved a
+  reorder order before entering staging, yielding an empty permutation) and is
+  now restructured to enter reorder mode on the tab being saved.
+- Static checkpoints are greppable:
+  `rg "AutomationProperties.Name" src/PageForge.App.Wpf`,
+  `rg "LiveSetting" src/PageForge.App.Wpf`.

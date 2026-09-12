@@ -12,7 +12,7 @@
         <Border DockPanel.Dock="Top" Background="#2b2b2b" Padding="8,6">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
-                    <Button Content="Open PDF…" Click="Open_Click" Padding="12,4"
+                    <Button Content="Open PDF…" x:Name="OpenPdfButton" AutomationProperties.Name="Open PDF…" Click="Open_Click" Padding="12,4"
                             ToolTip="Open one or more PDF documents (FR-VIEW-04 multi-doc tabs)" />
                 </StackPanel>
                 <!-- AGPL §13 source availability: point users at the public repository (TSD §7). -->

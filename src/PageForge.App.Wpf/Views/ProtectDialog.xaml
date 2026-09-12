@@ -10,7 +10,7 @@
         FontFamily="Segoe UI" TextOptions.TextFormattingMode="Display">
     <StackPanel Margin="14">
         <TextBlock Text="Choose passwords for the protected copy (FR-SEC-01)."
-                   TextWrapping="Wrap" Margin="0,0,0,10" Foreground="#bbb" />
+                   TextWrapping="Wrap" Margin="0,0,0,10" Foreground="#555555" />
 
         <TextBlock Text="Open password (required to open the copy)" />
         <PasswordBox x:Name="OpenPasswordBox" AutomationProperties.Name="Open password" Margin="0,2,0,8" PasswordChanged="Passwords_Changed" />
@@ -19,7 +19,7 @@
         <PasswordBox x:Name="OwnerPasswordBox" AutomationProperties.Name="Permissions password" Margin="0,2,0,8" PasswordChanged="Passwords_Changed" />
 
         <TextBlock Text="Encryption" />
-        <ComboBox x:Name="MethodCombo" Margin="0,2,0,10" SelectedIndex="0">
+        <ComboBox x:Name="MethodCombo" AutomationProperties.Name="Encryption method" Margin="0,2,0,10" SelectedIndex="0">
             <ComboBoxItem Content="AES-256 (recommended)" Tag="5" />
             <ComboBoxItem Content="AES-128" Tag="4" />
             <ComboBoxItem Content="RC4-128 (legacy)" Tag="3" />
@@ -27,11 +27,15 @@
         </ComboBox>
 
         <TextBlock Text="Permissions for the open password (owner password bypasses these)" />
-        <CheckBox x:Name="PermPrint" Content="Print" IsChecked="True" Margin="4,4,0,0" />
-        <CheckBox x:Name="PermCopy" Content="Copy / extract text" IsChecked="True" Margin="4,2,0,0" />
-        <CheckBox x:Name="PermModify" Content="Modify contents" IsChecked="True" Margin="4,2,0,0" />
-        <CheckBox x:Name="PermAnnotate" Content="Annotate / fill forms" IsChecked="True" Margin="4,2,0,0" />
-        <CheckBox x:Name="PermAssemble" Content="Assemble pages" IsChecked="True" Margin="4,2,0,0" />
+        <GroupBox Header="Permissions" Margin="0,2,0,0" Padding="4">
+            <StackPanel>
+                <CheckBox x:Name="PermPrint" Content="Print" IsChecked="True" Margin="4,4,0,0" />
+                <CheckBox x:Name="PermCopy" Content="Copy / extract text" IsChecked="True" Margin="4,2,0,0" />
+                <CheckBox x:Name="PermModify" Content="Modify contents" IsChecked="True" Margin="4,2,0,0" />
+                <CheckBox x:Name="PermAnnotate" Content="Annotate / fill forms" IsChecked="True" Margin="4,2,0,0" />
+                <CheckBox x:Name="PermAssemble" Content="Assemble pages" IsChecked="True" Margin="4,2,0,0" />
+            </StackPanel>
+        </GroupBox>
 
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
             <Button Content="Cancel" Width="90" Margin="0,0,8,0" IsCancel="True" />

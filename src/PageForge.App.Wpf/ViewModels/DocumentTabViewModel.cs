@@ -12,10 +12,12 @@ namespace PageForge.App.Wpf.ViewModels;
 
 /// <summary>
 /// One row in the viewer's page list or thumbnail strip. Carries the lazy full
-/// image and the lazy thumbnail, plus the page region for sizing, and its
-/// 1-based display number.
+/// image and the lazy thumbnail, plus the page region for sizing, its 1-based
+/// display number, and the page's accessible text layer (WCAG 1.1.1): the PDF
+/// text runs surfaced as a readable overlay bound to <see cref="AccessibleText"/>,
+/// loaded lazily the first time the page is realized on screen.
 /// </summary>
-public sealed class PageSlotViewModel
+public sealed class PageSlotViewModel : ObservableObject
 {
     public required PageImageViewModel Image { get; init; }
 
@@ -25,7 +27,120 @@ public sealed class PageSlotViewModel
 
     public required int DisplayNumber { get; init; }
 
+    /// <summary>Lists the page's editable text runs from the serialized engine
+    /// lane; supplied by the owning tab so slots never touch the engine directly.</summary>
+    public required Func<int, CancellationToken, ValueTask<IReadOnlyList<PdfTextRun>>> AccessibleTextLoader { get; init; }
+
     public int PageIndex => DisplayNumber - 1;
+
+    /// <summary>Accessible name for the full page surface (WCAG 4.1.2).</summary>
+    public string AccessibleImageName => $"Document page {DisplayNumber}";
+
+    /// <summary>Accessible name for the thumbnail strip entry.</summary>
+    public string AccessibleThumbnailName => $"Thumbnail page {DisplayNumber}";
+
+    /// <summary>The page's text in reading order, for the accessible text layer.
+    /// Empty until <see cref="EnsureAccessibleTextAsync"/> completes (or the page
+    /// has no extractable text).</summary>
+    public string AccessibleText
+    {
+        get => _accessibleText;
+        private set => SetProperty(ref _accessibleText, value);
+    }
+
+    private string _accessibleText = string.Empty;
+    private bool _accessibleTextRequested;
+
+    /// <summary>Loads <see cref="AccessibleText"/> once. Executes the engine call
+    /// off the UI thread (the engine's threading contract) and applies the result
+    /// back on the dispatcher.</summary>
+    public async Task EnsureAccessibleTextAsync(CancellationToken ct = default)
+    {
+        if (_accessibleTextRequested)
+        {
+            return;
+        }
+
+        _accessibleTextRequested = true;
+        try
+        {
+            IReadOnlyList<PdfTextRun> runs = await AccessibleTextLoader(PageIndex, ct).ConfigureAwait(false);
+            string composed = ComposeReadableText(runs);
+            await System.Windows.Application.Current.Dispatcher.InvokeAsync(() => AccessibleText = composed)
+                .Task.ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // A failed extraction leaves the empty layer; attempting it again is
+            // allowed (retry on re-realization), never crash the render.
+            _accessibleTextRequested = false;
+        }
+    }
+
+    /// <summary>Drops the cached accessible text so a content rewrite
+    /// (text edit, form fill, redaction) gets re-extracted on next display.</summary>
+    public void InvalidateAccessibleText() => _accessibleTextRequested = false;
+
+    /// <summary>
+    /// Assembles the page's runs into approximate reading order: lines are rows
+    /// grouped by vertical overlap, ordered top-to-bottom (PDF Y grows up), each
+    /// line ordered left-to-right with word spaces.
+    /// </summary>
+    private static string ComposeReadableText(IReadOnlyList<PdfTextRun> runs)
+    {
+        if (runs.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var ordered = runs.OrderByDescending(r => r.Y1).ThenBy(r => r.X0).ToList();
+        var lines = new List<List<PdfTextRun>>();
+        double lineTop = double.MinValue;
+        double lineBottom = double.MaxValue;
+
+        foreach (PdfTextRun run in ordered)
+        {
+            if (lines.Count == 0)
+            {
+                lines.Add(new List<PdfTextRun> { run });
+                lineTop = run.Y1;
+                lineBottom = run.Y0;
+                continue;
+            }
+
+            double gap = Math.Max(0, run.Y1 - lineBottom);
+            double lineHeight = Math.Max(1.0, lineTop - lineBottom);
+            if (gap > lineHeight * 0.5)
+            {
+                lines.Add(new List<PdfTextRun> { run });
+                lineTop = run.Y1;
+                lineBottom = run.Y0;
+            }
+            else
+            {
+                lines[^1].Add(run);
+                lineTop = Math.Max(lineTop, run.Y1);
+                lineBottom = Math.Min(lineBottom, run.Y0);
+            }
+        }
+
+        var sb = new System.Text.StringBuilder();
+        foreach (List<PdfTextRun> line in lines)
+        {
+            foreach (PdfTextRun run in line.OrderBy(r => r.X0))
+            {
+                sb.Append(run.Text);
+                sb.Append(' ');
+            }
+
+            if (sb.Length > 0)
+            {
+                sb[^1] = '\n';
+            }
+        }
+
+        return sb.ToString().TrimEnd('\n');
+    }
 }
 
 /// <summary>
@@ -42,6 +157,26 @@ public sealed class OutlineEntryViewModel
     public int Indent => Math.Max(0, Item.Depth - 1);
 
     public System.Windows.FontWeight FontWeightPx => Item.Depth == 1 ? System.Windows.FontWeights.Bold : System.Windows.FontWeights.Normal;
+}
+
+/// <summary>
+/// One node of the hierarchical document outline (WCAG 1.3.1), bound to the
+/// outline <see cref="System.Windows.Controls.TreeView"/>. Children carry the
+/// pre-order subtree of a <see cref="PageForge.Core.Pdf.PdfOutline"/> item.
+/// </summary>
+public sealed class OutlineTreeNodeViewModel
+{
+    public required string Title { get; init; }
+
+    public required string PageLabel { get; init; }
+
+    public required int PageNumber { get; init; }
+
+    public required int Depth { get; init; }
+
+    public IList<OutlineTreeNodeViewModel> Children { get; } = new List<OutlineTreeNodeViewModel>();
+
+    public System.Windows.FontWeight FontWeightPx => Depth == 1 ? System.Windows.FontWeights.Bold : System.Windows.FontWeights.Normal;
 }
 
 /// <summary>
@@ -146,6 +281,10 @@ public sealed class DocumentTabViewModel : ObservableObject
         private set => SetProperty(ref _outline, value);
     }
 
+    /// <summary>The hierarchy of the document outline (WCAG 1.3.1), bound to the
+    /// outline TreeView. Nodes carry depth so AT reports real structure.</summary>
+    public ObservableCollection<OutlineTreeNodeViewModel> OutlineTree { get; } = new();
+
     public IReadOnlyList<SearchResultViewModel> SearchHits
     {
         get => _searchHits;
@@ -223,6 +362,7 @@ public sealed class DocumentTabViewModel : ObservableObject
                     Thumbnail = new PageImageViewModel(_doc, i, thumbDpi),
                     Region = region,
                     DisplayNumber = i + 1,
+                    AccessibleTextLoader = (page, ct) => _doc.Engine.ListTextRunsAsync(page, ct),
                 });
             }
 
@@ -239,6 +379,12 @@ public sealed class DocumentTabViewModel : ObservableObject
                 .Select(item => new OutlineEntryViewModel { Item = item })
                 .ToArray();
 
+            OutlineTree.Clear();
+            foreach (OutlineTreeNodeViewModel node in BuildOutlineTree(_doc.Outline.Items))
+            {
+                OutlineTree.Add(node);
+            }
+
             Status = _doc.Outline.HasItems
                 ? $"{_doc.PageCount} pages · {_doc.Outline.Items.Count} bookmarks"
                 : $"{_doc.PageCount} pages";
@@ -249,6 +395,7 @@ public sealed class DocumentTabViewModel : ObservableObject
         }
 
         OnPropertyChanged(nameof(Outline));
+        OnPropertyChanged(nameof(OutlineTree));
         OnPropertyChanged(nameof(PageCount));
         OnPropertyChanged(nameof(DisplayName));
         RaiseStateChanged();
@@ -850,6 +997,11 @@ public sealed class DocumentTabViewModel : ObservableObject
             slot.Image.Clear();
         });
         await slot.Image.RenderAsync(ct).ConfigureAwait(false);
+
+        // The page's pixels changed (edit / fill / redaction); the accessible
+        // text layer must be re-extracted from the mutated content stream.
+        slot.InvalidateAccessibleText();
+        await slot.EnsureAccessibleTextAsync(ct).ConfigureAwait(false);
     }
 
     private PdfPageRegion CurrentRegion()
@@ -907,6 +1059,42 @@ public sealed class DocumentTabViewModel : ObservableObject
     /// indices (each item's <see cref="PageSlotViewModel.PageIndex"/> is its
     /// original position in the source document).</summary>
     public int[] BuildOrder() => ReorderItems.Select(p => p.PageIndex).ToArray();
+
+    /// <summary>Rebuilds the flat pre-order outline into a parent/child tree using
+    /// each item's <see cref="OutlineItem.Depth"/> (1-based).</summary>
+    private static IReadOnlyList<OutlineTreeNodeViewModel> BuildOutlineTree(IReadOnlyList<OutlineItem> items)
+    {
+        var roots = new List<OutlineTreeNodeViewModel>();
+        var stack = new Stack<OutlineTreeNodeViewModel>();
+        foreach (OutlineItem item in items)
+        {
+            var node = new OutlineTreeNodeViewModel
+            {
+                Title = item.Title,
+                PageLabel = item.PageNumber > 0 ? $"p{item.PageNumber}" : string.Empty,
+                PageNumber = item.PageNumber,
+                Depth = item.Depth,
+            };
+
+            while (stack.Count > 0 && stack.Peek().Depth >= node.Depth)
+            {
+                stack.Pop();
+            }
+
+            if (stack.Count > 0)
+            {
+                stack.Peek().Children.Add(node);
+            }
+            else
+            {
+                roots.Add(node);
+            }
+
+            stack.Push(node);
+        }
+
+        return roots;
+    }
 
     private void GuardPageCount()
     {

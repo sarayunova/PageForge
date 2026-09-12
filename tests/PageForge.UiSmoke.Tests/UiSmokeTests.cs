@@ -32,19 +32,17 @@ public class UiSmokeTests
         Assert.EndsWith("/ 1", PageForgeApp.GetText(initial).Trim());
 
         // Organizer toolbar mounted (FR-PAGE): reorder toggle + save order.
-        AutomationElement? reorderToggle = app.FindInSelectedTabByName("Reorder");
-        AutomationElement? saveOrder = app.FindInSelectedTabByName("Save order…");
+        // Lookups are by AutomationId: exact-name matching is ambiguous because
+        // button content text is exposed as its own inner text element with the
+        // same visible string (e.g. "Reorder"/"Save order…").
+        AutomationElement? reorderToggle = app.FindInSelectedTabById("ReorderToggle");
+        AutomationElement? saveOrder = app.FindInSelectedTabById("SaveOrderButton");
         Assert.NotNull(reorderToggle);
         Assert.NotNull(saveOrder);
 
-        // Reorder staging toggle switches status (drag-drop staging list) without a dialog.
-        PageForgeApp.Activate(reorderToggle!);
-        Assert.Contains("Reorder mode", await WaitForText(app, "StatusText"));
-        PageForgeApp.Activate(app.FindInSelectedTabByName("Reorder")!);
-
         // Open the 3-page fixture via the Open PDF… dialog (button lives on the
         // MainWindow shell, not in the tab content).
-        PageForgeApp.Activate(RequireVisible(app, "Open PDF…", isTabScoped: false));
+        PageForgeApp.Activate(app.FindById("OpenPdfButton") ?? throw new InvalidOperationException("Open PDF… button not found."));
         await OpenFileViaDialog(app, Sample3);
 
         // Newly opened tab auto-selected -> 3 thumbnails, indicator 1 / 3.
@@ -52,7 +50,7 @@ public class UiSmokeTests
         Assert.Equal("1 / 3", PageForgeApp.GetText(indicator).Trim());
 
         // Page navigation (FR-VIEW) advances the indicator.
-        AutomationElement next = app.FindInSelectedTabByName("Next ▶")
+        AutomationElement next = app.FindInSelectedTabById("NextButton")
             ?? throw new InvalidOperationException("Next button not found.");
         PageForgeApp.Activate(next);
         AutomationElement advanced = await WaitForIndicator(app, "2 / 3");
@@ -62,27 +60,23 @@ public class UiSmokeTests
         int thumbs = CountThumbnails(app);
         Assert.Equal(3, thumbs);
 
+        // Reorder staging toggle switches status without a dialog; staging must be
+        // entered on the tab that will be saved (BuildOrder validates a permutation).
+        PageForgeApp.Activate(app.FindInSelectedTabById("ReorderToggle")!);
+        Assert.Contains("Reorder mode", await WaitForText(app, "StatusText"));
+
         // Save order… -> common Save dialog -> new tab for the reordered file.
         string outFile = ReorderedPath();
-        AutomationElement saveAs = app.FindInSelectedTabByName("Save order…")
+        AutomationElement saveAs = app.FindInSelectedTabById("SaveOrderButton")
             ?? throw new InvalidOperationException("Save order… button not found.");
         PageForgeApp.Activate(saveAs);
         await SaveViaDialog(app, outFile);
 
         // The saved copy reopens in a new selected tab (FR-PAGE reorder/merge apply).
-        AutomationElement reopened = await WaitForIndicator(app, "/ 3");
-        Assert.Equal("1 / 3", PageForgeApp.GetText(reopened).Trim());
+        // Exact match: a suffix wait would resolve immediately against the previous
+        // tab's "2 / 3" before the new tab is selected.
+        AutomationElement reopened = await WaitForIndicatorValue(app, "1 / 3");
         Assert.True(File.Exists(outFile), $"reordered file was not written: {outFile}");
-    }
-
-    private static AutomationElement RequireVisible(PageForgeApp app, string name, bool isTabScoped)
-    {
-        if (!isTabScoped)
-        {
-            return app.FindByName(name) ?? throw new InvalidOperationException($"Element '{name}' not found.");
-        }
-
-        return app.FindInSelectedTabByName(name) ?? throw new InvalidOperationException($"Element '{name}' not found in selected tab.");
     }
 
     private static async Task<string> WaitForText(PageForgeApp app, string automationId)
@@ -119,6 +113,23 @@ public class UiSmokeTests
         throw new TimeoutException($"Timed out waiting for page indicator ending '{suffix}'.");
     }
 
+    private static async Task<AutomationElement> WaitForIndicatorValue(PageForgeApp app, string expected)
+    {
+        DateTime deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+        while (DateTime.UtcNow < deadline)
+        {
+            AutomationElement? el = app.FindInSelectedTabById("PageIndicatorText");
+            if (el is not null && PageForgeApp.GetText(el).Trim() == expected)
+            {
+                return el;
+            }
+
+            await Task.Delay(200);
+        }
+
+        throw new TimeoutException($"Timed out waiting for page indicator '{expected}'.");
+    }
+
     private static int CountThumbnails(PageForgeApp app)
     {
         AutomationElement? list = app.FindInSelectedTabById("ThumbList");
@@ -141,37 +152,14 @@ public class UiSmokeTests
 
     private static async Task OpenFileViaDialog(PageForgeApp app, string path)
     {
-        AutomationElement dialog = await PageForgeApp.WaitForDialogAsync("open");
-        TypeFilenameAndConfirm(dialog, path);
+        IntPtr dialog = await PageForgeApp.WaitForDialogAsync("open");
+        PageForgeApp.TypeFilenameAndConfirm(dialog, path);
     }
 
     private static async Task SaveViaDialog(PageForgeApp app, string path)
     {
-        AutomationElement dialog = await PageForgeApp.WaitForDialogAsync("save");
-        TypeFilenameAndConfirm(dialog, path);
-    }
-
-    private static void TypeFilenameAndConfirm(AutomationElement dialog, string path)
-    {
-        AutomationElement? edit = FindInDialog(dialog, "1148");
-        Assert.NotNull(edit);
-        PageForgeApp.SetText(edit!, path);
-
-        AutomationElement? confirm = FindInDialog(dialog, "1");
-        Assert.NotNull(confirm);
-        PageForgeApp.Activate(confirm!);
-    }
-
-    private static AutomationElement? FindInDialog(AutomationElement dialog, string automationId)
-    {
-        try
-        {
-            return dialog.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.AutomationIdProperty, automationId));
-        }
-        catch (ElementNotAvailableException)
-        {
-            return null;
-        }
+        IntPtr dialog = await PageForgeApp.WaitForDialogAsync("save");
+        PageForgeApp.TypeFilenameAndConfirm(dialog, path);
     }
 
     private static string ReorderedPath()

@@ -46,10 +46,11 @@ public partial class DocumentView : UserControl
     public void SetTab(DocumentTabViewModel vm)
     {
         _vm = vm;
+        DataContext = vm;
 
         ThumbList.ItemsSource = vm.IsReorderMode ? vm.ReorderItems : vm.Pages;
         ReorderToggle.IsChecked = vm.IsReorderMode;
-        OutlineList.ItemsSource = vm.Outline;
+        OutlineTreeView.ItemsSource = vm.OutlineTree;
         SearchList.ItemsSource = vm.SearchHits;
         AnnotationList.ItemsSource = vm.Annotations;
         ContinuousToggle.IsChecked = vm.IsContinuous;
@@ -253,7 +254,7 @@ public partial class DocumentView : UserControl
         {
             _vm.EnterReorderMode();
             ThumbList.ItemsSource = _vm.ReorderItems;
-            StatusText.Text = "Reorder mode: drag thumbnails to arrange, then Save order…";
+            StatusText.Text = "Reorder mode: drag thumbnails, or Ctrl+Up/Ctrl+Down to move the selected page, then Save order…";
         }
         else
         {
@@ -353,14 +354,48 @@ public partial class DocumentView : UserControl
         }
     }
 
-    private void OutlineList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void OutlineTreeView_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
-        if (OutlineList.SelectedItem is OutlineEntryViewModel entry)
+        if (e.NewValue is OutlineTreeNodeViewModel node)
         {
-            _vm?.NavigateToOutline(entry);
-            OutlineList.SelectedIndex = -1;
+            if (node.PageNumber > 0)
+            {
+                _vm?.GoToPage(node.PageNumber - 1);
+            }
+
             RefreshAndScroll();
+            if (OutlineTreeView.ItemContainerGenerator.ContainerFromItem(node) is TreeViewItem item)
+            {
+                item.IsSelected = false;
+            }
         }
+    }
+
+    /// <summary>Keyboard path for page reorder (WCAG 2.1.1): in reorder mode,
+    /// Ctrl+Up/Ctrl+Down moves the selected thumbnail within the staging list.</summary>
+    private void ThumbList_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (_vm?.IsReorderMode != true)
+        {
+            return;
+        }
+
+        if ((Keyboard.Modifiers & ModifierKeys.Control) == 0 || e.Key is not (Key.Up or Key.Down))
+        {
+            return;
+        }
+
+        int index = ThumbList.SelectedIndex;
+        int target = e.Key == Key.Up ? index - 1 : index + 1;
+        if (index < 0 || target < 0 || target >= ThumbList.Items.Count)
+        {
+            return;
+        }
+
+        _vm.MoveReorderItem(index, target);
+        ThumbList.SelectedIndex = target;
+        StatusText.Text = "Reorder mode: drag thumbnails, or Ctrl+Up/Ctrl+Down to move the selected page, then Save order…";
+        e.Handled = true;
     }
 
     private void SearchList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -684,6 +719,7 @@ public partial class DocumentView : UserControl
     private static string? AskEditText(string initial)
     {
         var box = new TextBox { Text = initial, MinWidth = 320 };
+        System.Windows.Automation.AutomationProperties.SetName(box, "Replacement text");
         var ok = new Button { Content = "OK", IsDefault = true, Width = 80, Margin = new Thickness(0, 0, 6, 0) };
         var cancel = new Button { Content = "Cancel", IsCancel = true, Width = 80 };
         var buttons = new StackPanel

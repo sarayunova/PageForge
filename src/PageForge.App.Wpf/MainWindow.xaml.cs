@@ -85,6 +85,8 @@ public partial class MainWindow : Window
                 Padding = new Thickness(4, 0, 4, 0),
                 Cursor = System.Windows.Input.Cursors.Hand,
             };
+            System.Windows.Automation.AutomationProperties.SetName(close, $"Close {vm.DisplayName}");
+            close.ToolTip = $"Close {vm.DisplayName}";
             close.Click += (_, _) => CloseTab(tab, vm);
             header.Children.Add(close);
             tab.Header = header;

@@ -26,7 +26,7 @@
                         Click="Previous_Click" Padding="8,3" />
                 <TextBlock x:Name="PageIndicatorText" Foreground="#ddd" VerticalAlignment="Center"
                            Margin="10,0" MinWidth="70" TextAlignment="Center" />
-                <Button Content="Next ▶" AutomationProperties.Name="Next page"
+                <Button Content="Next ▶" x:Name="NextButton" AutomationProperties.Name="Next page"
                         Click="Next_Click" Padding="8,3" />
                 <Separator Margin="6,0" Width="1" Background="#555" />
                 <Button Content="−" AutomationProperties.Name="Zoom out" Click="ZoomOut_Click" Padding="10,3" ToolTip="Zoom out" />
@@ -38,7 +38,7 @@
                 <Button Content="⟲" AutomationProperties.Name="Rotate counter-clockwise" Click="RotateCCW_Click" Padding="10,3" ToolTip="Rotate counter-clockwise" />
                 <Button Content="⟳" AutomationProperties.Name="Rotate clockwise" Click="RotateCW_Click" Padding="10,3" ToolTip="Rotate clockwise" />
                 <Separator Margin="6,0" Width="1" Background="#555" />
-                <TextBlock Text="Organize" Foreground="#aaa" VerticalAlignment="Center" Margin="0,0,6,0" />
+                <TextBlock Text="Organize" Foreground="#bbb" FontWeight="Bold" AutomationProperties.Name="Organize tools" VerticalAlignment="Center" Margin="0,0,6,0" />
                 <Button Content="⟳ page" AutomationProperties.Name="Rotate page" Click="OrganizeRotatePage_Click" Padding="8,3" ToolTip="Save a rotated copy of the current page to a new file" />
                 <Button Content="✕ page" AutomationProperties.Name="Delete page" Click="OrganizeDeletePage_Click" Padding="8,3" ToolTip="Delete the current page into a new file" />
                 <Button Content="✂ page" AutomationProperties.Name="Extract page" Click="OrganizeExtractPage_Click" Padding="8,3" ToolTip="Extract the current page to a new file" />
@@ -46,15 +46,15 @@
                 <ToggleButton x:Name="ReorderToggle" Content="Reorder" AutomationProperties.Name="Reorder pages"
                               Checked="ReorderToggle_Changed" Unchecked="ReorderToggle_Changed"
                               Padding="8,3" ToolTip="Drag thumbnails to reorder pages, then save" />
-                <Button Content="Save order…" AutomationProperties.Name="Save page order" Click="SaveOrder_Click" Padding="8,3" ToolTip="Write the reordered pages to a new PDF" />
+                <Button Content="Save order…" x:Name="SaveOrderButton" AutomationProperties.Name="Save page order" Click="SaveOrder_Click" Padding="8,3" ToolTip="Write the reordered pages to a new PDF" />
                 <Separator Margin="6,0" Width="1" Background="#555" />
-                <TextBlock Text="Annotate" Foreground="#aaa" VerticalAlignment="Center" Margin="0,0,6,0" />
+                <TextBlock Text="Annotate" Foreground="#bbb" FontWeight="Bold" AutomationProperties.Name="Annotate tools" VerticalAlignment="Center" Margin="0,0,6,0" />
                 <Button Content="✱ highlight" AutomationProperties.Name="Add highlight" Click="AnnotateHighlight_Click" Padding="8,3" ToolTip="Add a highlight over the top of the current page" />
                 <Button Content="🗨 note" AutomationProperties.Name="Add text note" Click="AnnotateText_Click" Padding="8,3" ToolTip="Add a text note to the current page" />
                 <Button Content="✒ ink" AutomationProperties.Name="Add ink stroke" Click="AnnotateInk_Click" Padding="8,3" ToolTip="Add an ink stroke to the current page" />
                 <Button Content="⚟ flatten…" AutomationProperties.Name="Flatten annotations" Click="AnnotateFlatten_Click" Padding="8,3" ToolTip="Save a copy with selected annotation types baked into static content" />
                 <Separator Margin="6,0" Width="1" Background="#555" />
-                <TextBlock Text="Edit" Foreground="#aaa" VerticalAlignment="Center" Margin="0,0,6,0" />
+                <TextBlock Text="Edit" Foreground="#bbb" FontWeight="Bold" AutomationProperties.Name="Edit tools" VerticalAlignment="Center" Margin="0,0,6,0" />
                 <ToggleButton x:Name="EditModeToggle" Content="✎ text" AutomationProperties.Name="Edit text mode"
                               Checked="EditModeToggle_Changed" Unchecked="EditModeToggle_Changed"
                               Padding="8,3" ToolTip="Click a word on the page to edit it; edits grow the box and warn on collision" />
@@ -78,12 +78,13 @@
         </Border>
 
         <!-- Left sidebar -->
-        <Grid DockPanel.Dock="Left" x:Name="Sidebar" Width="270" Margin="0,4,4,4">
-            <TabControl>
+        <Grid DockPanel.Dock="Left" x:Name="Sidebar" Width="270" Margin="0,4,4,4" Background="#1e1e1e">
+            <TabControl Background="#1e1e1e">
                 <TabItem Header="Pages">
-                    <ListBox x:Name="ThumbList" SelectionChanged="ThumbList_SelectionChanged"
+                    <ListBox x:Name="ThumbList" Background="#1e1e1e" SelectionChanged="ThumbList_SelectionChanged"
                              AllowDrop="True" PreviewMouseLeftButtonDown="ThumbList_PreviewMouseLeftButtonDown"
                              PreviewMouseMove="ThumbList_PreviewMouseMove" Drop="ThumbList_Drop"
+                             PreviewKeyDown="ThumbList_PreviewKeyDown"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                         <ListBox.ItemsPanel>
                             <ItemsPanelTemplate>
@@ -97,6 +98,7 @@
                                     <StackPanel>
                                         <Image Source="{Binding Thumbnail.Bitmap}"
                                                Width="160" Height="200" Stretch="Uniform"
+                                               AutomationProperties.Name="{Binding AccessibleThumbnailName}"
                                                views:PageImageBehavior.RenderOnLoad="True" />
                                         <TextBlock Text="{Binding DisplayNumber, StringFormat=Page {0}}"
                                                    Foreground="#bbb" FontSize="11" Margin="4,2" />
@@ -107,22 +109,22 @@
                     </ListBox>
                 </TabItem>
                 <TabItem Header="Bookmarks">
-                    <ListBox x:Name="OutlineList" SelectionChanged="OutlineList_SelectionChanged"
-                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
+                    <TreeView x:Name="OutlineTreeView" Background="#1e1e1e"
+                              BorderThickness="0"
+                              SelectedItemChanged="OutlineTreeView_SelectedItemChanged">
+                        <TreeView.ItemTemplate>
+                            <HierarchicalDataTemplate ItemsSource="{Binding Children}">
                                 <StackPanel Orientation="Horizontal" Margin="0,2">
-                                    <Border Width="{Binding Indent, Converter={StaticResource IndentToWidth}}" />
                                     <TextBlock Text="{Binding Title}" Foreground="#ddd" FontSize="12"
                                                FontWeight="{Binding FontWeightPx}" />
-                                    <TextBlock Text="{Binding PageLabel}" Foreground="#888" Margin="8,0,0,0" />
+                                    <TextBlock Text="{Binding PageLabel}" Foreground="#999" Margin="8,0,0,0" />
                                 </StackPanel>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
+                            </HierarchicalDataTemplate>
+                        </TreeView.ItemTemplate>
+                    </TreeView>
                 </TabItem>
                 <TabItem Header="Search">
-                    <ListBox x:Name="SearchList" SelectionChanged="SearchList_SelectionChanged"
+                    <ListBox x:Name="SearchList" Background="#1e1e1e" SelectionChanged="SearchList_SelectionChanged"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
@@ -137,10 +139,10 @@
                     </ListBox>
                 </TabItem>
                 <TabItem Header="Annotations">
-                    <DockPanel>
-                        <TextBlock DockPanel.Dock="Top" Foreground="#888" FontSize="11" Margin="4,4,4,2"
+                    <DockPanel Background="#1e1e1e">
+                        <TextBlock DockPanel.Dock="Top" Foreground="#999" FontSize="11" Margin="4,4,4,2"
                                    Text="Annotations on current page" />
-                        <ListBox x:Name="AnnotationList"
+                        <ListBox x:Name="AnnotationList" Background="#1e1e1e"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
@@ -149,7 +151,7 @@
                                                    Text="{Binding TypeName}" />
                                         <TextBlock Foreground="#ccc" FontSize="12"
                                                    Text="{Binding Description}" TextWrapping="Wrap" />
-                                        <TextBlock Foreground="#666" FontSize="10"
+                                        <TextBlock Foreground="#999" FontSize="10"
                                                    Text="{Binding Bounds}" />
                                     </StackPanel>
                                 </DataTemplate>
@@ -163,7 +165,11 @@
         <!-- Center: page surface + status -->
         <DockPanel>
             <StatusBar DockPanel.Dock="Bottom" Background="#2b2b2b">
-                <TextBlock x:Name="StatusText" Foreground="#bbb" />
+                <ProgressBar Width="110" Height="12" IsIndeterminate="True" Margin="0,0,8,0"
+                             Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"
+                             AutomationProperties.Name="Working" />
+                <TextBlock x:Name="StatusText" Foreground="#bbb"
+                           AutomationProperties.LiveSetting="Assertive" />
             </StatusBar>
             <Grid>
                 <locals:ObjectEditView x:Name="ObjectView" Visibility="Collapsed" />
@@ -195,10 +201,18 @@
                         <Border BorderBrush="#555" BorderThickness="1" Margin="8,10"
                                 Background="White"
                                 LayoutTransform="{Binding DataContext.Rotation, Converter={StaticResource RotationToTransform}, RelativeSource={RelativeSource AncestorType=ListBox}}">
-                            <Image Source="{Binding Image.Bitmap}" Stretch="None"
-                                   CacheMode="BitmapCache"
-                                   MouseLeftButtonUp="PageImage_MouseLeftButtonUp"
-                                   views:PageImageBehavior.RenderOnLoad="True" />
+                            <Grid>
+                                <Image Source="{Binding Image.Bitmap}" Stretch="None"
+                                       CacheMode="BitmapCache"
+                                       MouseLeftButtonUp="PageImage_MouseLeftButtonUp"
+                                       AutomationProperties.Name="{Binding AccessibleImageName}"
+                                       views:PageImageBehavior.RenderOnLoad="True" />
+                                <TextBlock Text="{Binding AccessibleText}"
+                                           IsHitTestVisible="False" Opacity="0"
+                                           TextWrapping="Wrap" VerticalAlignment="Stretch"
+                                           AutomationProperties.Name="{Binding AccessibleImageName}"
+                                           views:PageImageBehavior.EnsureTextOnLoad="True" />
+                            </Grid>
                         </Border>
                     </DataTemplate>
                 </ListBox.ItemTemplate>
