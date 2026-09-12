@@ -65,7 +65,7 @@ Applied FR coverage (with verification evidence):
 2. **Phase 6 exit evidence missing** — `tools/loadtest/` (real k6-adjacent harness exists) has no recorded run against TSD targets; no WCAG 2.1 AA audit artifact.
 3. **Shell is WPF, not WinUI** — `PageForge.App.Wpf` (~3.9k lines, all product UI) is the shipping shell; `PageForge.App` is a 168-line WinUI spike kept from rotting by the enforcing CI lane. Porting is post-beta (TSD §12.1 amendment). x64 only; ARM64 deferred.
 4. **Sweep's last item — DONE (2026-09-12)** — `tools/generate-corpus.ps1` gained an `-OutDir` switch and all nine unchecked `mutool` invocations are now guarded by `Assert-Mutool`. The `-OutDir` verification caught a real drift (form-application's hand-rolled xref writer emitted CRLF against an LF-pinned blob); the writer was normalized to LF, and all four PDFs + four goldens now regenerate byte-identical to the manifest pins. Verified in both directions: success path reproduces pins (exit 0), and a failing `mutool` now aborts loudly (exit 1) instead of silently continuing.
-5. Minor: `main` has **no branch protection**; actions pins were bumped; `.gitattributes` added now; `docs/fidelity-corpus.md` referenced but missing.
+5. Minor: `main` had **no branch protection** — now added (2026-09-12, see §9.4); actions pins were bumped; `.gitattributes` added; `docs/fidelity-corpus.md` referenced but missing.
 
 ## 8. Observations / assessment
 
@@ -78,6 +78,6 @@ Applied FR coverage (with verification evidence):
 1. ~~Resolve the signing decision~~ **DONE (2026-09-12)** — option B (ship unsigned) implemented across `release.yml`, TSD §12.1, README/CONTRIBUTING/CHANGELOG and the handoff; tagging `v0.1.0-beta` now produces an unsigned draft release. Tag once CI stays green.
 2. ~~Add an `-OutDir` switch to `tools/generate-corpus.ps1`, then add the exit-code checks~~ **DONE (2026-09-12)** — sweep complete; see §7.4. Generator and release scripts both now check every native invocation.
 3. Produce Phase 6 exit evidence: a recorded load-test run against TSD targets and a WCAG 2.1 AA audit artifact (confirm the desired artifact format with the maintainer first).
-4. Add branch protection / rulesets on `main`.
+4. ~~Add branch protection / rulesets on `main`.~~ **DONE (2026-09-12)** via the classic branch-protection API: block deletions and force pushes, require linear history, enforced on admins. Deliberately **not** enforced: required status checks and PR review — CI runs on `on: push` after the commit lands, so a required-check on the direct-push workflow would deadlock the `master:main` flow; adopt a PR workflow first if you want those gates. Revert at any time: `gh api -X DELETE repos/sarayunova/PageForge/branches/main/protection`.
 5. Record the `-SkipApi` rationale in the README so hosted deploys are not treated as an accidental gap.
 6. (Post-beta, tracked, not blockers) Port the shell to WinUI 3 and add a native ARM64 build lane, per TSD §12.1.
