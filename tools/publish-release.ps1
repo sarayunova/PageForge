@@ -40,10 +40,23 @@ param(
 $ErrorActionPreference = "Stop"
 
 $root   = Split-Path -Parent $PSScriptRoot
-$dotnet = Join-Path $env:LOCALAPPDATA "Microsoft\dotnet\dotnet.exe"
 
-if (-not (Test-Path $dotnet)) {
-    throw "dotnet not found at expected user-scope path '$dotnet'; set/toolchain first."
+# Resolve the .NET SDK robustly across environments. Prefer an explicit
+# DOTNET_EXE, then PATH (where actions/setup-dotnet puts the SDK on CI runners;
+# `dotnet` is NOT there on GitHub's windows runners any other way), then the dev
+# machine's user-scope install (this machine's SDK is installed with -NoPath).
+$dotnet = $env:DOTNET_EXE
+if (-not $dotnet) {
+    $commandDotnet = Get-Command "dotnet" -ErrorAction SilentlyContinue
+    if ($commandDotnet) { $dotnet = $commandDotnet.Source }
+}
+if (-not $dotnet) {
+    $userScope = Join-Path $env:LOCALAPPDATA "Microsoft\dotnet\dotnet.exe"
+    if (Test-Path $userScope) { $dotnet = $userScope }
+}
+
+if (-not $dotnet -or -not (Test-Path $dotnet)) {
+    throw "dotnet not found (checked DOTNET_EXE, PATH, and user-scope '$env:LOCALAPPDATA\Microsoft\dotnet\dotnet.exe'); set/toolchain first."
 }
 
 $relRoot    = Join-Path $root "artifacts\release"
