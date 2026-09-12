@@ -19,7 +19,11 @@ namespace PageForge.LoadTest;
 ///
 /// Usage:
 ///   dotnet run --project tools/loadtest/PageForge.LoadTest
-///       [--users 20] [--iterations 2] [--p95-ms 450] [--verbose]
+///       [--users 20] [--iterations 2] [--p95-ms 450] [--warm 4] [--verbose]
+/// * --warm drives a small warm-up batch (default 4 VU x 1 iteration) that is
+///   discarded from the report: without it, the first hit of each endpoint
+///   pays JIT/tiering cold-start cost under concurrent load and the measured
+///   tail is dominated by warm-up, not steady state.
 /// Exit code is 0 when targets are met, 1 otherwise.
 /// </summary>
 public static class Program
@@ -34,6 +38,7 @@ public static class Program
         int users = GetInt(args, "users", 20);
         int iterations = GetInt(args, "iterations", 2);
         int p95TargetMs = GetInt(args, "p95-ms", 450);
+        int warmUsers = GetInt(args, "warm", 4);
         bool verbose = args.Contains("--verbose", StringComparer.OrdinalIgnoreCase);
 
         Console.WriteLine($"PageForge load test: {users} virtual users x {iterations} iterations, " +
@@ -46,6 +51,28 @@ public static class Program
         // Host the API once; all VUs share the same in-memory store and worker.
         using var factory = new LoadHostFactory();
         using HttpClient client = factory.CreateClient();
+
+        if (warmUsers > 0)
+        {
+            // Discarded warm-up: fills JIT/tiering and provider caches so the
+            // measured run reflects steady state rather than cold start.
+            var warmTasks = new Task[warmUsers];
+            for (int u = 0; u < warmUsers; u++)
+            {
+                int vu = u;
+                warmTasks[u] = Task.Run(() => RunUserFlowAsync(
+                    client, vu, 1, latencies,
+                    () => { }, () => { }, verbose: false));
+            }
+            await Task.WhenAll(warmTasks);
+            Console.WriteLine($"Warm-up complete ({warmUsers} VU x 1 iteration, excluded from report).");
+        }
+
+        // Reset measurement state after warm-up so the report covers only the
+        // measured batch.
+        latencies = new BoxedConcurrentQueue();
+        totalRequests = 0;
+        failures = 0;
 
         var sw = Stopwatch.StartNew();
 

@@ -90,6 +90,10 @@ cross-check the zip's SHA-256 against the release run's build artifact.
 Signed installers (via Azure Artifact Signing) become the distribution path once
 the signing setup in `CONTRIBUTING.md` is in place.
 
+Release payloads deliberately exclude the hosted API (`-SkipApi`): hosted
+services deploy separately from desktop releases, so installers never bundle a
+dead API server and nothing is omitted by accident.
+
 ## Contributing
 
 See `CONTRIBUTING.md` for the developer workflow and `CODE_OF_CONDUCT.md` for

@@ -436,23 +436,29 @@ recommended two steps:**
    `upload-artifact` v4→v7, `download-artifact` v4→v8) as their own commit, once
    CI is green so breakage is attributable. This also clears the Node 20
    deprecation warning GitHub keeps emailing about.
-4. **Phase 6 exit evidence.** `tools/loadtest/` exists but has no recorded run
-   against TSD targets, and there is no WCAG 2.1 AA audit artifact. Now that WPF
-   is the declared product target (TSD §12.1), a WPF accessibility audit counts
-   as real evidence. Largest remaining *substantive* gap.
+4. **Phase 6 exit evidence — DONE (2026-09-12).** `docs/phase6-evidence/` now
+   holds the recorded load-test report and the WCAG 2.1 AA documented
+   self-assessment (the maintainer picked "documented self-assessment" for the
+   artifact format). Load-test: the harness gained a `--warm` phase because the
+   very first run FAILED (p95 512ms) — cold JIT under 20 concurrent VUs, not
+   service capacity; after warm-up, 20VU×3it p95=92ms and 40VU×3it p95=170ms,
+   0 failures, both PASS, targets met (hermetic in-memory host; real
+   Postgres/MinIO runs are future work). WCAG: honest, evidence-cited, FAILs
+   on 1.1.1/2.1.1/1.4.3/4.1.3 with a 7-item prioritized remediation plan —
+   the shell does NOT yet pass the "AA pass on core screens" exit criterion,
+   and the plan is the concrete remaining work.
 5. **Signing — RESOLVED (option B, 2026-09-12).** Decided: ship the beta
    unsigned until Azure Artifact Signing is configured. The change landed in
    `release.yml` (gate relaxed, truthful release notes) + the TSD §12.1 amendment
    + README/CONTRIBUTING/CHANGELOG. `v*` tags now create unsigned draft
    releases — expected and documented. If the maintainer later completes the
    Azure setup, sign a release and verify the notes flip to "code-signed".
-6. **API excluded from releases** (`-SkipApi`). Fine if hosted deploys are
-   separate, but nothing states so; one sentence in the README closes it.
-   **Unanswered — this question was put to the maintainer and not yet answered.**
-7. **WCAG 2.1 AA audit scope — unanswered.** Asked what standard of artifact is
-   wanted (documented self-assessment against the checklist, automated tooling
-   output, or something customer-facing); the answer changes the size of the job
-   materially. Ask again before starting item 4.
+6. **API excluded from releases** (`-SkipApi`) — **RESOLVED (2026-09-12):** hosted
+   deploys are intentionally separate; a sentence in the README's downloads
+   section records the rationale so the exclusion is not an accidental gap.
+7. **WCAG 2.1 AA audit scope — RESOLVED (2026-09-12):** the maintainer chose a
+   **documented self-assessment**; it is recorded in `docs/phase6-evidence/`
+   and exposes the remediation worklist (see item 4).
 8. **Tag `v0.1.0-beta`** once (1) is settled — the signing decision is made
    (option B), so tagging immediately produces an unsigned draft release.
 
