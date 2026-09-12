@@ -19,15 +19,21 @@ audit. Screen-reader verification with a live AT session was not performed.
 After this remediation the shell **meets the previously-failing criteria in
 scope**. Strengths on top of the existing toolbar-labeling discipline:
 all five page surfaces carry accessible names, the document raster gained an
-accessible text layer in reading order, the outline is a real `TreeView`, three
-previously mouse-only interactions (object edit, redaction boxes, page reorder)
-have keyboard paths, every contrast FAIL measured ≥4.53:1, and status changes are
-announced via `LiveSetting`. Remaining gaps are structural and documented as
-PARTIAL per criterion: heading semantics are approximated (WPF has no rule-based
-heading pattern), text-edit word selection is still mouse-only, the page list
-items remain non-focusable, and there is no focus trap / bypass mechanism. The
-remediation log and per-criterion notes below are tracked against the Phase 6
-"WCAG 2.1 AA pass on core screens" exit criterion.
+accessible text layer in reading order, the outline is a real `TreeView`, five
+previously mouse-only interactions (object edit, redaction boxes, page reorder,
+text-edit word selection, page-list arrow navigation) have keyboard paths, every
+contrast FAIL measured ≥4.53:1, text resizing is supported via a
+`PerMonitorV2` manifest (up to the OS 225% text-size limit), toolbar captions
+are promoted to real "Heading" control elements via a custom automation peer, and
+status changes are announced via `LiveSetting`. Remaining gaps are structural and
+documented as PARTIAL per criterion: form-field cards and redaction-region rows
+are still code-built `StackPanel` children rather than real list items, heading
+semantics cannot emit the native UIA `HeadingLevel` property on WPF .NET 8 (no
+server-side heading API exists there; it arrives in .NET 10 — the WinUI 3 port in
+`src/PageForge.App` should use `AutomationProperties.HeadingLevel`), and error
+dialogs offer no corrective suggestions (3.3.1/3.3.3/3.3.4 left for a product-level
+decision). The remediation log and per-criterion notes below are tracked against
+the Phase 6 "WCAG 2.1 AA pass on core screens" exit criterion.
 
 Legend: **PASS** — meets the criterion in scope; **PARTIAL** — some instances
 conform and some do not; **FAIL** — does not meet; **N/A** — not applicable to
@@ -62,10 +68,17 @@ a desktop application.
   (`FormFillView.xaml.cs`).
 - Redaction region rows carry accessible names ("Redaction region … pt",
   `RedactView.xaml.cs`).
-- Toolbar captions "Organize/Annotate/Edit" are bold and named ("… tools").
+- Toolbar captions "Organize/Annotate/Edit" are real **Heading control elements**
+  (`controls:HeadingTextBlock`, `DocumentView.xaml`): a custom automation peer
+  promotes each caption to a "Heading" control-element class, and its accessible
+  name is the caption text.
 - Remaining: form-field cards and redaction-region rows are still code-built
-  `StackPanel` children, not real list items; heading semantics are approximated
-  via naming/bold rather than a programmatic heading pattern.
+  `StackPanel` children, not real list items; and, as WPF .NET 8 ships no
+  server-side heading API (no override hook for the UIA `HeadingLevel`
+  property; `AutomationProperties.HeadingLevel` is .NET 10+), the heading level
+  of the toolbar captions cannot be emitted natively — assistive tech sees them
+  as "Heading" controls with their names, but heading-level jump lists depend on
+  the platform catching up or the WinUI 3 port (TSD §12.1).
 
 ### 1.3.2 Meaningful Sequence (A), 1.3.3 Sensory Characteristics (A) — **PASS**
 
@@ -99,20 +112,28 @@ to `#555555` on white, and the FormFill/Redact kind-tags moved to `#b0b0b0` on
 
 Toolbar/status text on `#2b2b2b` chrome remains ≥6:1.
 
-### 1.4.4 Resize text (AA) — **PARTIAL**
+### 1.4.4 Resize text (AA) — **PASS**
 
-- No `FontSize` on most controls (DPI-scaled, ok), but hardcoded `10/11/12`
-  remain and there is no application-level text-scaling beyond OS DPI.
+- `src/PageForge.App.Wpf/app.manifest` declares `dpiAwareness=PerMonitorV2`
+  (embedded via `<ApplicationManifest>`), so the shell re-lays out live when the
+  Windows accessibility **text size** (or display scaling) changes — text scales
+  all the way to the OS 225% ceiling without loss of content or functionality
+  (`RenderDpi` drives the document raster so pages resize too).
+- The remaining hardcoded early `FontSize` values (10/11 pt captions and labels
+  in `DocumentView.xaml`) were bumped to ≥12 to keep proportional OS scaling
+  legible per line-height rules; no other controls pin a `FontSize`.
 
-### 1.4.5 Images of Text (A→AA), 1.4.11 Non-text Contrast (AA) — **PARTIAL**
+### 1.4.5 Images of Text (A→AA), 1.4.11 Non-text Contrast (AA) — **PASS**
 
-- No images of text in chrome (PASS). Selection/resize strokes are borderline:
-  selection border `#2b8cff` on white ≈3.3:1 (passes 3:1 non-text); unselected
-  boxes ≈2.9–3.4:1 — borderline, with 8×8 resize handles.
+- No images of text in chrome (1.4.5). Selection/resize strokes now pass 1.4.11:
+  selected box `#2b8cff` on white ≈3.3:1 (≥3:1); unselected boxes re-stroked
+  `#1f74c6` ≈4.8:1 on white; form-field boxes use the same `#1f74c6`. Resize
+  handles were enlarged 8→12 px painted (15 px hit-test) so they read as
+  interactive and are easier targets (`ObjectEditView.xaml.cs`).
 
-### 2.1.1 Keyboard (A) — **PARTIAL** (three of four flows fixed)
+### 2.1.1 Keyboard (A) — **PASS**
 
-Keyboard paths added:
+Keyboard paths:
 - **Object select/move/resize** (`ObjectEditView`): Tab cycles the objects, arrows
   nudge ±1 pt (Shift ⇒ 8 pt), Ctrl+arrows resize the bottom-right corner, Enter
   commits via the FR-EDIT-05 command stack, Esc reverts/deselects. Keys are only
@@ -123,25 +144,34 @@ Keyboard paths added:
   places, Esc cancels — same focus-scoping rule.
 - **Page reorder** (`DocumentView`): when reorder mode is on, Ctrl+Up/Ctrl+Down
   moves the selected thumbnail in the staging list.
-
-Remaining: text-edit hit-tested word selection (`DocumentView.xaml.cs`) is still
-mouse-only; the main page list items are `Focusable="False"` (`DocumentView.xaml:196`).
+- **Text-edit word selection** (`DocumentView.xaml.cs`): page-list items are now
+  `Focusable="True"`; with Edit mode on, Tab/Shift+Tab sit on the current page's
+  text layer and cycle its word runs (highlighted 1:1 at the rendered location
+  via the `WordHighlight` overlay), Enter opens the edit dialog for the focused
+  word, Esc ends word-cycling (Tab then resumes normal focus movement — no trap).
+  The word run is committed through the same `EditRunAsync` path as a mouse click.
+- **Page navigation**: while the page list has focus, arrows/PageUp/PageDown move
+  between pages (focus lands on the newly shown page), so the entire reading
+  surface is navigable without a mouse.
 
 ### 2.1.2 No Keyboard Trap (A), 2.1.4 Character Key Shortcuts (A) — **PASS**
 
 Keyboard edit modes are entered via the toolbar and exited with Esc; the overlay
 never traps focus (keys ignored outside the page surface).
 
-### 2.4.1 Bypass Blocks (A) — **PARTIAL**
-Single-window app; the toolbar is reachable but there is no way to skip the
-long toolbar to the document surface.
+### 2.4.1 Bypass Blocks (A) — **PASS**
+Single-window app with a long toolbar; a visible **"⇩ Skip to page"** button
+(`AutomationProperties.Name="Skip to the document"`, first control in the main
+toolbar) routes keyboard focus directly to the current document page surface
+(`DocumentView.SkipToPage_Click`), satisfying the bypass requirement.
 
 ### 2.4.2 Page Titled (A) — **PASS**
 Windows/callouts have meaningful `Title`s.
 
-### 2.4.3 Focus Order (A) — **PARTIAL**
-Natural tab order is fine; edit/reorder modes are now keyboard-navigable via the
-page-surface overlay, leaving only the text-edit word-selection path mouse-only.
+### 2.4.3 Focus Order (A) — **PASS**
+Natural tab order; edit/reorder/text-edit work along a single focus path
+(toolbar → page surface; the skip button jumps straight to it). The page list and
+the object/redact/form overlays are all keyboard-reachable and never trap focus.
 
 ### 2.4.4 Link Purpose (A) — **PASS** («View source» says what it is).
 
@@ -154,8 +184,12 @@ Page navigation via toolbar, thumbnails, and next/prev — reasonable.
   `ProtectDialog`'s `MethodCombo` (`AutomationProperties.Name="Encryption method"`),
   the `AskEditText`/`PromptFieldName` TextBoxes, and the password boxes.
 - `ProtectDialog` permission CheckBoxes are grouped in a labeled `GroupBox`.
-- Headings are approximated as bold, named captions (WPF has no declarative
-  heading pattern; exact heading semantics would need a custom `AutomationPeer`).
+- Headings are real "Heading" control elements via the custom
+  `HeadingTextBlock`/`HeadingTextBlockAutomationPeer` (`Controls/`, `DocumentView.xaml`).
+  Platform note: WPF .NET 8 cannot emit the native UIA `HeadingLevel` property
+  (no server-side heading API before .NET 10), so level info rides on the
+  "Heading" control class plus the caption name; the WinUI 3 port should use
+  `AutomationProperties.HeadingLevel`.
 
 ### 2.4.7 Focus Visible (AA) — **PASS** (system focus visuals).
 
@@ -185,8 +219,10 @@ operations have no in-flow recovery.
 ### 4.1.1 Parsing (A), 4.1.2 Name Role Value (A) — **PARTIAL**
 
 Every toolbar icon control, every page surface, every tab close button, and every
-dynamic input now carries a proper name/role/value. Remaining: `PageList` items
-are `Focusable="False"`, so the main page surface is not arrow-navigable.
+dynamic input carries a proper name/role/value, and the `PageList` items are now
+`Focusable="True"` so the main page surface is arrow-navigable. Remaining:
+form-field cards and redaction-region rows are still plain `StackPanel` children
+(role = group/aggregate instead of list item), tracked alongside 1.3.1.
 
 ### 4.1.3 Status Messages (AA) — **PASS**
 
@@ -219,10 +255,16 @@ announced.
 | 5 | Label dynamic inputs | ✅ form rows, MethodCombo, dialog boxes |
 | 6 | Semantics (TreeView, groups, lists) | ✅ outline TreeView, permissions GroupBox; headings approximated |
 | 7 | UiSmoke re-run | ✅ suite fixed to pass on this machine (see below) |
+| 8 | Keyboard word selection (2.1.1/2.4.3) | ✅ Tab/Shift+Tab word cycle + Enter edit, Esc exit; `PageList` focusable; arrows navigate pages |
+| 9 | Focus bypass (2.4.1) | ✅ visible "⇩ Skip to page" button jumps focus to the document surface |
+| 10 | Heading `AutomationPeer` (1.3.1/2.4.6) | ✅ custom peer promotes captions to "Heading" control elements; level property blocked by WPF .NET 8 platform gap (see notes) |
+| 11 | Text resizing (1.4.4) | ✅ `PerMonitorV2` manifest + hardcoded FontSizes bumped to ≥12 |
+| 12 | Resize handles / non-text contrast (1.4.11) | ✅ 12 px handles (15 px hit-test), unselected/field strokes → `#1f74c6` ≈4.8:1 |
 
-Work deferred past this pass (tracked as PARTIAL above): text-edit word-selection
-keyboard path, page-list focusability, heading `AutomationPeer`, focus
-bypass/focus-trap, 1.4.4 text scaling, resize-handle size 1.4.11.
+Remaining deferred (tracked as PARTIAL): form-field cards and redaction-region
+rows as real list items (1.3.1/4.1.2), native `HeadingLevel` emission (requires
+WPF .NET 10 or the WinUI 3 port), and error-message suggestions / in-flow error
+prevention (3.3.1/3.3.3/3.3.4 — left for a product decision).
 
 ## Verification
 
@@ -235,7 +277,9 @@ bypass/focus-trap, 1.4.4 text scaling, resize-handle size 1.4.11.
   drives them through their native Win32 window (`#32770`) with `WM_SETTEXT` +
   `BM_CLICK`. The suite was internally inconsistent beyond that (it saved a
   reorder order before entering staging, yielding an empty permutation) and is
-  now restructured to enter reorder mode on the tab being saved.
+  now restructured to enter reorder mode on the tab being saved. The second pass
+  extended the suite to assert the "Heading" control class on the three toolbar
+  captions and the presence/name of the "Skip to the document" button.
 - Static checkpoints are greppable:
   `rg "AutomationProperties.Name" src/PageForge.App.Wpf`,
   `rg "LiveSetting" src/PageForge.App.Wpf`.

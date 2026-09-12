@@ -671,6 +671,15 @@ public sealed class DocumentTabViewModel : ObservableObject
     public async ValueTask<PdfTextRun?> HitTestAsync(double xPt, double yPt, CancellationToken ct = default)
         => await TextEditService.HitTestAsync(_doc.Engine, _doc.CurrentPage, xPt, yPt, ct).ConfigureAwait(false);
 
+    /// <summary>Lists the editable text runs of the currently displayed page, for
+    /// the keyboard word-selection path (WCAG 2.1.1/2.4.3).</summary>
+    public async Task<IReadOnlyList<PdfTextRun>> ListPageRunsAsync(CancellationToken ct = default)
+    {
+        GuardPageCount();
+        int page = Math.Min(_doc.CurrentPage, _doc.PageCount - 1);
+        return await _doc.Engine.ListTextRunsAsync(page, ct).ConfigureAwait(false);
+    }
+
     /// <summary>
     /// Commits a user-facing text edit through the FR-EDIT-02/03 gates and the
     /// FR-EDIT-05 command stack. Runs the overflow/collision analysis and the

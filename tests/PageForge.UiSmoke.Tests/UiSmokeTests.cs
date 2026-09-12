@@ -31,6 +31,15 @@ public class UiSmokeTests
         AutomationElement initial = await app.WaitForVisibleAsync("PageIndicatorText");
         Assert.EndsWith("/ 1", PageForgeApp.GetText(initial).Trim());
 
+        // WCAG 2.4.6/1.3.1: toolbar captions are real "Heading" control elements
+        // in the automation tree, and the 2.4.1 content bypass exists.
+        AssertHeading(app, "Organize tools");
+        AssertHeading(app, "Annotate tools");
+        AssertHeading(app, "Edit tools");
+        AutomationElement skip = app.FindInSelectedTabById("SkipToPageButton")
+            ?? throw new InvalidOperationException("Skip-to-document button not found.");
+        Assert.Equal("Skip to the document", skip.Current.Name);
+
         // Organizer toolbar mounted (FR-PAGE): reorder toggle + save order.
         // Lookups are by AutomationId: exact-name matching is ambiguous because
         // button content text is exposed as its own inner text element with the
@@ -77,6 +86,13 @@ public class UiSmokeTests
         // tab's "2 / 3" before the new tab is selected.
         AutomationElement reopened = await WaitForIndicatorValue(app, "1 / 3");
         Assert.True(File.Exists(outFile), $"reordered file was not written: {outFile}");
+    }
+
+    private static void AssertHeading(PageForgeApp app, string captionName)
+    {
+        AutomationElement? caption = app.FindInSelectedTabByName(captionName)
+            ?? throw new InvalidOperationException($"Heading caption '{captionName}' not found.");
+        Assert.Equal("Heading", caption.Current.ClassName);
     }
 
     private static async Task<string> WaitForText(PageForgeApp app, string automationId)

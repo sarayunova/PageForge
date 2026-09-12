@@ -42,7 +42,7 @@
                 <Grid x:Name="PageHost" Background="White" Margin="24">
                     <Image x:Name="PageImage" Stretch="None" SnapsToDevicePixels="True"
                        AutomationProperties.Name="Form fill page" />
-                    <Canvas x:Name="Overlay" IsHitTestVisible="False" ClipToBounds="True" />
+                    <Canvas x:Name="Overlay" IsHitTestVisible="False" ClipToBounds="True" Focusable="True" />
                 </Grid>
             </ScrollViewer>
         </Grid>

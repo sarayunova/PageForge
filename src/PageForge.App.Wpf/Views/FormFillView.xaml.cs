@@ -5,6 +5,7 @@
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using PageForge.App.Wpf.ViewModels;
@@ -119,7 +120,7 @@ public partial class FormFillView : UserControl
             var border = new Rectangle
             {
                 Fill = new SolidColorBrush(Color.FromArgb(12, 0x2b, 0x8c, 0xff)),
-                Stroke = new SolidColorBrush(Color.FromArgb(0xcc, 0x77, 0x77, 0x77)),
+                Stroke = new SolidColorBrush(Color.FromArgb(0xff, 0x1f, 0x74, 0xc6)),
                 StrokeThickness = 1,
                 StrokeDashArray = new DoubleCollection { 3, 2 },
                 Width = (field.Bounds.X1 - field.Bounds.X0) * _scale,
@@ -347,4 +348,8 @@ public partial class FormFillView : UserControl
         window.ShowDialog();
         return string.IsNullOrWhiteSpace(result) ? null : result;
     }
+
+    /// <summary>Moves keyboard focus onto the page area so the skip-navigation
+    /// bypass (WCAG 2.4.1) can land here when form-fill mode is active.</summary>
+    public void FocusSurface() => Keyboard.Focus(Overlay);
 }

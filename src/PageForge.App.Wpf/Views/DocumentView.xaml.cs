@@ -25,6 +25,12 @@ public partial class DocumentView : UserControl
     private System.Windows.Point _mouseDownPoint;
     private int _lastAnnotatedPage = -1;
 
+    /// <summary>Editable words of the current page for the keyboard word-selection
+    /// path (WCAG 2.1.1/2.4.3); valid only while edit mode is on.</summary>
+    private IReadOnlyList<PdfTextRun> _wordRuns = Array.Empty<PdfTextRun>();
+    private int _wordIndex = -1;
+    private PageSlotViewModel? _wordPage;
+
     public DocumentView()
     {
         InitializeComponent();
@@ -88,6 +94,8 @@ public partial class DocumentView : UserControl
             RedactViewHost.Refresh();
         }
 
+        ClearWordCycle();
+
         RefreshAnnotationsIfNeeded();
     }
 
@@ -149,6 +157,8 @@ public partial class DocumentView : UserControl
         {
             RedactViewHost.Refresh();
         }
+
+        ClearWordCycle();
     }
 
     private void Previous_Click(object sender, RoutedEventArgs e)
@@ -398,6 +408,285 @@ public partial class DocumentView : UserControl
         e.Handled = true;
     }
 
+    /// <summary>WCAG 2.4.1 bypass: jumps keyboard focus over the toolbar straight
+    /// to the visible document surface (page list, or the object/form/redact
+    /// overlay when one of those modes is active).</summary>
+    private void SkipToPage_Click(object sender, RoutedEventArgs e)
+    {
+        if (ObjectView.Visibility == Visibility.Visible)
+        {
+            ObjectView.FocusSurface();
+            return;
+        }
+
+        if (FormView.Visibility == Visibility.Visible)
+        {
+            FormView.FocusSurface();
+            return;
+        }
+
+        if (RedactViewHost.Visibility == Visibility.Visible)
+        {
+            RedactViewHost.FocusSurface();
+            return;
+        }
+
+        FocusCurrentPageItem();
+    }
+
+    private void FocusCurrentPageItem()
+    {
+        if (_vm is null)
+        {
+            return;
+        }
+
+        PageSlotViewModel? slot = _vm.CurrentPageSlot
+            ?? (_vm.Pages.Count > 0 ? _vm.Pages[0] : null);
+        if (slot is null)
+        {
+            return;
+        }
+
+        PageList.ScrollIntoView(slot);
+        _ = FocusPageItemWhenReadyAsync(slot);
+    }
+
+    private async Task FocusPageItemWhenReadyAsync(PageSlotViewModel slot)
+    {
+        await System.Windows.Application.Current.Dispatcher
+            .InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Loaded);
+
+        if (PageList.ItemContainerGenerator.ContainerFromItem(slot) is ListBoxItem item)
+        {
+            Keyboard.Focus(item);
+        }
+        else
+        {
+            PageList.Focus();
+        }
+    }
+
+    /// <summary>Keyboard navigation of the page surface (WCAG 2.1.1/2.4.3): the
+    /// main page list items are focusable, so Tab reaches the document and
+    /// Up/Down/Left/Right/PageUp/PageDown flip pages. While edit mode is on,
+    /// Tab/Shift+Tab instead cycles the page's editable words (Enter edits, Esc
+    /// cancels). Focus-scoped so the toolbar's own Tab order is untouched.</summary>
+    private void PageList_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (_vm is null || e.Handled || !PageList.IsKeyboardFocusWithin)
+        {
+            return;
+        }
+
+        if (EditModeToggle?.IsChecked == true && HandleWordCycleKey(e))
+        {
+            return;
+        }
+
+        switch (e.Key)
+        {
+            case Key.Left:
+            case Key.Up:
+            case Key.PageUp:
+                _vm.PreviousPage();
+                RefreshAndScroll();
+                e.Handled = true;
+                break;
+            case Key.Right:
+            case Key.Down:
+            case Key.PageDown:
+                _vm.NextPage();
+                RefreshAndScroll();
+                e.Handled = true;
+                break;
+        }
+    }
+
+    private bool HandleWordCycleKey(KeyEventArgs e)
+    {
+        if (e.Key == Key.Tab)
+        {
+            _ = HandleWordTabAsync();
+            e.Handled = true;
+            return true;
+        }
+
+        if (_wordIndex < 0)
+        {
+            return false;
+        }
+
+        if (e.Key == Key.Enter)
+        {
+            CommitSelectedWordAsync();
+            e.Handled = true;
+            return true;
+        }
+
+        if (e.Key == Key.Escape)
+        {
+            ClearWordCycle();
+            e.Handled = true;
+            return true;
+        }
+
+        return false;
+    }
+
+    private async Task HandleWordTabAsync()
+    {
+        if (_vm is null)
+        {
+            return;
+        }
+
+        if (_wordRuns.Count == 0 || _wordPage is null)
+        {
+            await LoadWordsAsync();
+            return;
+        }
+
+        bool forward = (Keyboard.Modifiers & ModifierKeys.Shift) == 0;
+        int next = _wordIndex < 0
+            ? (forward ? 0 : _wordRuns.Count - 1)
+            : (_wordIndex + (forward ? 1 : -1) + _wordRuns.Count) % _wordRuns.Count;
+        await PresentWordAsync(next);
+    }
+
+    /// <summary>Loads the current page's editable runs for the keyboard
+    /// word-selection path and puts the highlight on the first word.</summary>
+    private async Task LoadWordsAsync()
+    {
+        if (_vm is null)
+        {
+            return;
+        }
+
+        var slot = _vm.CurrentPageSlot;
+        if (slot is null)
+        {
+            _wordRuns = Array.Empty<PdfTextRun>();
+            _wordIndex = -1;
+            _wordPage = null;
+            return;
+        }
+
+        try
+        {
+            IReadOnlyList<PdfTextRun> runs = await _vm.ListPageRunsAsync();
+            _wordRuns = runs;
+            _wordPage = slot;
+            _wordIndex = -1;
+            if (_wordRuns.Count == 0)
+            {
+                StatusText.Text = "Edit mode: this page has no editable words.";
+                return;
+            }
+
+            await PresentWordAsync(0);
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = $"Edit mode: could not load words ({ex.Message}).";
+        }
+    }
+
+    private async Task PresentWordAsync(int index)
+    {
+        if (_vm is null || _wordPage is null || index < 0 || index >= _wordRuns.Count)
+        {
+            return;
+        }
+
+        _wordIndex = index;
+        PdfTextRun run = _wordRuns[index];
+        PageSlotViewModel slot = _wordPage;
+
+        PageList.ScrollIntoView(slot);
+        await System.Windows.Application.Current.Dispatcher
+            .InvokeAsync(() => { }, System.Windows.Threading.DispatcherPriority.Loaded);
+
+        if (PageList.ItemContainerGenerator.ContainerFromItem(slot) is ListBoxItem lvi)
+        {
+            Border? highlight = FindVisualChildByName<Border>(lvi, "WordHighlight");
+            if (highlight is not null && slot.Image.Bitmap is { PixelHeight: > 0 } bitmap)
+            {
+                double scale = _vm!.RenderDpi / 72.0;
+                double pixelH = bitmap.PixelHeight;
+                highlight.Visibility = Visibility.Visible;
+                highlight.Margin = new Thickness(run.X0 * scale, pixelH - run.Y1 * scale, 0, 0);
+                highlight.Width = Math.Max(2.0, (run.X1 - run.X0) * scale);
+                highlight.Height = Math.Max(2.0, (run.Y1 - run.Y0) * scale);
+            }
+        }
+
+        StatusText.Text = $"Edit mode: word {index + 1} of {_wordRuns.Count}: “{run.Text}” — Enter to edit, Tab for the next word, Esc to stop.";
+    }
+
+    private async void CommitSelectedWordAsync()
+    {
+        if (_wordIndex < 0 || _wordIndex >= _wordRuns.Count)
+        {
+            return;
+        }
+
+        PdfTextRun run = _wordRuns[_wordIndex];
+        ClearWordCycle();
+        await EditRunAsync(run);
+        if (_vm is not null)
+        {
+            Refresh();
+        }
+    }
+
+    private void ClearWordCycle()
+    {
+        if (_wordIndex < 0 && _wordRuns.Count == 0)
+        {
+            return;
+        }
+
+        _wordRuns = Array.Empty<PdfTextRun>();
+        _wordIndex = -1;
+        HideWordHighlight(_wordPage);
+        _wordPage = null;
+    }
+
+    private void HideWordHighlight(PageSlotViewModel? slot)
+    {
+        if (slot is null || PageList.ItemContainerGenerator.ContainerFromItem(slot) is not ListBoxItem lvi)
+        {
+            return;
+        }
+
+        if (FindVisualChildByName<Border>(lvi, "WordHighlight") is { } highlight)
+        {
+            highlight.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private static T? FindVisualChildByName<T>(DependencyObject parent, string name)
+        where T : FrameworkElement
+    {
+        int count = VisualTreeHelper.GetChildrenCount(parent);
+        for (int i = 0; i < count; i++)
+        {
+            DependencyObject child = VisualTreeHelper.GetChild(parent, i);
+            if (child is T match && match.Name == name)
+            {
+                return match;
+            }
+
+            if (FindVisualChildByName<T>(child, name) is { } nested)
+            {
+                return nested;
+            }
+        }
+
+        return null;
+    }
+
     private void SearchList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (SearchList.SelectedItem is SearchResultViewModel hit)
@@ -506,8 +795,9 @@ public partial class DocumentView : UserControl
         }
 
         StatusText.Text = (EditModeToggle?.IsChecked == true)
-            ? "Edit mode: click a word on the page to replace its text"
+            ? "Edit mode: click a word, or Tab / Shift+Tab to pick one and Enter to edit it, Esc to stop"
             : _vm?.Status ?? string.Empty;
+        ClearWordCycle();
     }
 
     private void ObjectModeToggle_Changed(object sender, RoutedEventArgs e)
@@ -669,49 +959,57 @@ public partial class DocumentView : UserControl
                 return;
             }
 
-            string? newText = AskEditText(run.Text);
-            if (newText is null)
-            {
-                return;
-            }
-
-            TextEditOutcome outcome = await _vm.EditTextRunAsync(run.Index, newText, allowCollision: false).ConfigureAwait(true);
-            if (outcome.Succeeded)
-            {
-                StatusText.Text = _vm.Status;
-                return;
-            }
-
-            // FR-EDIT-02 collision confirmation gateway: surface the warning and
-            // require explicit confirmation before committing.
-            if (outcome.Kind == TextEditOutcomeKind.NeedsConfirmation)
-            {
-                var confirm = MessageBox.Show(
-                    $"{outcome.Message}\n\nApply it anyway?",
-                    "Overflow / collision",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Warning);
-                if (confirm == MessageBoxResult.Yes)
-                {
-                    TextEditOutcome forced = await _vm.EditTextRunAsync(run.Index, newText, allowCollision: true).ConfigureAwait(true);
-                    StatusText.Text = forced.Succeeded ? _vm.Status : forced.Message ?? "Edit not applied.";
-                }
-                else
-                {
-                    StatusText.Text = "Edit cancelled.";
-                }
-
-                return;
-            }
-
-            // FR-EDIT-03 font fidelity: the text can't be painted faithfully.
-            StatusText.Text = outcome.Message ?? "Edit not applied.";
-            MessageBox.Show(outcome.Message ?? "The new text cannot be rendered by the run's font.", "Font fidelity", MessageBoxButton.OK, MessageBoxImage.Information);
+            await EditRunAsync(run);
         }
         catch (Exception ex)
         {
             MessageBox.Show($"Edit failed:\n{ex.Message}", "PageForge", MessageBoxButton.OK, MessageBoxImage.Error);
         }
+    }
+
+    /// <summary>Prompts for replacement text and commits it through the
+    /// FR-EDIT-02/03 gates and the FR-EDIT-05 command stack. Shared by the
+    /// mouse hit-test path and the keyboard word-selection path (WCAG 2.1.1).</summary>
+    private async Task EditRunAsync(PdfTextRun run)
+    {
+        string? newText = AskEditText(run.Text);
+        if (newText is null)
+        {
+            return;
+        }
+
+        TextEditOutcome outcome = await _vm!.EditTextRunAsync(run.Index, newText, allowCollision: false).ConfigureAwait(true);
+        if (outcome.Succeeded)
+        {
+            StatusText.Text = _vm.Status;
+            return;
+        }
+
+        // FR-EDIT-02 collision confirmation gateway: surface the warning and
+        // require explicit confirmation before committing.
+        if (outcome.Kind == TextEditOutcomeKind.NeedsConfirmation)
+        {
+            var confirm = MessageBox.Show(
+                $"{outcome.Message}\n\nApply it anyway?",
+                "Overflow / collision",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+            if (confirm == MessageBoxResult.Yes)
+            {
+                TextEditOutcome forced = await _vm.EditTextRunAsync(run.Index, newText, allowCollision: true).ConfigureAwait(true);
+                StatusText.Text = forced.Succeeded ? _vm.Status : forced.Message ?? "Edit not applied.";
+            }
+            else
+            {
+                StatusText.Text = "Edit cancelled.";
+            }
+
+            return;
+        }
+
+        // FR-EDIT-03 font fidelity: the text can't be painted faithfully.
+        StatusText.Text = outcome.Message ?? "Edit not applied.";
+        MessageBox.Show(outcome.Message ?? "The new text cannot be rendered by the run's font.", "Font fidelity", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     /// <summary>Opens a small prompt for replacement text. Returns the text, or

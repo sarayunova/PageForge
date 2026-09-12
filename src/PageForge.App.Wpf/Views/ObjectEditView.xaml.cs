@@ -23,8 +23,10 @@ namespace PageForge.App.Wpf.Views;
 /// </summary>
 public partial class ObjectEditView : UserControl
 {
-    private const double HandleSize = 8;
-    private const double HandleHit = 11;
+    // WCAG 1.4.11: handles render at >=12px and every selection stroke is >=3:1 on
+    // white (selected #2b8cff ≈3.3:1, unselected #1f74c6 ≈4.8:1).
+    private const double HandleSize = 12;
+    private const double HandleHit = 15;
 
     private sealed class ObjBox
     {
@@ -127,7 +129,7 @@ public partial class ObjectEditView : UserControl
             var border = new Rectangle
             {
                 Fill = new SolidColorBrush(Color.FromArgb(16, 0x2b, 0x8c, 0xff)),
-                Stroke = new SolidColorBrush(Color.FromArgb(0xcc, 0x77, 0x77, 0x77)),
+                Stroke = new SolidColorBrush(Color.FromArgb(0xff, 0x1f, 0x74, 0xc6)),
                 StrokeThickness = 1,
                 StrokeDashArray = new DoubleCollection { 3, 2 },
             };
@@ -208,7 +210,7 @@ public partial class ObjectEditView : UserControl
             foreach (ObjBox box in _boxes)
             {
                 box.Visual.Fill = new SolidColorBrush(Color.FromArgb(16, 0x2b, 0x8c, 0xff));
-                box.Visual.Stroke = new SolidColorBrush(Color.FromArgb(0xcc, 0x77, 0x77, 0x77));
+                box.Visual.Stroke = new SolidColorBrush(Color.FromArgb(0xff, 0x1f, 0x74, 0xc6));
                 box.Visual.StrokeThickness = 1;
                 box.Visual.StrokeDashArray = new DoubleCollection { 3, 2 };
             }
@@ -610,4 +612,8 @@ public partial class ObjectEditView : UserControl
     private void Hint(string text) => HintText.Text = text;
 
     private void Status(string text) => HintText.Text = text;
+
+    /// <summary>Moves keyboard focus onto the interactive surface so the keyboard
+    /// selection/move/resize path is reachable with one action (WCAG 2.4.1).</summary>
+    public void FocusSurface() => Keyboard.Focus(Overlay);
 }

@@ -448,4 +448,8 @@ public partial class RedactView : UserControl
     }
 
     private void Hint(string text) => HintText.Text = text;
+
+    /// <summary>Moves keyboard focus onto the interactive overlay so the keyboard
+    /// redaction path is reachable with one action (WCAG 2.4.1).</summary>
+    public void FocusSurface() => Keyboard.Focus(Overlay);
 }
