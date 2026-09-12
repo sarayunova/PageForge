@@ -43,6 +43,24 @@ services:
       timeout: 5s
       retries: 10
 
+  # Mailpit is the local SMTP sink (dev/test only). The hosted API's
+  # `Email:Provider=smtp` path points here; mail is captured in the Mailpit
+  # web UI (http://localhost:8025) and is never delivered off-box. It also
+  # lets the e-sign completion/reminder lanes run end-to-end in dev without a
+  # real mail server.
+  mailpit:
+    image: axllent/mailpit:v1.20
+    container_name: pageforge-mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025"  # SMTP (the API's SMTP endpoint)
+      - "8025:8025"  # Web UI
+    healthcheck:
+      test: ["CMD", "/mailpit", "ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   # MinIO (S3-compatible) is reserved for document-version blob storage
   # (FR-SYNC). Provided here so the local stack is complete for Phase 4C.
   minio:
