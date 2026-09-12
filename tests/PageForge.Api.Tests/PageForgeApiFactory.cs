@@ -27,6 +27,9 @@ public sealed class PageForgeApiFactory : WebApplicationFactory<Program>
     public const string Issuer = "PageForge";
     public const string Audience = "PageForge";
 
+    /// <summary>Env var that flips this factory into hosted-CI mode ("1" = the `api-hosted` lane).</summary>
+    public const string HostedCiEnvVar = "PAGEFORGE_HOSTED_CI";
+
     // A fixed database name with a shared InMemoryDatabaseRoot so every DbContext
     // instance (the app's scoped one AND the factory's EnsureCreated context) sees
     // the same data. Static so all factory instances reuse one in-memory store and
@@ -37,31 +40,57 @@ public sealed class PageForgeApiFactory : WebApplicationFactory<Program>
     /// <summary>Captured outbound email for this factory instance (e-sign reminders/certificates).</summary>
     public RecordingEmailSender Email { get; } = new();
 
+    /// <summary>True when the <see cref="HostedCiEnvVar"/> gate is "1" (CI `api-hosted` job).</summary>
+    public static bool HostedCiEnabled =>
+        string.Equals(
+            Environment.GetEnvironmentVariable(HostedCiEnvVar) ?? "0", "1",
+            StringComparison.Ordinal);
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
 
+        bool hosted = HostedCiEnabled;
+
         builder.ConfigureServices(services =>
         {
-            ServiceDescriptor? db = services.SingleOrDefault(
-                d => d.ServiceType == typeof(DbContextOptions<AppDbContext>));
-            if (db is not null) services.Remove(db);
+            if (!hosted)
+            {
+                // Hermetic (default): swap the real Npgsql context for the in-memory
+                // provider and the real MinIO-backed blob storage for a fake, so
+                // integration tests run hermetically with no external database.
+                ServiceDescriptor? db = services.SingleOrDefault(
+                    d => d.ServiceType == typeof(DbContextOptions<AppDbContext>));
+                if (db is not null) services.Remove(db);
 
-            services.AddDbContext<AppDbContext>(options =>
-                options.UseInMemoryDatabase(_dbName, _root)
-                    .ConfigureWarnings(w =>
-                        w.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning)));
+                services.AddDbContext<AppDbContext>(options =>
+                    options.UseInMemoryDatabase(_dbName, _root)
+                        .ConfigureWarnings(w =>
+                            w.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning)));
 
-            // Substitute the real MinIO-backed blob storage with an in-memory fake
-            // so sync integration tests need no MinIO/network, and disable the Sync
-            // config section (which the real app reads from appsettings.json).
-            ServiceDescriptor? blob = services.SingleOrDefault(
-                d => d.ServiceType == typeof(IBlobStorage));
-            if (blob is not null) services.Remove(blob);
-            services.AddSingleton<IBlobStorage, FakeBlobStorage>();
-            builder.UseSetting("Sync:Endpoint", "");
-            builder.UseSetting("Sync:AccessKey", "");
-            builder.UseSetting("Sync:SecretKey", "");
+                // Substitute the real MinIO-backed blob storage with an in-memory fake
+                // so sync integration tests need no MinIO/network, and disable the Sync
+                // config section (which the real app reads from appsettings.json).
+                ServiceDescriptor? blob = services.SingleOrDefault(
+                    d => d.ServiceType == typeof(IBlobStorage));
+                if (blob is not null) services.Remove(blob);
+                services.AddSingleton<IBlobStorage, FakeBlobStorage>();
+                builder.UseSetting("Sync:Endpoint", "");
+                builder.UseSetting("Sync:AccessKey", "");
+                builder.UseSetting("Sync:SecretKey", "");
+            }
+            else
+            {
+                // Hosted CI (`PAGEFORGE_HOSTED_CI=1`, the `api-hosted` job): KEEP the
+                // real Npgsql <see cref="AppDbContext"/> and the real MinIO-backed
+                // <see cref="IBlobStorage"/> exactly as the real Program.cs registers
+                // them (the job's service containers provide Postgres + MinIO), and
+                // turn on EF auto-migration so `MigrateAsync` provisions the schema —
+                // the same path the deployed hosted API takes. All other seams below
+                // (email capture, fixed JWT) are unchanged so the 46 e-identity and
+                // e-sign assertions behave identically in both modes.
+                builder.UseSetting("Database:AutoMigrate", "true");
+            }
 
             // Replace the config-selected email sender with a capture sink so
             // e-sign tests can assert reminders/certificates without SMTP.
@@ -75,12 +104,16 @@ public sealed class PageForgeApiFactory : WebApplicationFactory<Program>
             builder.UseSetting("Jwt:Issuer", Issuer);
             builder.UseSetting("Jwt:Audience", Audience);
             builder.UseSetting("Jwt:AccessExpiryMinutes", "30");
-            builder.UseSetting("Database:AutoMigrate", "false");
 
-            ServiceProvider sp = services.BuildServiceProvider();
-            using IServiceScope scope = sp.CreateScope();
-            var ctx = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-            ctx.Database.EnsureCreated();
+            if (!hosted)
+            {
+                builder.UseSetting("Database:AutoMigrate", "false");
+
+                ServiceProvider sp = services.BuildServiceProvider();
+                using IServiceScope scope = sp.CreateScope();
+                var ctx = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+                ctx.Database.EnsureCreated();
+            }
         });
 
         builder.UseSetting("detailedErrors", "true");

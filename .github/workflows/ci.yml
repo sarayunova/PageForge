@@ -210,3 +210,83 @@ jobs:
           & $msbuild src/PageForge.App/PageForge.App.csproj -t:Build `
             -p:Configuration=Release -p:Platform=x64 -p:RuntimeIdentifier=win-x64
           if ($LASTEXITCODE -ne 0) { throw "build failed (exit $LASTEXITCODE)" }
+
+  api-hosted:
+    # Hosted-API lane: runs the API integration suite against the REAL PostgreSQL
+    # and REAL MinIO instead of the hermetic in-memory/fake substitutions. The
+    # PageForgeApiFactory reads PAGEFORGE_HOSTED_CI=1 and keeps the real Npgsql
+    # AppDbContext + real MinIO-backed IBlobStorage exactly as Program.cs
+    # registers them, turns on EF auto-migration (Database:AutoMigrate=true), and
+    # lets GitHub Actions provision both services as the job's service
+    # containers. All other seams (email capture sink, fixed JWT) are unchanged,
+    # so the 47 assertions behave identically to the hermetic managed-build lane.
+    name: Hosted API integration (Postgres + MinIO)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [native-build]
+    env:
+      PAGEFORGE_HOSTED_CI: "1"
+      # The hosted lane uses the SAME native shim the native-build job published,
+      # so the shell OCR path is exercised exactly as it is in managed-build.
+      PAGEFORGE_REQUIRE_NATIVE: "1"
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: pageforge
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d pageforge"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      minio:
+        image: minio/minio:latest
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+        command: server /data --console-address ":9001"
+        ports:
+          - 9000:9000
+        options: >-
+          --health-cmd "curl -f http://localhost:9000/minio/health/live"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 8.0.x
+      - uses: actions/download-artifact@v8
+        with:
+          name: native-shim
+          path: native/out
+      - name: Build API + tests
+        shell: pwsh
+        run: |
+          $api = 'services/PageForge.Api/PageForge.Api.csproj'
+          $tests = 'tests/PageForge.Api.Tests/PageForge.Api.Tests.csproj'
+          foreach ($p in @($api, $tests)) {
+            dotnet build $p -c Release -warnaserror
+            if ($LASTEXITCODE -ne 0) { throw "build failed for $p (exit $LASTEXITCODE)" }
+          }
+      - name: Run hosted API suite (real Postgres + MinIO)
+        shell: pwsh
+        run: |
+          $suites = @(
+            'services/PageForge.Api',
+            'tests/PageForge.Api.Tests')
+          $failed = @()
+          foreach ($s in $suites) {
+            dotnet test $s -c Release --no-build
+            if ($LASTEXITCODE -ne 0) { $failed += "$s (exit $LASTEXITCODE)" }
+          }
+          if ($failed) {
+            Write-Error "hosted API suites failed:`n$($failed -join "`n")"
+            exit 1
+          }
+          Write-Host "all hosted API suites passed"
