@@ -2,8 +2,10 @@
 
 Status: **Phase R (render) and Phases U0–U2 (tokens, Fluent chrome, toolbar) are
 done and committed** on branch `fix/viewer-render-phase-r`, which is pushed to
-`origin`. Phase U3 (document surface) and U4 (MVVM cleanup) are the remaining
-work. Read `AGENTS.md` and the TRD/TSD first.
+`origin`. **Phase U4 (MVVM cleanup) is part-done** — the command bar, status line
+and list controls are converted; the per-mode child views are not. Phase U3
+(document surface) is still open, though three of its layout bugs were fixed
+along the way. Read `AGENTS.md` and the TRD/TSD first.
 
 ## 1. What this project actually is
 
@@ -97,6 +99,41 @@ sink (`Diagnostics/FileLoggerProvider.cs`) is in-repo, because every dependency
 needs an AGPL licence check and a notices entry, and that is a poor trade for an
 append behind a lock.
 
+**Phase U4, part one (`5e3d916`, `69b19c3`, `6abf2d8`).** The command bar, the
+status line and all five list controls now use commands and bindings. Three
+things are worth carrying forward from it:
+
+- Dropping `x:Name` from a bound element broke UiSmoke instantly — `x:Name` is
+  what supplies the `AutomationId`. Keep the names through every rename.
+- A `Command` binding that does not resolve leaves the button visible, enabled
+  and completely inert: no exception, no log. Same silent-failure shape as the
+  blank-viewer bug. UiSmoke now invokes Zoom in and asserts the readout reaches
+  125%.
+- The status line needed a concept, not just a binding. Mode hints belong to the
+  view and must come down when a mode is switched off; document outcomes belong
+  to the view model. They were one field, so turning a mode off could not restore
+  what the line said before — it had already been overwritten with the hint.
+  `Status` now reads `_statusHint ?? _status`.
+
+**Three layout bugs found and fixed (`2c2fd04`, `edf93bf`, `9884465`).** All had
+been shipping:
+
+- The form and redaction **side panels were invisible**. Both set
+  `DockPanel.Dock="Right"` on a child of a `Grid`, where the attached property is
+  silently ignored, so the panel and the page shared one cell and the page —
+  declared second — covered it. Nobody could see the list of form fields or of
+  marked redaction regions.
+- Fixing that exposed the **Apply bar being pushed off its own panel**: a
+  `DockPanel` gives the fill slot to its *last* child whatever its `Dock` says.
+- The **mode toolbars overflowed**, hint and buttons in one `StackPanel`, so the
+  last command sat past the right edge. Same class Phase U2 fixed on the main
+  toolbar; the contextual rows never got it.
+
+Also: nine hardcoded dark-theme colours survived Phase U0 in the panels that
+build chrome in code, invisible on a light background. `Views/ThemedElements.cs`
+resolves them from tokens via `SetResourceReference`, so they follow a live theme
+swap.
+
 ### Still open on the UI
 
 - **Phase U3 — the document surface.** Page shadows and a proper canvas
@@ -104,13 +141,13 @@ append behind a lock.
   a bare panel), per-page loading skeletons, and a **collapsible sidebar with a
   splitter** — it is still a fixed `Width="270"` with no collapse
   (`DocumentView.xaml:355`).
-- **Phase U4 — MVVM cleanup.** `DocumentView.xaml.cs` is **1,335 lines** of
-  imperative wiring, assigning `ItemsSource` and text by hand (`Refresh()`,
-  `RefreshAndScroll()`) instead of binding. There is **no `ICommand` anywhere in
-  the shell** — every control is a `Click` handler. This is what makes any
-  future UI change expensive, and it is where the original render bug lived. Do
-  it incrementally, one surface at a time, keeping UiSmoke green: it looks up
-  controls by `AutomationId`, so preserve those names through every rename.
+- **Phase U4, part two — the per-mode child views.** `DocumentView.xaml.cs` is
+  down to **1,306 lines**, but `ObjectEditView`, `FormFillView` and `RedactView`
+  still expose imperative `Refresh()` methods the parent calls on every state
+  change. Each rebuilds overlay rectangles positioned from PDF geometry, so
+  converting them means an `ItemsControl` over a `Canvas` with bound positions,
+  per view. That is a design change rather than a mechanical one and probably
+  wants its own session.
 - **No fit-to-width.** The old "Fit" button called `ZoomReset()` (100%) despite
   its tooltip; it was renamed "Reset zoom to 100%", so it is honest now, but
   actual fit-to-width / fit-page does not exist.
@@ -118,6 +155,26 @@ append behind a lock.
   and compiles, but no test forces a render failure, so neither the panel nor
   the error-path logging is proven on screen. A `--smoke` proof that injects a
   failing render would cover both.
+
+### What UiSmoke covers now, and what it still cannot
+
+All six tool groups are checked at **1200x820 and again at 900x600** (the
+window's declared `MinWidth`): every command must have a non-zero size and lie
+inside the window, and each side panel's header must not overlap the page.
+`ResizeAsync` refuses to return if the window did not actually reach the
+requested width, so a silent no-op cannot make those assertions vacuous.
+
+Every one of those assertions was checked against the bug it exists for, by
+reverting the fix and watching it fail. Do the same for any new one — a test that
+has never failed is not known to work.
+
+It still cannot see **occlusion by a same-rect sibling** (UIA has no z-order) or
+**colour correctness** beyond the single `ContentMutedBrush` token asserted in
+`--smoke`. Catching those means screenshot-diffing against approved baselines,
+which is its own infrastructure decision rather than more UiSmoke.
+
+Use `--theme light|dark|system` to inspect a palette without touching the
+machine's Windows setting.
 
 Accessibility is a gate on every UI phase, not a phase of its own: Phase 6
 reached WCAG 2.1 AA and the restyle must not regress contrast, keyboard paths,
@@ -131,14 +188,14 @@ in `THIRD-PARTY-NOTICES.md`. Permissive (MIT/Apache-2.0) is fine; commercial
 suites (Syncfusion, DevExpress, Telerik) are a licence and distribution problem
 for an AGPL open-source beta and are ruled out.
 
-Taken so far, both MIT and both recorded: **WPF-UI** 4.3.0 (Fluent control
-styles, Mica, the icon set) and **Microsoft.Extensions.Logging** 8.0.1.
+Taken so far, all MIT and all recorded: **WPF-UI** 4.3.0 (Fluent control styles,
+Mica, the icon set), **Microsoft.Extensions.Logging** 8.0.1 and
+**CommunityToolkit.Mvvm** 8.4.0.
 
 Still worth taking when the relevant phase starts:
 
 | Package | Licence | Why |
 |---|---|---|
-| **CommunityToolkit.Mvvm** | MIT | Source-generated `ObservableProperty`/`RelayCommand`. The prerequisite for Phase U4 — it is what lets the 1,335-line code-behind become bindings. |
 | **Microsoft.Xaml.Behaviors.Wpf** | MIT | Proper behaviors/triggers, replacing the hand-rolled attached-property `Loaded` hooks — exactly where the render bug lived. |
 | **Microsoft.Extensions.DependencyInjection** | MIT | A real container, so `AppLog`'s static holder can become injection. `AppLog.Factory` is the single seam to repoint. |
 
@@ -162,8 +219,21 @@ disposed mid-write.
 therefore a silent no-op and the hosted lane's database stayed empty; the fix
 was `EnsureCreatedAsync()`, which builds the schema from the model. That is a
 test-lane provision, **not a production story** — `EnsureCreated` cannot evolve
-a schema. Real EF migrations are owed before the API is deployed anywhere
-durable.
+a schema. **Real EF migrations are owed before the API is deployed anywhere
+durable** — this is the one piece of genuine product debt on this branch.
+
+`85c6b7b` fixed a flake that failed
+`OcrJobsApiTests.Submit_job_completes_and_notifies_owner` about one run in three.
+It was not timing: `PageForgeApiFactory`'s in-memory database name and root are
+**static**, so every test class's host shares one database, while each host has
+its own `RecordingEmailSender`. `OcrJobWorker` swept items still marked Queued at
+start-up, so a host coming up could pick up another host's job, complete it in
+its own scope, and deliver the completion email to the wrong recorder. Sweeping
+is right for a deployed API, so it stays on by default behind
+`Ocr:SweepQueuedOnStart` and the test factory turns it off.
+
+That shared static database is still the underlying smell. If anything similar
+resurfaces, giving each factory its own database name is the real fix.
 
 ## 6. Answers to the questions this note used to ask
 
@@ -183,7 +253,30 @@ Branch `fix/viewer-render-phase-r` is pushed and well ahead of
 is clean.
 
 Suites all green at the time of writing: Core 154, Fidelity 48, API hermetic 47,
-UiSmoke 1, and `--smoke` exits 0.
+UiSmoke 2, and `--smoke` exits 0.
 
-Next step is **Phase U3**, doing U4 incrementally alongside it as each surface is
+Next step is **Phase U3**, doing the rest of U4 alongside it as each surface is
 touched. Before deep U4 work, get an answer on the WinUI port timing (§6.4).
+
+One sequencing note, because it changes the answer to §6.4. Doing U4 **before**
+the WinUI port is not optional polish. Code-behind is the part of a WPF shell
+that does not port; view models and bindings port nearly as they are. Every
+`Click` handler left in place gets rewritten once for WinUI and again for MVVM.
+So the port is the strongest argument *for* finishing U4, not a reason to skip
+it.
+
+If the port does go ahead, the hard blocker is that the WinUI spike **does not
+build on this machine**:
+
+```
+MrtCore.PriGen.targets(914,5): error MSB4062: The
+"Microsoft.Build.Packaging.Pri.Tasks.ExpandPriContent" task could not be
+loaded from ...\AppxPackage\Microsoft.Build.Packaging.Pri.Tasks.dll
+```
+
+That assembly ships with Visual Studio's **Windows application development**
+workload, not the .NET SDK. Until it is installed nothing WinUI can be compiled
+or run. The four genuine rewrites once it is: worker-thread bitmaps (WinUI has no
+`Freeze()`), `MessageBox` → async `ContentDialog` (31 call sites), `DynamicResource`
+→ `ThemeResource` (93 sites), and page rotation (`LayoutTransform` has no WinUI
+equivalent that resizes the layout slot).
