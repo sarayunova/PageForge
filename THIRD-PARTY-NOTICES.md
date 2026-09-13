@@ -41,6 +41,20 @@ repository (`.gitignore`) and is not redistributed as a binary-only artifact.
   Unlike the entries in the build-tooling section below, this assembly **is
   distributed** with the desktop application.
 
+### Microsoft.Extensions.Logging — the desktop shell's logging abstraction
+- Version: 8.0.1 (with its transitive `Microsoft.Extensions.Logging.Abstractions`,
+  `Microsoft.Extensions.DependencyInjection`(`.Abstractions`), `Microsoft.Extensions.Options`
+  and `Microsoft.Extensions.Primitives` dependencies)
+- Source: `https://github.com/dotnet/runtime`
+- License: MIT
+- Copyright: .NET Foundation and Contributors
+- Usage: supplies `ILogger` and the logger factory behind
+  `src/PageForge.App.Wpf/Diagnostics/AppLog.cs`, replacing `System.Diagnostics.Trace`
+  so a failure on a user's machine leaves a readable trail. Only the abstraction and
+  factory are taken; the sink itself (`Diagnostics/FileLoggerProvider.cs`) is
+  PageForge code, so no logging framework is distributed. These assemblies **are
+  distributed** with the desktop application.
+
 ## Build / verification tooling (used at build or test time, not distributed)
 
 ### qpdf — structural PDF validation (dev tool)

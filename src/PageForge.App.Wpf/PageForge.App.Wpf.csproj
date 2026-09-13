@@ -40,8 +40,11 @@
   <ItemGroup>
     <None Include="..\..\tools\tessdata\eng.traineddata" CopyToOutputDirectory="PreserveNewest" Link="tessdata\eng.traineddata" />
   </ItemGroup>
+  <!-- Logging abstraction + the default factory. The sink is in-repo
+       (Diagnostics/FileLoggerProvider), so no logging framework is taken on. -->
   <ItemGroup>
     <PackageReference Include="WPF-UI" Version="4.3.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.1" />
   </ItemGroup>
 
 </Project>

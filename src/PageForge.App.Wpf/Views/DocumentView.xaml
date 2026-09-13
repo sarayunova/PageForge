@@ -498,6 +498,15 @@
                                                    Margin="0,4,0,0"
                                                    AutomationProperties.LiveSetting="Polite"
                                                    Text="{Binding Image.RenderError}" />
+                                        <!-- A render can fail for reasons that pass
+                                             on a second attempt (a transient file
+                                             lock, memory pressure at a high zoom),
+                                             so reporting without offering a retry
+                                             would strand the page. -->
+                                        <Button Content="Try again" Margin="0,8,0,0" Padding="12,4"
+                                                HorizontalAlignment="Left"
+                                                AutomationProperties.Name="Try rendering this page again"
+                                                Click="PageRetryRender_Click" />
                                     </StackPanel>
                                 </Border>
                                 <Border x:Name="WordHighlight" BorderBrush="{DynamicResource SelectionBrush}"

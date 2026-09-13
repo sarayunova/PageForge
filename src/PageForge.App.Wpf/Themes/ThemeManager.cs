@@ -3,6 +3,7 @@
 // This file is part of PageForge. See LICENSE for the full license text.
 
 using System.Windows;
+using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
 
 namespace PageForge.App.Wpf.Themes;
@@ -141,8 +142,9 @@ public static class ThemeManager
         {
             // A locked-down or policy-restricted registry must not stop the app
             // starting; it only means we cannot follow the OS.
-            System.Diagnostics.Trace.TraceWarning(
-                $"PageForge: could not read the Windows app theme, defaulting to dark: {exception.Message}");
+            Diagnostics.AppLog.For(typeof(ThemeManager)).LogWarning(
+                exception,
+                "Could not read the Windows app theme; defaulting to dark.");
         }
 
         return AppTheme.Dark;
