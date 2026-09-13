@@ -240,6 +240,128 @@ public class UiSmokeTests
         return count;
     }
 
+    /// <summary>
+    /// Every tool mode must actually show its panel and keep its commands on
+    /// screen.
+    ///
+    /// UiSmoke only ever drove the Organize group, so Forms, Redact and Object
+    /// edit had no automated exercise at all - and three layout bugs shipped in
+    /// them. The side panel was laid out underneath the page and could not be seen
+    /// (DockPanel.Dock on a Grid child, which is silently ignored); the redaction
+    /// Apply bar was pushed off its own panel; and the mode toolbars laid a long
+    /// hint and their buttons in a StackPanel, so at the default window width the
+    /// last command sat past the right edge.
+    ///
+    /// A test that only asked "does this element exist?" would have passed through
+    /// all three: every one of those elements was in the automation tree the whole
+    /// time. So this asserts geometry - commands inside the window, panels beside
+    /// the page rather than under it - because geometry is what was broken.
+    /// </summary>
+    [Fact]
+    public async Task Every_tool_mode_shows_its_panel_and_keeps_its_commands_on_screen()
+    {
+        await using PageForgeApp app = await PageForgeApp.LaunchAsync();
+        await app.WaitForVisibleAsync("PageIndicatorText");
+
+        await AssertModeAsync(
+            app, "FormsModeTab", "Form fill mode",
+            page: "Form fill page",
+            panelHeader: "Fields on this page",
+            commands: ["New text field…", "Flatten form…"]);
+
+        await AssertModeAsync(
+            app, "RedactModeTab", "Redact mode",
+            page: "Redact page",
+            panelHeader: "Regions marked on this page",
+            commands: ["Undo redaction", "Save redacted…", "Apply redactions…"]);
+
+        // Object edit has no side panel; only its command row is at issue.
+        await AssertModeAsync(
+            app, "EditModeTab", "Object editing mode",
+            page: null,
+            panelHeader: null,
+            commands: ["Replace…"]);
+    }
+
+    private static async Task AssertModeAsync(
+        PageForgeApp app,
+        string tabAutomationId,
+        string toggleName,
+        string? page,
+        string? panelHeader,
+        string[] commands)
+    {
+        SelectToolGroup(app, tabAutomationId);
+
+        AutomationElement toggle = app.FindByName(toggleName)
+            ?? throw new InvalidOperationException($"Mode toggle '{toggleName}' not found.");
+        ((TogglePattern)toggle.GetCurrentPattern(TogglePattern.Pattern)).Toggle();
+
+        // The panel renders the page before it lists anything, so give it a beat.
+        await Task.Delay(1500);
+
+        System.Windows.Rect window = app.Window.Current.BoundingRectangle;
+
+        foreach (string command in commands)
+        {
+            AutomationElement el = app.FindByName(command)
+                ?? throw new InvalidOperationException(
+                    $"{toggleName}: command '{command}' is not in the automation tree.");
+
+            System.Windows.Rect r = el.Current.BoundingRectangle;
+            Assert.False(el.Current.IsOffscreen, $"{toggleName}: '{command}' is offscreen.");
+            Assert.True(r.Width > 0 && r.Height > 0, $"{toggleName}: '{command}' has no size.");
+            Assert.True(
+                r.Left >= window.Left && r.Right <= window.Right,
+                $"{toggleName}: '{command}' is outside the window horizontally " +
+                $"(button {r.Left:F0}..{r.Right:F0}, window {window.Left:F0}..{window.Right:F0}).");
+        }
+
+        if (page is not null && panelHeader is not null)
+        {
+            // The page surface is renamed at runtime to carry its page number
+            // ("Form fill page 1"), so match on the prefix rather than the
+            // XAML-time name.
+            AutomationElement pageEl = FindByNamePrefix(app, page)
+                ?? throw new InvalidOperationException($"{toggleName}: page surface '{page}…' not found.");
+            AutomationElement headerEl = app.FindByName(panelHeader)
+                ?? throw new InvalidOperationException($"{toggleName}: panel header '{panelHeader}' not found.");
+
+            System.Windows.Rect pageRect = pageEl.Current.BoundingRectangle;
+            System.Windows.Rect headerRect = headerEl.Current.BoundingRectangle;
+
+            Assert.True(headerRect.Width > 0 && headerRect.Height > 0,
+                $"{toggleName}: panel header '{panelHeader}' has no size.");
+
+            System.Windows.Rect overlap = System.Windows.Rect.Intersect(pageRect, headerRect);
+            Assert.True(
+                overlap.IsEmpty || overlap.Width < 1 || overlap.Height < 1,
+                $"{toggleName}: the panel is laid out on top of the page instead of beside it " +
+                $"(page {pageRect}, panel header {headerRect}).");
+        }
+
+        // Leave the mode off so the next one starts clean.
+        ((TogglePattern)toggle.GetCurrentPattern(TogglePattern.Pattern)).Toggle();
+        await Task.Delay(400);
+    }
+
+    /// <summary>First descendant whose automation name starts with the prefix.
+    /// UIA property conditions are exact-match, and some names carry a page
+    /// number appended at runtime.</summary>
+    private static AutomationElement? FindByNamePrefix(PageForgeApp app, string prefix)
+    {
+        foreach (AutomationElement el in app.Window.FindAll(
+            TreeScope.Descendants, Condition.TrueCondition))
+        {
+            if (el.Current.Name.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                return el;
+            }
+        }
+
+        return null;
+    }
+
     private static async Task OpenFileViaDialog(PageForgeApp app, string path)
     {
         IntPtr dialog = await PageForgeApp.WaitForDialogAsync("open");
