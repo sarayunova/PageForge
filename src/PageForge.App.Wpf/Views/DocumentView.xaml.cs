@@ -78,6 +78,7 @@ public partial class DocumentView : UserControl
         StatusText.Text = _vm.Status;
 
         _vm.ApplyZoomToPages();
+        RenderRealizedPages();
 
         if (ObjectView.Visibility == Visibility.Visible)
         {
@@ -97,6 +98,40 @@ public partial class DocumentView : UserControl
         ClearWordCycle();
 
         RefreshAnnotationsIfNeeded();
+    }
+
+    /// <summary>
+    /// Re-renders the page slots that currently have a realized container. A zoom
+    /// change only retargets the slots' DPI; containers that are already realized
+    /// never raise Loaded again, so without this the pages would keep showing their
+    /// stale bitmap (and, before the DPI cache tracked staleness, went blank) until
+    /// virtualization happened to recycle them.
+    /// </summary>
+    private void RenderRealizedPages()
+    {
+        if (_vm is null || PageList.Items.Count == 0)
+        {
+            return;
+        }
+
+        var realized = new List<PageSlotViewModel>();
+        foreach (object item in PageList.Items)
+        {
+            if (item is PageSlotViewModel slot
+                && PageList.ItemContainerGenerator.ContainerFromItem(slot) is not null)
+            {
+                realized.Add(slot);
+            }
+        }
+
+        if (realized.Count == 0)
+        {
+            // Nothing on screen yet (first layout pass): the RenderOnLoad behavior
+            // will render each slot as its container is realized.
+            return;
+        }
+
+        _ = _vm.RenderSlotsAsync(realized);
     }
 
     private void RefreshAnnotationsIfNeeded()

@@ -208,11 +208,30 @@
                                 Background="White"
                                 LayoutTransform="{Binding DataContext.Rotation, Converter={StaticResource RotationToTransform}, RelativeSource={RelativeSource AncestorType=ListBox}}">
                             <Grid>
+                                <!-- Stretch=None is deliberate and fidelity-critical:
+                                     the bitmap shows at exactly the DPI it was
+                                     rendered at, so zoom means "re-render sharper",
+                                     never "resample a cached bitmap up". -->
                                 <Image Source="{Binding Image.Bitmap}" Stretch="None"
                                        CacheMode="BitmapCache"
                                        MouseLeftButtonUp="PageImage_MouseLeftButtonUp"
                                        AutomationProperties.Name="{Binding AccessibleImageName}"
                                        views:PageImageBehavior.RenderOnLoad="True" />
+                                <!-- A render that fails must say so on the page
+                                     rather than leaving a blank sheet. -->
+                                <Border Background="#7f1d1d" Padding="12,8" MinWidth="240"
+                                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                                        Visibility="{Binding Image.HasRenderError, Converter={StaticResource BoolToVis}}">
+                                    <StackPanel>
+                                        <controls:HeadingTextBlock HeadingLevel="3" Foreground="#ffffff"
+                                                                   FontWeight="Bold" TextWrapping="Wrap"
+                                                                   Text="{Binding DisplayNumber, StringFormat=Page {0} could not be rendered}" />
+                                        <TextBlock Foreground="#ffe4e4" FontSize="12" TextWrapping="Wrap"
+                                                   Margin="0,4,0,0"
+                                                   AutomationProperties.LiveSetting="Polite"
+                                                   Text="{Binding Image.RenderError}" />
+                                    </StackPanel>
+                                </Border>
                                 <Border x:Name="WordHighlight" BorderBrush="#2b8cff"
                                         BorderThickness="2" Visibility="Collapsed"
                                         IsHitTestVisible="False"

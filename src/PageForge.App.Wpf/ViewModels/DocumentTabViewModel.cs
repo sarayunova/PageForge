@@ -215,6 +215,10 @@ public sealed class DocumentTabViewModel : ObservableObject
     private bool _isBusy;
     private bool _isReorderMode;
 
+    /// <summary>Cancels the in-flight zoom re-render when a newer zoom supersedes
+    /// it, so a rapid zoom sequence does not render every intermediate DPI.</summary>
+    private CancellationTokenSource? _slotRenderCts;
+
     /// <summary>The FR-EDIT-05 undo/redo stack for this document session.</summary>
     private readonly EditCommandStack _editStack = new();
 
@@ -402,14 +406,72 @@ public sealed class DocumentTabViewModel : ObservableObject
     }
 
     /// <summary>Sets every full page render DPI to the current zoom-based DPI
-    /// (or to <paramref name="overrideDpi"/> when provided) and drops caches so
-    /// visible pages re-render at the new resolution.</summary>
+    /// (or to <paramref name="overrideDpi"/> when provided), marking cached
+    /// bitmaps stale so they re-render at the new resolution.</summary>
+    /// <remarks>
+    /// This only retargets the slots. Pages whose containers are already realized
+    /// never raise Loaded again, so nothing would re-render them on its own — the
+    /// view must follow this call with <see cref="RenderSlotsAsync"/> for the slots
+    /// it currently has on screen. Retargeting the DPI deliberately keeps the stale
+    /// bitmap visible, so a zoom step does not flash the page white.
+    /// </remarks>
     public void ApplyZoomToPages(double overrideDpi = 0)
     {
         double dpi = overrideDpi > 0 ? overrideDpi : RenderDpi;
         foreach (PageSlotViewModel page in _pages)
         {
             page.Image.RenderDpi = dpi;
+        }
+    }
+
+    /// <summary>
+    /// Re-renders the given slots (the ones the view currently has realized) at
+    /// their current DPI, nearest to the current page first. Each call supersedes
+    /// the previous one, so holding down zoom cancels the renders it outran instead
+    /// of queueing every intermediate resolution.
+    /// </summary>
+    public async Task RenderSlotsAsync(IEnumerable<PageSlotViewModel> slots)
+    {
+        ArgumentNullException.ThrowIfNull(slots);
+
+        var cts = new CancellationTokenSource();
+        CancellationTokenSource? previous = Interlocked.Exchange(ref _slotRenderCts, cts);
+        if (previous is not null)
+        {
+            previous.Cancel();
+            previous.Dispose();
+        }
+
+        int current = _doc.CurrentPage;
+        PageSlotViewModel[] ordered = slots
+            .Where(slot => !slot.Image.IsLoaded || slot.Image.IsStale)
+            .OrderBy(slot => Math.Abs(slot.PageIndex - current))
+            .ToArray();
+
+        try
+        {
+            foreach (PageSlotViewModel slot in ordered)
+            {
+                if (cts.Token.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                await slot.Image.RenderAsync(cts.Token).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Superseded by a newer zoom; that newer call owns the re-render.
+        }
+        finally
+        {
+            // Only dispose if this call is still the current one; a newer call has
+            // already disposed ours through the Exchange above.
+            if (Interlocked.CompareExchange(ref _slotRenderCts, null, cts) == cts)
+            {
+                cts.Dispose();
+            }
         }
     }
 

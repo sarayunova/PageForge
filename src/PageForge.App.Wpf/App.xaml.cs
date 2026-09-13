@@ -25,6 +25,7 @@ public partial class App : Application
         {
             await RunHeadlessProofAsync();
             await RunHeadlessViewerProofAsync();
+            await RunHeadlessSlotRenderProofAsync();
             await RunHeadlessOrganizerProofAsync();
             await RunHeadlessAnnotationProofAsync();
             await RunHeadlessEditProofAsync();
@@ -191,6 +192,111 @@ public partial class App : Application
 
         string candidate = Path.Combine(root, "tools", "sample-pdf", "corpus");
         return Directory.Exists(candidate) ? candidate : null;
+    }
+
+    /// <summary>
+    /// FR-VIEW-01 regression proof for the two defects that made an opened PDF show
+    /// nothing on screen:
+    ///
+    /// 1. The RenderOnLoad behavior matched the realized element's DataContext against
+    ///    PageImageViewModel, but the page and thumbnail templates bind through a
+    ///    PageSlotViewModel. The match never succeeded, RenderAsync was never called,
+    ///    and every page stayed blank — silently, because it was a bare `if`. This
+    ///    proof asserts the resolution for both surfaces (page and thumbnail).
+    ///
+    /// 2. A zoom change retargets each slot's DPI, but nothing re-rendered slots whose
+    ///    containers were already realized (Loaded does not fire twice). This proof
+    ///    asserts the DPI change marks the cache stale while keeping the old bitmap
+    ///    visible, and that re-rendering yields a genuinely higher-resolution bitmap.
+    /// </summary>
+    private static async Task RunHeadlessSlotRenderProofAsync()
+    {
+        try
+        {
+            string? pdfPath = FindSamplePdf();
+            if (pdfPath is null)
+            {
+                Console.Error.WriteLine("sample document not found");
+                FailProof(2);
+                return;
+            }
+
+            var sb = new StringBuilder();
+            await using (DocumentViewModel core = new(MuPdfEngine.Create()))
+            {
+                var tab = new ViewModels.DocumentTabViewModel(core);
+                await tab.InitializeAsync(pdfPath);
+
+                if (tab.Pages.Count == 0)
+                {
+                    Console.Error.WriteLine("slot render proof failed: no page slots built");
+                    FailProof();
+                    return;
+                }
+
+                ViewModels.PageSlotViewModel slot = tab.Pages[0];
+
+                // (1) The behavior must resolve a PageSlotViewModel DataContext to the
+                // right image for each surface. Returning null here is the original
+                // blank-viewer bug.
+                var pageImage = new System.Windows.Controls.Image { DataContext = slot };
+                pageImage.SetBinding(
+                    System.Windows.Controls.Image.SourceProperty,
+                    new System.Windows.Data.Binding("Image.Bitmap"));
+
+                var thumbImage = new System.Windows.Controls.Image { DataContext = slot };
+                thumbImage.SetBinding(
+                    System.Windows.Controls.Image.SourceProperty,
+                    new System.Windows.Data.Binding("Thumbnail.Bitmap"));
+
+                bool pageResolves = ReferenceEquals(ViewModels.PageImageBehavior.ResolveImage(pageImage), slot.Image);
+                bool thumbResolves = ReferenceEquals(ViewModels.PageImageBehavior.ResolveImage(thumbImage), slot.Thumbnail);
+
+                sb.AppendLine($"resolve page slot -> Image: {pageResolves}");
+                sb.AppendLine($"resolve thumb slot -> Thumbnail: {thumbResolves}");
+
+                // (2) Render at 1x, then zoom and prove the stale cache is both kept
+                // and replaced by a higher-resolution render.
+                await slot.Image.RenderAsync();
+                bool rendered = slot.Image.Bitmap is not null;
+                int baseWidth = slot.Image.Bitmap?.PixelWidth ?? 0;
+                sb.AppendLine($"render @{slot.Image.RenderDpi:0} dpi -> loaded={rendered} width={baseWidth}px");
+
+                System.Windows.Media.Imaging.BitmapSource? before = slot.Image.Bitmap;
+                slot.Image.RenderDpi *= 2.0;
+
+                bool staleKeepsPixels = slot.Image.IsStale && ReferenceEquals(slot.Image.Bitmap, before);
+                sb.AppendLine($"after zoom: stale={slot.Image.IsStale} keptOldBitmap={ReferenceEquals(slot.Image.Bitmap, before)}");
+
+                await tab.RenderSlotsAsync(new[] { slot });
+                int zoomedWidth = slot.Image.Bitmap?.PixelWidth ?? 0;
+                bool rerendered = zoomedWidth > baseWidth && !slot.Image.IsStale;
+                sb.AppendLine($"re-render @{slot.Image.RenderDpi:0} dpi -> width={zoomedWidth}px stale={slot.Image.IsStale}");
+
+                if (!pageResolves || !thumbResolves || !rendered || !staleKeepsPixels || !rerendered)
+                {
+                    Console.Error.WriteLine(
+                        "slot render proof failed: " +
+                        $"pageResolves={pageResolves} thumbResolves={thumbResolves} rendered={rendered} " +
+                        $"staleKeepsPixels={staleKeepsPixels} rerendered={rerendered}");
+                    FailProof();
+                }
+
+                string outDir = Path.GetFullPath(Path.Combine(FindRepoRoot() ?? string.Empty, "artifacts"));
+                Directory.CreateDirectory(outDir);
+                string outPath = Path.Combine(outDir, "slot-render-proof.txt");
+                await File.WriteAllTextAsync(outPath, sb.ToString());
+
+                Console.WriteLine(
+                    $"slot render proof: resolve={pageResolves && thumbResolves} " +
+                    $"render={baseWidth}px zoom={zoomedWidth}px -> {outPath}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"slot render proof failed: {ex.Message}");
+            FailProof();
+        }
     }
 
     /// <summary>
