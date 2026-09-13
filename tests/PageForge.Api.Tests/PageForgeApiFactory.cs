@@ -67,6 +67,21 @@ public sealed class PageForgeApiFactory : WebApplicationFactory<Program>
 
     private static bool _hostedSchemaReady;
 
+    /// <summary>
+    /// Suffix giving the hosted lane a fresh database per test process.
+    ///
+    /// The suite reuses fixed addresses - a@example.com at nine call sites,
+    /// alice@example.com at five - and every test class shares one database, so a
+    /// second run against the same database fails on duplicate registration. CI hid
+    /// that behind a throwaway container; locally it made the lane unrunnable twice
+    /// in a row, and it still left two tests failing in CI through ordering alone.
+    ///
+    /// Migrate() creates the database when it is absent, so naming a new one per
+    /// process is enough: no drop, and no teardown to forget.
+    /// </summary>
+    private static readonly string HostedDbSuffix =
+        $"_{DateTime.UtcNow:yyyyMMddHHmmss}_{Environment.ProcessId}";
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
@@ -111,6 +126,28 @@ public sealed class PageForgeApiFactory : WebApplicationFactory<Program>
                 // (email capture, fixed JWT) are unchanged so the 46 e-identity and
                 // e-sign assertions behave identically in both modes.
                 builder.UseSetting("Database:AutoMigrate", "true");
+
+                // Point every host in this process at one fresh database, so a
+                // re-run never inherits the previous run's users. Read from the
+                // same configuration the app uses, so a connection string aimed
+                // somewhere other than the default is still honoured.
+                var configured = new Npgsql.NpgsqlConnectionStringBuilder(
+                    Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
+                    ?? "Host=localhost;Port=5432;Database=pageforge;Username=postgres;Password=postgres");
+
+                configured.Database += HostedDbSuffix;
+                string hostedConnection = configured.ConnectionString;
+                HostedDefaultConnection = hostedConnection;
+
+                // Replace the registration rather than setting configuration.
+                // Program.cs resolves the connection string when it registers the
+                // context, and UseSetting did not reach it - the app kept using the
+                // configured database and every re-run still collided. Swapping the
+                // descriptor is what the hermetic branch does, for the same reason.
+                ServiceDescriptor? pg = services.SingleOrDefault(
+                    d => d.ServiceType == typeof(DbContextOptions<AppDbContext>));
+                if (pg is not null) services.Remove(pg);
+                services.AddDbContext<AppDbContext>(o => o.UseNpgsql(hostedConnection));
 
                 // ...but do not rely on it. Database:AutoMigrate drives a block in
                 // Program.cs that sits between builder.Build() and app.Run(), and
