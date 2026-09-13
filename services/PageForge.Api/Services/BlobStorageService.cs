@@ -45,8 +45,33 @@ public sealed class BlobStorageService : IBlobStorage
             new BucketExistsArgs().WithBucket(_options.Bucket), ct);
         if (!exists)
         {
-            await _client.MakeBucketAsync(
-                new MakeBucketArgs().WithBucket(_options.Bucket), ct);
+            try
+            {
+                await _client.MakeBucketAsync(
+                    new MakeBucketArgs().WithBucket(_options.Bucket), ct);
+            }
+            catch (Exception)
+            {
+                // Check-then-act: another caller can create the bucket between the
+                // BucketExistsAsync above and this line, and MinIO then answers
+                // BucketAlreadyOwnedByYou. Two API instances starting against a
+                // fresh bucket race exactly the same way, so this is not a
+                // test-only concern - it surfaced in the api-hosted lane as
+                // "Bucket already owned by you: pageforge-documents
+                // (Parameter 'response')", turning a version push into a 400.
+                //
+                // Judged by the postcondition rather than by the exception. MinIO
+                // 7.0 reports this as a plain ArgumentException from response
+                // parsing, not a MinioException, so a type filter would miss it and
+                // a message match would break on any wording change. If the bucket
+                // exists now, this method's contract is met however it got there;
+                // if it does not, the failure was real and must not be swallowed.
+                if (!await _client.BucketExistsAsync(
+                        new BucketExistsArgs().WithBucket(_options.Bucket), ct))
+                {
+                    throw;
+                }
+            }
         }
         return true;
     }
