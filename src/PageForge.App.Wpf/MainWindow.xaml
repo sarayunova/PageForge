@@ -1,37 +1,86 @@
 <!-- Copyright (c) 2026 LiVi Software Company
      SPDX-License-Identifier: AGPL-3.0-only
      This file is part of PageForge. See LICENSE for the full license text. -->
-<Window x:Class="PageForge.App.Wpf.MainWindow"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="PageForge — Phase 1 Viewer (WPF fallback)"
-        Width="1200" Height="820"
-        WindowStartupLocation="CenterScreen"
-        Background="{DynamicResource SurfaceAppBrush}"
-        Foreground="{DynamicResource ContentBrush}"
-        FontFamily="{StaticResource AppFontFamily}"
-        FontSize="{StaticResource FontSizeBase}"
-        TextOptions.TextFormattingMode="Display"
-        UseLayoutRounding="True">
+
+<!--
+    A WPF-UI FluentWindow rather than a plain Window, so the shell gets the
+    Windows 11 chrome cues: a Mica backdrop, rounded corners, and a title bar
+    that is part of the app rather than a grey strip bolted above it.
+
+    ExtendsContentIntoTitleBar lets the title bar carry real controls, so the
+    "Open PDF…" command and the AGPL source link move into it and the separate
+    toolbar row they used to occupy is gone entirely - one less band of chrome
+    between the user and the document.
+
+    Background is deliberately Transparent: Mica is drawn by the OS behind the
+    window, and painting an opaque window background would cover it. The content
+    regions paint their own surfaces, so only genuinely empty chrome shows the
+    backdrop. On Windows 10, where Mica does not exist, WPF-UI falls back to a
+    solid backdrop on its own.
+-->
+<controls:FluentShellWindow x:Class="PageForge.App.Wpf.MainWindow"
+                 xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                 xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+                 xmlns:controls="clr-namespace:PageForge.App.Wpf.Controls"
+                 Title="PageForge"
+                 Width="1200" Height="820"
+                 MinWidth="900" MinHeight="600"
+                 WindowStartupLocation="CenterScreen"
+                 WindowBackdropType="Mica"
+                 WindowCornerPreference="Round"
+                 ExtendsContentIntoTitleBar="True"
+                 Background="Transparent"
+                 Foreground="{DynamicResource ContentBrush}"
+                 FontFamily="{StaticResource AppFontFamily}"
+                 FontSize="{StaticResource FontSizeBase}"
+                 TextOptions.TextFormattingMode="Display"
+                 UseLayoutRounding="True">
 
     <DockPanel>
-        <Border DockPanel.Dock="Top" Background="{DynamicResource SurfaceRaisedBrush}" Padding="8,6">
-            <DockPanel>
-                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
-                    <Button Content="Open PDF…" x:Name="OpenPdfButton" AutomationProperties.Name="Open PDF…" Click="Open_Click" Padding="12,4"
-                            ToolTip="Open one or more PDF documents (FR-VIEW-04 multi-doc tabs)" />
+        <!-- Title is rendered in Header rather than via TitleBar.Title: setting
+             Header takes over the title's slot, so relying on Title alone leaves
+             the window with no product name showing at all. Window.Title is still
+             "PageForge" for the taskbar and for UIA (the smoke suite finds the
+             window by that name). -->
+        <ui:TitleBar DockPanel.Dock="Top"
+                     AutomationProperties.Name="PageForge title bar">
+            <ui:TitleBar.Header>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="PageForge"
+                               FontFamily="{StaticResource DisplayFontFamily}"
+                               FontSize="{StaticResource FontSizeLG}"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource ContentBrush}"
+                               VerticalAlignment="Center" Margin="12,0,0,0" />
+                    <Separator Margin="12,6" Width="1"
+                               Background="{DynamicResource EdgeStrongBrush}" />
+                    <Button x:Name="OpenPdfButton" AutomationProperties.Name="Open PDF…"
+                            Click="Open_Click" Padding="10,3"
+                            VerticalAlignment="Center"
+                            ToolTip="Open one or more PDF documents (FR-VIEW-04 multi-doc tabs)">
+                        <StackPanel Orientation="Horizontal">
+                            <ui:SymbolIcon Symbol="DocumentPdf24" FontSize="14" Margin="0,0,6,0" />
+                            <TextBlock Text="Open PDF…" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
-                <!-- AGPL §13 source availability: point users at the public repository (TSD §7). -->
-                <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center"
-                           Foreground="{DynamicResource ContentBrush}">
+            </ui:TitleBar.Header>
+            <ui:TitleBar.TrailingContent>
+                <!-- AGPL §13 source availability: point users at the public
+                     repository (TSD §7). It belongs in the chrome, not the
+                     document surface, so the title bar is the right home. -->
+                <TextBlock VerticalAlignment="Center" Margin="0,0,12,0"
+                           Foreground="{DynamicResource ContentMutedBrush}">
                     <Hyperlink Click="ViewSource_Click"
                                ToolTip="AGPLv3: view the exact source running here"
                                Foreground="{DynamicResource AccentTextBrush}">
                         View source
                     </Hyperlink>
                 </TextBlock>
-            </DockPanel>
-        </Border>
-        <TabControl x:Name="DocTabs" />
+            </ui:TitleBar.TrailingContent>
+        </ui:TitleBar>
+
+        <TabControl x:Name="DocTabs" Background="Transparent" BorderThickness="0" />
     </DockPanel>
-</Window>
+</controls:FluentShellWindow>
