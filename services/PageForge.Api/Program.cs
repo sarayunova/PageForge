@@ -17,6 +17,25 @@ using PageForge.Api.Services.Email;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Hosted-CI logging seam (PAGEFORGE_HOSTED_CI=1 = the `api-hosted` CI job).
+// The default host build on Windows registers the Windows Event Log logging
+// provider. In the hosted lane the real OcrJobWorker keeps real Npgsql +
+// MinIO I/O in flight through the register->verify->accrue round-trips, and an
+// in-flight write can land on that provider while a per-test host teardown is
+// disposing it, surfacing: ObjectDisposedException ("An error occurred while
+// writing to logger(s)") from ErrorHandlingMiddleware. Nothing in the suite
+// reads or asserts Event Log output (it is infrastructure, same category as
+// the SMTP/MinIO/EventSource seams), so the hosted lane drops only that
+// provider and keeps console. The hermetic lane never sets the gate, so this
+// branch is a no-op there and hermetic stays byte-identical 47/47.
+if (string.Equals(
+        Environment.GetEnvironmentVariable("PAGEFORGE_HOSTED_CI"),
+        "1", StringComparison.Ordinal))
+{
+    builder.Logging.ClearProviders();
+    builder.Logging.AddConsole();
+}
+
 // EF Core + PostgreSQL
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -183,7 +202,15 @@ if (bool.TryParse(builder.Configuration["Database:AutoMigrate"], out bool migrat
 {
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await db.Database.MigrateAsync();
+
+    // Deterministic schema-before-start in the HOSTED lane: this API has NO EF
+    // migrations (no Migrations/ folder), so MigrateAsync() is a silent NO-OP that
+    // leaves the real Postgres empty — and OcrJobWorker's startup sweep then hits
+    // Npgsql.PostgresException 42P01 "relation OcrJobItems does not exist".
+    // Building/validating the real schema from the model is the deterministic
+    // provision; hermetic never enters here (AutoMigrate gate is off → block
+    // untaken → byte-neutral 47/47).
+    await db.Database.EnsureCreatedAsync();
 }
 
 app.Run();
