@@ -11,34 +11,54 @@
     <DockPanel Background="{DynamicResource CanvasBrush}">
         <!-- Redact toolbar -->
         <Border DockPanel.Dock="Top" Background="{DynamicResource SurfaceRaisedBrush}" Padding="6,4">
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock Text="Redact" Foreground="{DynamicResource DangerBrush}" FontWeight="Bold"
+            <!-- The commands dock right and the hint takes what is left, so the
+                 hint can never push a button off the edge of the window. As a
+                 StackPanel this row ran past 1200px and Save redacted… was
+                 unreachable - the same overflow Phase U2 fixed on the main
+                 toolbar, which the contextual rows did not get. -->
+            <DockPanel LastChildFill="True">
+                <TextBlock Text="Redact" DockPanel.Dock="Left" Foreground="{DynamicResource DangerBrush}" FontWeight="Bold"
                            VerticalAlignment="Center" Margin="0,0,10,0" />
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="↩ Undo" AutomationProperties.Name="Undo redaction" Click="Undo_Click" Padding="8,3"
+                            ToolTip="Undo the last redaction apply (restores the covered content from a snapshot)" />
+                    <Separator Margin="6,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
+                    <Button Content="Save redacted…" Click="SaveRedacted_Click" Padding="8,3"
+                            ToolTip="Write a new PDF with the redactions applied and the covered content permanently gone" />
+                </StackPanel>
                 <TextBlock x:Name="HintText" Text="Drag a box over content to remove, or use the keyboard: Enter begins a box, arrows size it, Ctrl+arrows move it, Enter places it, Esc cancels. Apply deletes the covered text and paints it black (undoable)."
                            Foreground="{DynamicResource ContentMutedBrush}" VerticalAlignment="Center" Margin="0,0,10,0"
+                           TextTrimming="CharacterEllipsis"
+                           ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
                            AutomationProperties.LiveSetting="Polite" />
-                <Button Content="↩ Undo" AutomationProperties.Name="Undo redaction" Click="Undo_Click" Padding="8,3"
-                        ToolTip="Undo the last redaction apply (restores the covered content from a snapshot)" />
-                <Separator Margin="6,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
-                <Button Content="Save redacted…" Click="SaveRedacted_Click" Padding="8,3"
-                        ToolTip="Write a new PDF with the redactions applied and the covered content permanently gone" />
-            </StackPanel>
+            </DockPanel>
         </Border>
 
-        <Grid>
+        <!-- A DockPanel, not a Grid: DockPanel.Dock is an attached property that
+             only means anything when the direct parent is a DockPanel. With a Grid
+             here it was silently ignored, so the regions panel and the page were
+             both laid out in the same single cell and the page - declared second,
+             so drawn on top - hid the panel completely. -->
+        <DockPanel LastChildFill="True">
             <!-- Right: marked regions + apply -->
             <DockPanel DockPanel.Dock="Right" Width="300" Margin="4">
                 <Border DockPanel.Dock="Top" Background="{DynamicResource SurfaceRaisedBrush}" Padding="6,4">
                     <TextBlock Text="Regions marked on this page" Foreground="{DynamicResource ContentBrush}" FontWeight="Bold" />
                 </Border>
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Background="{DynamicResource SurfaceAppBrush}">
-                    <StackPanel x:Name="RegionsPanel" />
-                </ScrollViewer>
+                <!-- The Apply bar is declared before the scrolling list on purpose.
+                     A DockPanel gives the fill slot to its LAST child whatever that
+                     child's Dock says, so with the list first the Apply bar took the
+                     whole remaining area and the button vanished off the panel. The
+                     list is the thing that should absorb the leftover space, so it
+                     goes last. -->
                 <Border DockPanel.Dock="Bottom" Background="{DynamicResource SurfaceRaisedBrush}" Padding="6,4">
                     <Button x:Name="ApplyButton" Content="Apply redactions…" IsEnabled="False"
                             Click="Apply_Click" Padding="10,4" HorizontalAlignment="Right"
                             ToolTip="Delete every marked region's content now (undoable via ↩ Undo)" />
                 </Border>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Background="{DynamicResource SurfaceAppBrush}">
+                    <StackPanel x:Name="RegionsPanel" />
+                </ScrollViewer>
             </DockPanel>
 
             <!-- Left: page + overlay -->
@@ -54,6 +74,6 @@
                             Cursor="Cross" />
                 </Grid>
             </ScrollViewer>
-        </Grid>
+        </DockPanel>
     </DockPanel>
 </UserControl>

@@ -11,17 +11,23 @@
     <DockPanel Background="{DynamicResource CanvasBrush}">
         <!-- Object-edit toolbar -->
         <Border DockPanel.Dock="Top" Background="{DynamicResource SurfaceRaisedBrush}" Padding="6,4">
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock Text="Object edit" Foreground="{DynamicResource AccentTextBrush}" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,10,0" />
+            <!-- Commands dock right, hint takes what is left: a long hint must
+                 never push a button off the edge of the window. -->
+            <DockPanel LastChildFill="True">
+                <TextBlock Text="Object edit" DockPanel.Dock="Left" Foreground="{DynamicResource AccentTextBrush}" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,10,0" />
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="Replace…" Click="Replace_Click" x:Name="ReplaceButton" Padding="8,3"
+                            IsEnabled="False" ToolTip="Pick a PNG/JPEG to paint inside the selected object's box" />
+                    <Separator Margin="6,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
+                    <Button Content="↩ Undo" Click="Undo_Click" x:Name="UndoButton" Padding="8,3" />
+                    <Button Content="↪ Redo" Click="Redo_Click" x:Name="RedoButton" Padding="8,3" />
+                </StackPanel>
                 <TextBlock x:Name="HintText" Text="Click an object to select; drag to move; drag a handle to resize. Keyboard: Tab selects, arrows move, Ctrl+arrows resize, Enter commits."
                            Foreground="{DynamicResource ContentMutedBrush}" VerticalAlignment="Center" Margin="0,0,10,0"
+                           TextTrimming="CharacterEllipsis"
+                           ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
                            AutomationProperties.LiveSetting="Polite" />
-                <Button Content="Replace…" Click="Replace_Click" x:Name="ReplaceButton" Padding="8,3"
-                        IsEnabled="False" ToolTip="Pick a PNG/JPEG to paint inside the selected object's box" />
-                <Separator Margin="6,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
-                <Button Content="↩ Undo" Click="Undo_Click" x:Name="UndoButton" Padding="8,3" />
-                <Button Content="↪ Redo" Click="Redo_Click" x:Name="RedoButton" Padding="8,3" />
-            </StackPanel>
+            </DockPanel>
         </Border>
 
         <!-- Page + overlay -->
