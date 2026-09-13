@@ -385,6 +385,46 @@ public class UiSmokeTests
         }
     }
 
+    /// <summary>
+    /// No text anywhere in the window may carry mojibake.
+    ///
+    /// Five button labels shipped reading "Insertâ€¦" instead of "Insert…" because a
+    /// tool round-tripped the XAML through an encoding that mangled every non-ASCII
+    /// character. Nothing caught it: the suite looks elements up by AutomationId and
+    /// AutomationProperties.Name, and those are ASCII, so the visible label text was
+    /// never once asserted.
+    ///
+    /// This checks the whole automation tree rather than a list of known labels, so
+    /// it catches the next one too - encoding damage is never confined to the string
+    /// you thought to write a test for. The markers are how the UTF-8 bytes of the
+    /// punctuation this UI uses (…, ↩, ↪) look once misdecoded as CP1252.
+    /// </summary>
+    [Fact]
+    public async Task No_visible_text_is_mojibake()
+    {
+        await using PageForgeApp app = await PageForgeApp.LaunchAsync();
+        await app.WaitForVisibleAsync("PageIndicatorText");
+
+        string[] markers = ["â€", "â†", "Ã¢", "Ã©"];
+        var bad = new List<string>();
+
+        foreach (AutomationElement el in app.Window.FindAll(
+            TreeScope.Descendants, Condition.TrueCondition))
+        {
+            string name = el.Current.Name;
+            if (!string.IsNullOrEmpty(name) &&
+                markers.Any(m => name.Contains(m, StringComparison.Ordinal)))
+            {
+                bad.Add(name);
+            }
+        }
+
+        Assert.True(
+            bad.Count == 0,
+            "Mojibake in visible text - a file was saved through an encoding that " +
+            "mangled non-ASCII characters: " + string.Join(" | ", bad));
+    }
+
     /// <summary>First descendant whose automation name starts with the prefix.
     /// UIA property conditions are exact-match, and some names carry a page
     /// number appended at runtime.</summary>
