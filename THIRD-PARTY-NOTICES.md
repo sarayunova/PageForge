@@ -55,6 +55,17 @@ repository (`.gitignore`) and is not redistributed as a binary-only artifact.
   PageForge code, so no logging framework is distributed. These assemblies **are
   distributed** with the desktop application.
 
+### CommunityToolkit.Mvvm — MVVM primitives for the desktop shell
+- Version: 8.4.0
+- Source: `https://github.com/CommunityToolkit/dotnet`
+- License: MIT
+- Copyright: .NET Foundation and Contributors
+- Usage: supplies the `ObservableObject` base and `RelayCommand` behind the shell's
+  view models (`src/PageForge.App.Wpf/ViewModels`), replacing a hand-rolled
+  `INotifyPropertyChanged` base so the shell's `Click`-handler code-behind can be
+  converted to commands and bindings. These assemblies **are distributed** with the
+  desktop application.
+
 ## Build / verification tooling (used at build or test time, not distributed)
 
 ### qpdf — structural PDF validation (dev tool)

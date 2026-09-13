@@ -31,6 +31,19 @@ public class UiSmokeTests
         AutomationElement initial = await app.WaitForVisibleAsync("PageIndicatorText");
         Assert.EndsWith("/ 1", PageForgeApp.GetText(initial).Trim());
 
+        // Phase U4: the command bar drives the view model through ICommand rather
+        // than Click handlers. A Command binding that does not resolve leaves the
+        // button visible, enabled and completely inert - the same silent-failure
+        // shape as the original blank-viewer bug - so invoke one and assert the
+        // view model actually moved.
+        Assert.Equal("100%", (await WaitForText(app, "ZoomText")).Trim());
+        PageForgeApp.Activate(app.FindByName("Zoom in")
+            ?? throw new InvalidOperationException("Zoom in button not found."));
+        Assert.Equal("125%", await WaitForTextToBe(app, "ZoomText", "125%"));
+        PageForgeApp.Activate(app.FindByName("Reset zoom to 100%")
+            ?? throw new InvalidOperationException("Reset zoom button not found."));
+        Assert.Equal("100%", await WaitForTextToBe(app, "ZoomText", "100%"));
+
         // WCAG 2.4.6/1.3.1: toolbar captions are real "Heading" control elements
         // in the automation tree, and the 2.4.1 content bypass exists.
         // The toolbar is now a command bar plus a tool-group selector, so only the
@@ -133,6 +146,27 @@ public class UiSmokeTests
     {
         SelectToolGroup(app, tabAutomationId);
         AssertHeading(app, captionName);
+    }
+
+    /// <summary>Waits for a bound text element to settle on an expected value.
+    /// Commands run through the dispatcher, so the binding updates a beat after
+    /// the Invoke returns.</summary>
+    private static async Task<string> WaitForTextToBe(PageForgeApp app, string automationId, string expected)
+    {
+        DateTime deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        string text = string.Empty;
+        while (DateTime.UtcNow < deadline)
+        {
+            text = (await WaitForText(app, automationId)).Trim();
+            if (string.Equals(text, expected, StringComparison.Ordinal))
+            {
+                return text;
+            }
+
+            await Task.Delay(100);
+        }
+
+        return text;
     }
 
     private static async Task<string> WaitForText(PageForgeApp app, string automationId)
