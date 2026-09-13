@@ -24,6 +24,7 @@
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
                  xmlns:controls="clr-namespace:PageForge.App.Wpf.Controls"
                  Title="PageForge"
+                 Icon="Assets/pageforge.ico"
                  Width="1200" Height="820"
                  MinWidth="900" MinHeight="600"
                  WindowStartupLocation="CenterScreen"
@@ -47,12 +48,19 @@
                      AutomationProperties.Name="PageForge title bar">
             <ui:TitleBar.Header>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- The 256px PNG rather than the .ico: WPF would otherwise pick
+                         an icon frame by its own rules and can land on a small one,
+                         which looks soft when scaled up to the title-bar size. -->
+                    <Image Source="Assets/pageforge-256.png" Width="18" Height="18"
+                           Margin="12,0,0,0" VerticalAlignment="Center"
+                           RenderOptions.BitmapScalingMode="HighQuality"
+                           AutomationProperties.Name="PageForge" />
                     <TextBlock Text="PageForge"
                                FontFamily="{StaticResource DisplayFontFamily}"
                                FontSize="{StaticResource FontSizeLG}"
                                FontWeight="SemiBold"
                                Foreground="{DynamicResource ContentBrush}"
-                               VerticalAlignment="Center" Margin="12,0,0,0" />
+                               VerticalAlignment="Center" Margin="8,0,0,0" />
                     <Separator Margin="12,6" Width="1"
                                Background="{DynamicResource EdgeStrongBrush}" />
                     <Button x:Name="OpenPdfButton" AutomationProperties.Name="Open PDF…"
