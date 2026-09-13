@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using PageForge.Api.Data;
 using PageForge.Api.Services;
 using PageForge.Api.Services.Email;
@@ -45,6 +46,20 @@ public sealed class PageForgeApiFactory : WebApplicationFactory<Program>
         string.Equals(
             Environment.GetEnvironmentVariable(HostedCiEnvVar) ?? "0", "1",
             StringComparison.Ordinal);
+
+    /// <summary>
+    /// Hosted-lane capture of the real PostgreSQL connection string — set ONLY in
+    /// the hosted <see cref="ConfigureWebHost"/> branch (hermetic never enters it),
+    /// so this stays byte-neutral for hermetic. The standalone schema-provision
+    /// seam in <see cref="InitializeAsync"/> reads it to build the real schema on a
+    /// standalone <see cref="AppDbContext"/> WITHOUT touching <see cref="Services"/>
+    /// (the <see cref="Services"/> getter deterministically starts the whole host,
+    /// which fires <c>OcrJobWorker</c>'s startup sweep against an EMPTY real
+    /// Postgres → <c>Npgsql.PostgresException 42P01</c> <i>before</i> any migration
+    /// can run — the hosted lane's first-order residual). This field is hermetic-
+    /// neutral: hermetic never reads or writes it.
+    /// </summary>
+    private static string? HostedDefaultConnection { get; set; }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -117,5 +132,47 @@ public sealed class PageForgeApiFactory : WebApplicationFactory<Program>
         });
 
         builder.UseSetting("detailedErrors", "true");
+    }
+
+    /// <summary>
+    /// Hosted-lane teardown seam: deterministically stop <see cref="OcrJobWorker"/>'s
+    /// background sweep BEFORE the host's DI provider is disposed, so its final
+    /// Npgsql/MinIO I/O no longer lands against a DISPOSED
+    /// <see cref="IServiceProvider"/> — the <c>ObjectDisposedException</c> at
+    /// <c>ServiceLookup.ThrowHelper</c> the hosted lane echoes during teardown
+    /// (hermetic never reaches it; hermetic keeps its own synchronous in-memory
+    /// worker sweep that finishes before dispose). Hermetic gate off → this whole
+    /// branch is byte-neutral and unreachable hermetic; nothing here is asserted.
+    /// </summary>
+    public override async ValueTask DisposeAsync()
+    {
+        if (HostedCiEnabled && HostedDefaultConnection is not null)
+        {
+            try
+            {
+                // Host is deterministically ALREADY started in the hosted lane (every
+                // hosted test hit `Services`), so this getter is a no-op reacquire, not
+                // a lazy start. Draining the sweep before teardown silences the
+                // disposed-provider echo without touching any hermetic byte.
+                var provider = Services;
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                foreach (var service in provider.GetServices<IHostedService>())
+                {
+                    if (service is OcrJobWorker worker)
+                        await worker.StopAsync(cts.Token);
+                }
+            }
+            catch (ObjectDisposedException)
+            {
+                // Teardown already in flight; residual is infrastructure-only and
+                // assertion-neutral. Hermetic never enters here.
+            }
+            catch
+            {
+                // Teardown hygiene only — no assertion surface, hermetic-neutral.
+            }
+        }
+
+        await base.DisposeAsync();
     }
 }
