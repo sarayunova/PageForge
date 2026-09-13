@@ -245,10 +245,41 @@ microseconds and a .NET tick is 100 nanoseconds, so a round-tripped `DateTime`
 came back with its final digit dropped. The in-memory provider stores the value
 as-is and never showed it; that assertion now compares within a millisecond.
 
-**Still open:** the hosted lane has no per-run database isolation. CI gets a fresh
-container so it passes, but re-running it against a used database fails on
-duplicate registrations — the suite reuses fixed addresses (`a@example.com` at
-nine call sites, `alice@example.com` at five) across classes.
+Two more problems sat behind that one, each invisible until the previous was
+fixed:
+
+**Isolation (`e2967bf`).** The suite reuses fixed addresses — `a@example.com` at
+nine call sites, `alice@example.com` at five — and every class shared one
+database, so parallel classes collided on registration. Each factory now owns a
+database. Note that xUnit constructs a test class *per test*, so this is really
+one database per test: the suite went from ~3s to ~19s, and databases accumulate
+(CI discards its container; a local Postgres does not — cleanup command is in
+`e2967bf`).
+
+**A bucket race (`62d081a`), and this one is a real production bug.**
+`EnsureBucketAsync` was check-then-act: `BucketExistsAsync`, then
+`MakeBucketAsync` if absent. Concurrent callers both see "absent", both create,
+and the loser gets `BucketAlreadyOwnedByYou` — which surfaced as a 400 on a
+document version push and failed a different test each run. Two API instances
+starting against a fresh bucket race identically; the isolation fix only made it
+visible by starting many hosts at once. It now judges the postcondition: if the
+bucket exists afterwards the contract is met, otherwise the failure is rethrown.
+Deliberately not a type filter — MinIO 7.0 reports this as a plain
+`ArgumentException` from response parsing, so `catch (MinioException)` would miss
+it, and matching the message would break on any wording change.
+
+**How it was found, because the method matters more than the fix.** Three
+successive guesses were wrong. What worked was one commit (`4e1e19b`) putting the
+HTTP response body into the assertion message, turning a useless
+`Expected: Created, Actual: BadRequest` into `"Bucket already owned by you:
+pageforge-documents (Parameter 'response')"` in a single run. It was then
+reproduced locally before being fixed, by pointing the suite at a fresh bucket
+name — which is what CI has every run and this machine never had: 2 failures
+without the fix, 0 with it. **Instrument first; a CI-only failure usually means
+the local environment differs in a way worth naming.**
+
+That diagnostic is still in place and should be removed once the fix has held for
+a few runs.
 
 `85c6b7b` fixed a flake that failed
 `OcrJobsApiTests.Submit_job_completes_and_notifies_owner` about one run in three.
@@ -279,9 +310,14 @@ resurfaces, giving each factory its own database name is the real fix.
 Branch `fix/viewer-render-phase-r` is pushed and open as **PR #1** against
 `origin/main`; nothing is merged. The working tree is clean.
 
-Suites all green at the time of writing: Core 154, Fidelity 48, API hermetic 47,
-UiSmoke 4, and `--smoke` exits 0. The hosted API lane passes 47/47 too, against
-real Postgres and MinIO.
+**All four CI jobs are green** — native shim, managed build + fidelity, hosted
+API, and the WinUI shell build. Locally: Core 154, Fidelity 48, API hermetic 47,
+hosted API 44 (the three native-OCR tests run on Windows only, see §5), UiSmoke
+4, and `--smoke` exits 0.
+
+Worth knowing: **the WinUI spike builds fine in CI** and fails only on this
+machine, for the missing Visual Studio workload in §6.4. The spike is not rotting,
+and CI already guards it.
 
 **Phase U3 is done** — collapsible/resizable sidebar (`a68e0b7`), empty state
 (`54c2c2f`), page shadows (`817dd8d`) and render placeholders (`844aec6`).
