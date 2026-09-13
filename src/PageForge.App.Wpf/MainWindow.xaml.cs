@@ -14,7 +14,17 @@ using PageForge.MuPdfInterop;
 
 namespace PageForge.App.Wpf;
 
-public partial class MainWindow : Window
+/// <summary>
+/// The shell window. Derives from WPF-UI's FluentWindow (itself a
+/// <see cref="Window"/>) so the Mica backdrop, rounded corners and the
+/// content-extended title bar declared in MainWindow.xaml are honoured; a plain
+/// Window would silently ignore those properties.
+///
+/// The base is <see cref="Controls.FluentShellWindow"/> rather than FluentWindow
+/// itself; that wrapper exists purely to dodge a namespace collision in the
+/// generated MainWindow.g.cs, and its own documentation explains why.
+/// </summary>
+public partial class MainWindow : Controls.FluentShellWindow
 {
     public MainWindow()
     {
