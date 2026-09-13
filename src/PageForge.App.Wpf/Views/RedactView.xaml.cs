@@ -123,10 +123,9 @@ public partial class RedactView : UserControl
                 Text = _justApplied
                     ? "Redactions applied and painted black. ↩ Undo restores the covered content; Save redacted… keeps it removed."
                     : "No regions on this page yet — drag a box over the content to redact.",
-                Foreground = new SolidColorBrush(Color.FromRgb(0xb0, 0xb0, 0xb0)),
                 Margin = new Thickness(8),
                 TextWrapping = TextWrapping.Wrap,
-            });
+            }.Themed(TextBlock.ForegroundProperty, "ContentMutedBrush"));
         }
         else
         {
@@ -136,9 +135,8 @@ public partial class RedactView : UserControl
                 var region = new TextBlock
                 {
                     Text = label,
-                    Foreground = new SolidColorBrush(Color.FromRgb(0xdd, 0xdd, 0xdd)),
                     Margin = new Thickness(8, 6, 8, 6),
-                };
+                }.Themed(TextBlock.ForegroundProperty, "ContentBrush");
                 AutomationProperties.SetName(region, $"Redaction region {label}");
                 RegionsPanel.Children.Add(region);
             }
