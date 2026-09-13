@@ -252,6 +252,34 @@ internal sealed class PageForgeApp : IAsyncDisposable
         return element.Current.Name;
     }
 
+    /// <summary>
+    /// Resizes the main window and waits for the layout to settle.
+    ///
+    /// Toolbar overflow only shows up at a width, so a test that only ever runs at
+    /// the default 1200x820 proves nothing about the sizes users actually pick.
+    /// MainWindow declares MinWidth="900", so that is the narrowest width the app
+    /// claims to support and the one worth holding it to.
+    /// </summary>
+    public async Task ResizeAsync(double width, double height)
+    {
+        var transform = (TransformPattern)Window.GetCurrentPattern(TransformPattern.Pattern);
+        transform.Resize(width, height);
+
+        // WPF lays out on the dispatcher after the resize call returns.
+        await Task.Delay(600);
+
+        // A resize that silently did nothing would make every width-dependent
+        // assertion vacuous - the test would keep passing at the default size while
+        // claiming to have checked a narrow one. The tolerance covers window chrome
+        // and DPI scaling, not a no-op.
+        double actual = Window.Current.BoundingRectangle.Width;
+        if (Math.Abs(actual - width) > 40)
+        {
+            throw new InvalidOperationException(
+                $"Resize to {width:F0} did not take effect; the window is {actual:F0} wide.");
+        }
+    }
+
     /// <summary>Invokes any element that supports Invoke, Toggle, or SelectionItem
     /// (WPF buttons/toggle-buttons/list items).</summary>
     public static void Activate(AutomationElement element)
