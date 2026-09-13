@@ -208,19 +208,47 @@ Note that the post-beta plan of record is a WinUI 3 port (TSD §12.1). WPF-UI is
 the right hedge: its visual language is WinUI's, so the tokens, icon set and
 layout decisions port even though the XAML does not.
 
-## 5. The API's outstanding debt
+## 5. The hosted API lane
 
-`0c1d119` made the hosted CI lane (`PAGEFORGE_HOSTED_CI=1`, real Postgres +
-MinIO) pass: it provisions the schema, drains `OcrJobWorker` before the host's
-provider is disposed, and drops the Windows Event Log provider that could be
-disposed mid-write.
+The `api-hosted` lane (`PAGEFORGE_HOSTED_CI=1`, real Postgres + MinIO) **had
+never executed once** before this branch. It died in `Initialize containers`
+every time, because `minio/minio` on Docker Hub stopped serving anonymous pulls.
+`a5a4fce` points it at a pinned release on quay.io, and `015baea` makes the suite
+behind it pass **47/47 against real Postgres and MinIO**.
 
-**`services/PageForge.Api` has no `Migrations/` folder.** `MigrateAsync()` was
-therefore a silent no-op and the hosted lane's database stayed empty; the fix
-was `EnsureCreatedAsync()`, which builds the schema from the model. That is a
-test-lane provision, **not a production story** — `EnsureCreated` cannot evolve
-a schema. **Real EF migrations are owed before the API is deployed anywhere
-durable** — this is the one piece of genuine product debt on this branch.
+> **The API does have EF migrations.** Seven of them, in
+> `services/PageForge.Api/Migrations/`, including `AddOcrJobs`, which creates
+> `OcrJobItems`. An earlier version of this note, `0c1d119`'s commit message and
+> the PR description all claimed it had none. That claim came from a comment in an
+> inherited working tree and was repeated without anyone listing the directory.
+> **Check the tree before repeating an inherited claim about it** — this one
+> caused the bug it was supposed to prevent.
+
+`0c1d119` acted on that false premise and replaced `MigrateAsync()` with
+`EnsureCreatedAsync()`. `EnsureCreated` builds a schema only when the *database*
+does not exist, and the lane's Postgres container pre-creates `pageforge` via
+`POSTGRES_DB` — so it found a database, created no tables, and `OcrJobWorker` hit
+the exact `42P01 relation "OcrJobItems" does not exist` the change was meant to
+prevent. `Program.cs` is back to `MigrateAsync()`.
+
+Restoring that alone was **not** enough, which is worth knowing before touching
+this again: `Database:AutoMigrate` drives a block between `builder.Build()` and
+`app.Run()`, and `WebApplicationFactory` captures the host at build time without
+running the rest of the entry point, so the block never executes under test at
+all. The hermetic branch has always provisioned its own schema for this reason;
+the hosted branch now does the same, applying the migrations once per process
+behind a lock because every test class builds its own host against one shared
+database.
+
+The last failure there was not a defect: PostgreSQL `timestamptz` keeps
+microseconds and a .NET tick is 100 nanoseconds, so a round-tripped `DateTime`
+came back with its final digit dropped. The in-memory provider stores the value
+as-is and never showed it; that assertion now compares within a millisecond.
+
+**Still open:** the hosted lane has no per-run database isolation. CI gets a fresh
+container so it passes, but re-running it against a used database fails on
+duplicate registrations — the suite reuses fixed addresses (`a@example.com` at
+nine call sites, `alice@example.com` at five) across classes.
 
 `85c6b7b` fixed a flake that failed
 `OcrJobsApiTests.Submit_job_completes_and_notifies_owner` about one run in three.
@@ -248,15 +276,22 @@ resurfaces, giving each factory its own database name is the real fix.
 
 ## 7. Next session starts here
 
-Branch `fix/viewer-render-phase-r` is pushed and well ahead of
-`origin/main`; **no PR has been opened and nothing is merged**. The working tree
-is clean.
+Branch `fix/viewer-render-phase-r` is pushed and open as **PR #1** against
+`origin/main`; nothing is merged. The working tree is clean.
 
 Suites all green at the time of writing: Core 154, Fidelity 48, API hermetic 47,
-UiSmoke 2, and `--smoke` exits 0.
+UiSmoke 4, and `--smoke` exits 0. The hosted API lane passes 47/47 too, against
+real Postgres and MinIO.
 
-Next step is **Phase U3**, doing the rest of U4 alongside it as each surface is
-touched. Before deep U4 work, get an answer on the WinUI port timing (§6.4).
+**Phase U3 is done** — collapsible/resizable sidebar (`a68e0b7`), empty state
+(`54c2c2f`), page shadows (`817dd8d`) and render placeholders (`844aec6`).
+
+Next is **U4 part two**: the per-mode child views. Each rebuilds overlay
+rectangles positioned from PDF geometry, so it means an `ItemsControl` over a
+`Canvas` with bound positions, per view — a design change rather than a
+mechanical one, and probably its own session. After that, per-run database
+isolation for the hosted API lane (§5). Before deep U4 work, get an answer on the
+WinUI port timing (§6.4).
 
 One sequencing note, because it changes the answer to §6.4. Doing U4 **before**
 the WinUI port is not optional polish. Code-behind is the part of a WPF shell
