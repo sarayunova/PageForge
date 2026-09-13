@@ -290,25 +290,52 @@ public class UiSmokeTests
                 page: null,
                 panelHeader: null,
                 commands: ["Replace…"]);
+
+            // Organize, Annotate and Document have no mode toggle - their commands
+            // sit directly in the contextual row - but that row is laid out the same
+            // way and overflows the same way, so it gets the same geometry check.
+            await AssertModeAsync(
+                app, "OrganizeModeTab", toggleName: null,
+                page: null, panelHeader: null,
+                commands: ["Rotate page", "Delete page", "Extract page", "Insert page"]);
+
+            await AssertModeAsync(
+                app, "AnnotateModeTab", toggleName: null,
+                page: null, panelHeader: null,
+                commands: ["Add highlight", "Add text note", "Add ink stroke", "Flatten annotations"]);
+
+            await AssertModeAsync(
+                app, "DocumentModeTab", toggleName: null,
+                page: null, panelHeader: null,
+                commands: ["Run OCR", "Protect document"]);
         }
     }
 
+    /// <param name="toggleName">The mode toggle to switch on, or null for a group
+    /// whose commands sit directly in the contextual row with no mode to enter.</param>
     private static async Task AssertModeAsync(
         PageForgeApp app,
         string tabAutomationId,
-        string toggleName,
+        string? toggleName,
         string? page,
         string? panelHeader,
         string[] commands)
     {
+        // Groups with no mode toggle still need a name in the failure message.
+        string label = toggleName ?? tabAutomationId;
+
         SelectToolGroup(app, tabAutomationId);
 
-        AutomationElement toggle = app.FindByName(toggleName)
-            ?? throw new InvalidOperationException($"Mode toggle '{toggleName}' not found.");
-        ((TogglePattern)toggle.GetCurrentPattern(TogglePattern.Pattern)).Toggle();
+        AutomationElement? toggle = null;
+        if (toggleName is not null)
+        {
+            toggle = app.FindByName(toggleName)
+                ?? throw new InvalidOperationException($"Mode toggle '{toggleName}' not found.");
+            ((TogglePattern)toggle.GetCurrentPattern(TogglePattern.Pattern)).Toggle();
+        }
 
         // The panel renders the page before it lists anything, so give it a beat.
-        await Task.Delay(1500);
+        await Task.Delay(toggleName is null ? 400 : 1500);
 
         System.Windows.Rect window = app.Window.Current.BoundingRectangle;
 
@@ -316,14 +343,14 @@ public class UiSmokeTests
         {
             AutomationElement el = app.FindByName(command)
                 ?? throw new InvalidOperationException(
-                    $"{toggleName}: command '{command}' is not in the automation tree.");
+                    $"{label}: command '{command}' is not in the automation tree.");
 
             System.Windows.Rect r = el.Current.BoundingRectangle;
-            Assert.False(el.Current.IsOffscreen, $"{toggleName}: '{command}' is offscreen.");
-            Assert.True(r.Width > 0 && r.Height > 0, $"{toggleName}: '{command}' has no size.");
+            Assert.False(el.Current.IsOffscreen, $"{label}: '{command}' is offscreen.");
+            Assert.True(r.Width > 0 && r.Height > 0, $"{label}: '{command}' has no size.");
             Assert.True(
                 r.Left >= window.Left && r.Right <= window.Right,
-                $"{toggleName}: '{command}' is outside the window horizontally " +
+                $"{label}: '{command}' is outside the window horizontally " +
                 $"(button {r.Left:F0}..{r.Right:F0}, window {window.Left:F0}..{window.Right:F0}).");
         }
 
@@ -333,26 +360,29 @@ public class UiSmokeTests
             // ("Form fill page 1"), so match on the prefix rather than the
             // XAML-time name.
             AutomationElement pageEl = FindByNamePrefix(app, page)
-                ?? throw new InvalidOperationException($"{toggleName}: page surface '{page}…' not found.");
+                ?? throw new InvalidOperationException($"{label}: page surface '{page}…' not found.");
             AutomationElement headerEl = app.FindByName(panelHeader)
-                ?? throw new InvalidOperationException($"{toggleName}: panel header '{panelHeader}' not found.");
+                ?? throw new InvalidOperationException($"{label}: panel header '{panelHeader}' not found.");
 
             System.Windows.Rect pageRect = pageEl.Current.BoundingRectangle;
             System.Windows.Rect headerRect = headerEl.Current.BoundingRectangle;
 
             Assert.True(headerRect.Width > 0 && headerRect.Height > 0,
-                $"{toggleName}: panel header '{panelHeader}' has no size.");
+                $"{label}: panel header '{panelHeader}' has no size.");
 
             System.Windows.Rect overlap = System.Windows.Rect.Intersect(pageRect, headerRect);
             Assert.True(
                 overlap.IsEmpty || overlap.Width < 1 || overlap.Height < 1,
-                $"{toggleName}: the panel is laid out on top of the page instead of beside it " +
+                $"{label}: the panel is laid out on top of the page instead of beside it " +
                 $"(page {pageRect}, panel header {headerRect}).");
         }
 
         // Leave the mode off so the next one starts clean.
-        ((TogglePattern)toggle.GetCurrentPattern(TogglePattern.Pattern)).Toggle();
-        await Task.Delay(400);
+        if (toggle is not null)
+        {
+            ((TogglePattern)toggle.GetCurrentPattern(TogglePattern.Pattern)).Toggle();
+            await Task.Delay(400);
+        }
     }
 
     /// <summary>First descendant whose automation name starts with the prefix.
