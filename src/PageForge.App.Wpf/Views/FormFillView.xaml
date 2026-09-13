@@ -11,21 +11,33 @@
     <DockPanel Background="{DynamicResource CanvasBrush}">
         <!-- Form-fill toolbar -->
         <Border DockPanel.Dock="Top" Background="{DynamicResource SurfaceRaisedBrush}" Padding="6,4">
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock Text="Fill form" Foreground="{DynamicResource AccentTextBrush}" FontWeight="Bold"
+            <!-- Commands dock right, hint takes what is left: the hint is replaced
+                 at runtime with per-page messages that are far longer than this
+                 default, and as a StackPanel those pushed the buttons off-screen. -->
+            <DockPanel LastChildFill="True">
+                <TextBlock Text="Fill form" DockPanel.Dock="Left" Foreground="{DynamicResource AccentTextBrush}" FontWeight="Bold"
                            VerticalAlignment="Center" Margin="0,0,10,0" />
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="New text field…" Click="NewField_Click" Padding="8,3"
+                            ToolTip="Create a new AcroForm text field on this page (with required/max-length validation)" />
+                    <Separator Margin="6,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
+                    <Button Content="Flatten form…" Click="Flatten_Click" Padding="8,3"
+                            ToolTip="Bake every field value into static page content (fields stop being interactive)" />
+                </StackPanel>
                 <TextBlock x:Name="HintText" Text="Set a field value; values appear on the page at once."
                            Foreground="{DynamicResource ContentMutedBrush}" VerticalAlignment="Center" Margin="0,0,10,0"
+                           TextTrimming="CharacterEllipsis"
+                           ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
                            AutomationProperties.LiveSetting="Polite" />
-                <Button Content="New text field…" Click="NewField_Click" Padding="8,3"
-                        ToolTip="Create a new AcroForm text field on this page (with required/max-length validation)" />
-                <Separator Margin="6,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
-                <Button Content="Flatten form…" Click="Flatten_Click" Padding="8,3"
-                        ToolTip="Bake every field value into static page content (fields stop being interactive)" />
-            </StackPanel>
+            </DockPanel>
         </Border>
 
-        <Grid>
+        <!-- A DockPanel, not a Grid: DockPanel.Dock is an attached property that
+             only means anything when the direct parent is a DockPanel. With a Grid
+             here it was silently ignored, so the fields panel and the page were
+             both laid out in the same single cell and the page - declared second,
+             so drawn on top - hid the panel completely. -->
+        <DockPanel LastChildFill="True">
             <!-- Right: fields panel -->
             <DockPanel DockPanel.Dock="Right" Width="300" Margin="4">
                 <Border DockPanel.Dock="Top" Background="{DynamicResource SurfaceRaisedBrush}" Padding="6,4">
@@ -45,6 +57,6 @@
                     <Canvas x:Name="Overlay" IsHitTestVisible="False" ClipToBounds="True" Focusable="True" />
                 </Grid>
             </ScrollViewer>
-        </Grid>
+        </DockPanel>
     </DockPanel>
 </UserControl>
