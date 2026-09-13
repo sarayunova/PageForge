@@ -61,26 +61,26 @@ public sealed class PageForgeApiFactory : WebApplicationFactory<Program>
     /// </summary>
     private static string? HostedDefaultConnection { get; set; }
 
-    /// <summary>Serializes the hosted lane's one-time schema migration across the
-    /// per-class hosts, which all share a single real database.</summary>
-    private static readonly object HostedSchemaGate = new();
-
-    private static bool _hostedSchemaReady;
+    /// <summary>Distinguishes the databases handed out within one test process.</summary>
+    private static int _hostedDbCounter;
 
     /// <summary>
-    /// Suffix giving the hosted lane a fresh database per test process.
+    /// Suffix giving the hosted lane a fresh database per FACTORY, which means one
+    /// per test class.
     ///
     /// The suite reuses fixed addresses - a@example.com at nine call sites,
-    /// alice@example.com at five - and every test class shares one database, so a
-    /// second run against the same database fails on duplicate registration. CI hid
-    /// that behind a throwaway container; locally it made the lane unrunnable twice
-    /// in a row, and it still left two tests failing in CI through ordering alone.
+    /// alice@example.com at five - so two classes registering the same address
+    /// collide and the loser gets 409 Conflict. Per-process isolation was not
+    /// enough, because xUnit runs classes in parallel inside one process: it passed
+    /// twice locally and still failed three tests in CI, where the scheduling
+    /// differs. Only per-class databases remove the collision rather than making it
+    /// less likely.
     ///
-    /// Migrate() creates the database when it is absent, so naming a new one per
-    /// process is enough: no drop, and no teardown to forget.
+    /// Migrate() creates the database when it is absent, so this costs one
+    /// migration per class and needs no drop and no teardown to forget.
     /// </summary>
-    private static readonly string HostedDbSuffix =
-        $"_{DateTime.UtcNow:yyyyMMddHHmmss}_{Environment.ProcessId}";
+    private readonly string _hostedDbSuffix =
+        $"_{DateTime.UtcNow:yyyyMMddHHmmss}_{Environment.ProcessId}_{Interlocked.Increment(ref _hostedDbCounter)}";
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -127,15 +127,15 @@ public sealed class PageForgeApiFactory : WebApplicationFactory<Program>
                 // e-sign assertions behave identically in both modes.
                 builder.UseSetting("Database:AutoMigrate", "true");
 
-                // Point every host in this process at one fresh database, so a
-                // re-run never inherits the previous run's users. Read from the
-                // same configuration the app uses, so a connection string aimed
-                // somewhere other than the default is still honoured.
+                // Give this factory - and so this test class - its own database, so
+                // neither a re-run nor a sibling class running in parallel can see
+                // its users. Derived from the configured connection string, so one
+                // aimed somewhere other than the default is still honoured.
                 var configured = new Npgsql.NpgsqlConnectionStringBuilder(
                     Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
                     ?? "Host=localhost;Port=5432;Database=pageforge;Username=postgres;Password=postgres");
 
-                configured.Database += HostedDbSuffix;
+                configured.Database += _hostedDbSuffix;
                 string hostedConnection = configured.ConnectionString;
                 HostedDefaultConnection = hostedConnection;
 
@@ -162,19 +162,13 @@ public sealed class PageForgeApiFactory : WebApplicationFactory<Program>
                 // rather than EnsureCreated so it applies the real migrations - the
                 // same ones a deployment applies.
                 //
-                // Once per process: every test class builds its own host against one
-                // shared database, and migrating the same database concurrently
-                // races.
-                lock (HostedSchemaGate)
+                // No lock and no once-only flag: this factory owns its database, so
+                // there is nothing to race with.
+                ServiceProvider hostedSp = services.BuildServiceProvider();
+                using (IServiceScope hostedScope = hostedSp.CreateScope())
                 {
-                    if (!_hostedSchemaReady)
-                    {
-                        ServiceProvider hostedSp = services.BuildServiceProvider();
-                        using IServiceScope hostedScope = hostedSp.CreateScope();
-                        var hostedDb = hostedScope.ServiceProvider.GetRequiredService<AppDbContext>();
-                        hostedDb.Database.Migrate();
-                        _hostedSchemaReady = true;
-                    }
+                    var hostedDb = hostedScope.ServiceProvider.GetRequiredService<AppDbContext>();
+                    hostedDb.Database.Migrate();
                 }
             }
 
