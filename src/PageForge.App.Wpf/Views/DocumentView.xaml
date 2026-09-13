@@ -502,9 +502,23 @@
                 </ListBox.ItemContainerStyle>
                 <ListBox.ItemTemplate>
                     <DataTemplate>
-                        <Border BorderBrush="{DynamicResource PageBorderBrush}" BorderThickness="1" Margin="8,10"
+                        <!-- A sheet, not a rectangle. The page used to sit on the
+                             canvas as a 1px outline, which reads as a box drawn on a
+                             background rather than as paper lying on a desk - the
+                             cue every other PDF reader gives you for where the page
+                             ends. The shadow is soft and nearly black at low opacity
+                             so it works over both the light and dark canvas without
+                             needing a token of its own.
+
+                             Margin is wider than the old 8,10 so consecutive pages
+                             in continuous mode do not run their shadows together. -->
+                        <Border BorderBrush="{DynamicResource PageBorderBrush}" BorderThickness="1" Margin="16,14"
                                 Background="{DynamicResource PageSheetBrush}"
                                 LayoutTransform="{Binding DataContext.Rotation, Converter={StaticResource RotationToTransform}, RelativeSource={RelativeSource AncestorType=ListBox}}">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="14" ShadowDepth="3" Direction="270"
+                                                  Color="#FF000000" Opacity="0.28" RenderingBias="Performance" />
+                            </Border.Effect>
                             <Grid>
                                 <!-- Stretch=None is deliberate and fidelity-critical:
                                      the bitmap shows at exactly the DPI it was
