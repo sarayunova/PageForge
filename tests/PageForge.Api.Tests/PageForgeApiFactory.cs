@@ -109,6 +109,16 @@ public sealed class PageForgeApiFactory : WebApplicationFactory<Program>
 
             // Replace the config-selected email sender with a capture sink so
             // e-sign tests can assert reminders/certificates without SMTP.
+            // Every test class builds its own host, and they all share one static
+            // in-memory database - but each host has its OWN recording email sender.
+            // With the start-up sweep on, a host starting up would pick up another
+            // host's queued OCR item, process it in its own scope, and deliver the
+            // completion email to its own sender instead of the owning test's. The
+            // job read Completed and the email was nowhere, so
+            // Submit_job_completes_and_notifies_owner failed about one run in three.
+            // Tests enqueue in-process at submit time, so nothing here needs the sweep.
+            builder.UseSetting("Ocr:SweepQueuedOnStart", "false");
+
             ServiceDescriptor? email = services.SingleOrDefault(
                 d => d.ServiceType == typeof(IEmailSender));
             if (email is not null) services.Remove(email);

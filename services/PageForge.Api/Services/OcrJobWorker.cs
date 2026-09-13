@@ -4,6 +4,7 @@
 
 using System.Threading.Channels;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using PageForge.Api.Data;
 
 namespace PageForge.Api.Services;
@@ -20,6 +21,7 @@ public sealed class OcrJobWorker : BackgroundService
     private readonly Channel<(Guid JobId, Guid ItemId)> _queue;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IOcrJobProcessor _processor;
+    private readonly OcrOptions _options;
 
     // Serializes the item-completion write across every worker instance in this
     // process. Tests spin up multiple WebApplicationFactory hosts (each with its own
@@ -27,10 +29,14 @@ public sealed class OcrJobWorker : BackgroundService
     // a static lock makes completion updates atomic process-wide and race-free.
     private static readonly SemaphoreSlim _completionLock = new(1, 1);
 
-    public OcrJobWorker(IServiceScopeFactory scopeFactory, IOcrJobProcessor processor)
+    public OcrJobWorker(
+        IServiceScopeFactory scopeFactory,
+        IOcrJobProcessor processor,
+        IOptions<OcrOptions> options)
     {
         _scopeFactory = scopeFactory;
         _processor = processor;
+        _options = options.Value;
         _queue = Channel.CreateBounded<(Guid, Guid)>(new BoundedChannelOptions(1000)
         {
             FullMode = BoundedChannelFullMode.Wait
@@ -42,7 +48,11 @@ public sealed class OcrJobWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await SweepQueuedItemsAsync(stoppingToken);
+        if (_options.SweepQueuedOnStart)
+        {
+            await SweepQueuedItemsAsync(stoppingToken);
+        }
+
         await RunWorkerAsync(stoppingToken);
     }
 

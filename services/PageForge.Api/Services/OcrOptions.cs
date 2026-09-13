@@ -25,4 +25,19 @@ public sealed class OcrOptions
     /// the native engine (e.g. the integration-test factory) keep a no-op path.
     /// </summary>
     public bool EnableNativeEngine { get; set; }
+
+    /// <summary>
+    /// When true (the default), <see cref="OcrJobWorker"/> sweeps items still marked
+    /// Queued in the database at start-up and re-enqueues them. That is what lets a
+    /// restarted host pick up work that was in flight when it went down, and it is
+    /// correct for a deployed API, which owns its database.
+    ///
+    /// The integration-test harness turns it off, because there it is actively
+    /// harmful: every test class builds its own host against one shared in-memory
+    /// database, so a starting host would sweep up another host's queued job and
+    /// complete it in its own scope - delivering the completion email to the wrong
+    /// host's recording sender. The job would read Completed, the email would be
+    /// nowhere, and the owning test would fail about one run in three.
+    /// </summary>
+    public bool SweepQueuedOnStart { get; set; } = true;
 }
