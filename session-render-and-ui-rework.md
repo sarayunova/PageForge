@@ -1,9 +1,9 @@
-# Session note: PDF render failure + UI modernization plan
+# Session note: PDF render failure + UI modernization
 
-Status: **Phase R (render) is done and committed** on branch
-`fix/viewer-render-phase-r` as `bdd3a18`. Phase U (UI modernization) is planned
-but not started, and is blocked on the four questions in §6. Read `AGENTS.md`
-and the TRD/TSD first.
+Status: **Phase R (render) and Phases U0–U2 (tokens, Fluent chrome, toolbar) are
+done and committed** on branch `fix/viewer-render-phase-r`, which is pushed to
+`origin`. Phase U3 (document surface) and U4 (MVVM cleanup) are the remaining
+work. Read `AGENTS.md` and the TRD/TSD first.
 
 ## 1. What this project actually is
 
@@ -21,244 +21,169 @@ Consequence for the UI question: any "frontend plugin" must be a **XAML/WPF**
 library. React/Tailwind/shadcn and the rest of the web toolchain are not
 applicable to the shipping shell.
 
-## 2. The PDF render bug — root cause found
+## 2. The PDF render bug — fixed in `bdd3a18`
 
-**The rendering engine is fine.** `PageForge.App.Wpf.exe --smoke` was run in
-this session and exits 0, rendering `sample-phase0.pdf` p1 at 794x1123 px to
-`artifacts/sample-phase0-p1-wpfproof.png`, plus the organizer, annotation, edit
-and 4-document corpus dogfood proofs. MuPDF, the shim, Interop and Core all
-work. The failure is entirely in the WPF binding layer.
+**The rendering engine was never at fault.** MuPDF, the shim, Interop and Core
+all worked; the failure was entirely in the WPF binding layer. Four causes, all
+addressed:
 
-### Cause A — the render trigger never fired (primary)
+- **A (primary) — the render trigger never fired.**
+  `PageImageBehavior.RenderOnLoad` matched the realized element's DataContext
+  against `PageImageViewModel`, but the page and thumbnail templates both bind
+  through a **`PageSlotViewModel`**. The pattern match always failed, so
+  `RenderAsync` was never called and the viewer stayed blank. Because it was a
+  silent `if`, nothing logged and nothing threw. Resolution now lives in
+  `PageImageBehavior.ResolveImage`, which maps a slot to the right image and
+  tells the page and thumbnail surfaces apart by binding path — they render the
+  same page at very different DPIs.
+- **B — zoom blanked every page.** `RenderDpi`'s setter dropped the cached
+  bitmap and nothing re-rendered it, so every zoom step left white pages until
+  the container recycled. `RenderDpi` now marks the cache stale while *keeping*
+  the old pixels on screen, and `DocumentView.RenderRealizedPages()` follows
+  `ApplyZoomToPages()` with `RenderSlotsAsync()` over the realized slots. Each
+  zoom cancels the previous re-render, so holding zoom does not render every
+  intermediate DPI.
+- **C — `Stretch` on the page image.** Reverted to `Stretch="None"`, with a
+  comment recording why. This is fidelity-critical: `None` shows the bitmap at
+  exactly the DPI it was rendered at, so zoom means "re-render sharper" rather
+  than "resample a cached bitmap up". `Uniform` would have masked cause B
+  instead of fixing it, and the fidelity suite pins byte-identical PNG output.
+- **D — no failure was ever surfaced.** `PageImageViewModel.RenderError` is
+  bound to a visible on-page error panel, which now also carries a **Try again**
+  button (`RetryAsync` clears the error first, so the attempt is visible).
 
-`PageImageBehavior.RenderOnLoad` (`ViewModels/PageImageViewModel.cs`) tested
-the realized element's DataContext with:
+Regression cover: `--smoke` runs `RunHeadlessSlotRenderProofAsync`, which
+asserts both surfaces resolve and that a 2x DPI change re-renders 794px →
+1588px. **Reintroducing cause A makes the proof exit 1**, so it is a test that
+can actually fail.
 
-```csharp
-if (element.DataContext is PageImageViewModel page) { await page.RenderAsync(); }
-```
+## 3. Why the interface looked dated — and what was done
 
-But the item templates in `Views/DocumentView.xaml` bind `Image.Bitmap` /
-`Thumbnail.Bitmap`, so the DataContext of every page and thumbnail slot is a
-**`PageSlotViewModel`**, never a `PageImageViewModel`. The pattern match always
-failed, `RenderAsync` was never called, and both the page surface and the
-thumbnail strip stayed blank on open. Because it is a silent `if`, nothing was
-logged and nothing threw.
+`App.xaml` used to be three lines with no `Application.Resources` at all: no
+theme, no templates, no tokens, no type scale. Every control was stock WPF
+Aero2 painted over with hex literals scattered through the XAML. That was the
+whole reason it read as an old application.
 
-The working tree already contains the corrected version (cast to
-`PageSlotViewModel`, call `slot.Image.RenderAsync()`, with catch arms that clear
-the slot for retry instead of letting an exception escape the `async void`
-`Loaded` seam). It is **uncommitted and unverified in a real window** — it
-compiles (`dotnet build ... -c Debug` succeeded, 0 warnings) but has only been
-exercised headlessly.
+**U0 + U1 — tokens and Fluent chrome (`c80bea0`, `24df7fe`).**
+`Themes/Tokens.Dark.xaml` and `Tokens.Light.xaml` hold the palette as named
+brushes, ported one-for-one from FrameForge's `tailwind.config.ts` — PageForge
+and FrameForge are sibling LiVi products, so the visual language is inherited
+rather than invented. `Typography.xaml` carries the dense 10–15px scale and the
+Segoe UI Variable stack. `ThemeManager` follows the OS theme and swaps
+dictionaries live. `MainWindow` is a WPF-UI `FluentWindow` with Mica, rounded
+corners and `ExtendsContentIntoTitleBar`; "Open PDF…" and the AGPL §13 source
+link moved into the title bar, removing a whole band of chrome.
 
-### Cause B — zoom blanks every page (real, still unfixed)
+**U2 — toolbar (`ae18e82`).** The single ~30-control `StackPanel` became three
+rows: an always-available command bar, a mode switcher, and a contextual row per
+mode. Unicode glyphs (`⇩ ⟲ ⟳ ✂ …`) were replaced with real icons. Previously,
+below about 1500px the last commands ran off the right edge and were simply
+unreachable — at the default 1200x820 window "Save order…" was already clipped.
 
-`DocumentTabViewModel.ApplyZoomToPages` sets `page.Image.RenderDpi = dpi` for
-every slot. `PageImageViewModel.RenderDpi`'s setter drops the cached bitmap
-(`Bitmap = null`) because the cache is stale at the new DPI — but **nothing
-re-renders it**. `Loaded` does not fire again for containers that are already
-realized, so after any zoom in/out/reset/fit the visible pages go white and stay
-white until the container is scrolled out and recycled back in. With Cause A
-also present the app looked permanently broken; with Cause A fixed this becomes
-the next visible defect.
+**Icon (`5aa987e`, `59db5f4`).** `tools/make-icon.ps1` generates
+`Assets/pageforge.ico` (16–256px) and a 256px PNG reproducibly from
+`assets/brand/pageforge-icon-source.png`, stamped into the exe via
+`ApplicationIcon`. The art is the flat full-bleed LiVi tile; the earlier
+gradient badge is kept as `assets/brand/pageforge-icon-alt-badge.png`. The flat
+art was chosen because its heavy strokes stay legible at 16px, where the
+gradient badge collapsed into a blue blob.
 
-Fix direction: after clearing, kick a re-render for the slots that are currently
-realized — either have `ApplyZoomToPages` await/queue `RenderAsync` for the
-visible range, or raise an event the view handles by re-rendering realized
-containers. Keep it cancellable so a fast zoom sequence supersedes in-flight
-renders rather than queueing them all.
+**Logging + retry (`2df7f98`).** `Diagnostics/AppLog.cs` is the logging seam,
+writing through `Microsoft.Extensions.Logging` to
+`%LOCALAPPDATA%\PageForge\logs\pageforge.log`. It replaced
+`System.Diagnostics.Trace`, which in a released WPF build writes nowhere anybody
+can read — that is how the blank-viewer bug reached a user with no trail. The
+sink (`Diagnostics/FileLoggerProvider.cs`) is in-repo, because every dependency
+needs an AGPL licence check and a notices entry, and that is a poor trade for an
+append behind a lock.
 
-### Cause C — `Stretch` on the page image
+### Still open on the UI
 
-The working tree also changes the page `Image` from `Stretch="None"` to
-`Stretch="Uniform"`. Be careful here: this is a **fidelity-sensitive** change.
-`Stretch="None"` shows the bitmap at exactly the DPI it was rendered at, which
-is what makes zoom mean "re-render at higher DPI" rather than "scale a blurry
-bitmap up". `Uniform` will make pages appear (blurred, resampled) even when the
-DPI-driven re-render path is broken — which masks Cause B instead of fixing it.
-Recommendation: **fix Cause B properly and revert this to `None`**, or make the
-container size explicitly track `PixelWidth`/`PixelHeight` so `Uniform` is a
-no-op at 1:1. The fidelity suite pins byte-identical PNG output
-(`tests/PageForge.Fidelity.Tests/corpus/manifest.psd1`), so a resampling change
-here is exactly the kind of thing the render-equality gate exists to catch.
-
-### Cause D — no failure is ever surfaced
-
-Even with the fix, a render failure results in a blank page and a
-`Trace.TraceWarning` nobody reads. There is no on-page error state and no
-retry affordance. This is why the bug survived to the user.
-
-### What was actually done (commit `bdd3a18`)
-
-All four causes are addressed:
-
-- **A** — resolution moved into `PageImageBehavior.ResolveImage`, which maps a
-  `PageSlotViewModel` DataContext to the right image and tells the page and
-  thumbnail surfaces apart by binding path, so a thumbnail is no longer at risk
-  of rendering at full-page DPI.
-- **B** — `RenderDpi` now marks the cache stale while *keeping* the old pixels on
-  screen (no white flash), and `DocumentView.RenderRealizedPages()` follows
-  `ApplyZoomToPages()` with the new `DocumentTabViewModel.RenderSlotsAsync()`
-  over the slots whose containers are realized. Each zoom cancels the previous
-  re-render, so holding zoom does not render every intermediate DPI.
-- **C** — reverted to `Stretch="None"` with a comment recording why, and the
-  fidelity suite passes.
-- **D** — `PageImageViewModel.RenderError` is bound to a visible on-page error
-  panel. The `ILogger` seam is still outstanding (see below).
-
-Verification performed:
-
-- `--smoke` exits 0, including a new `RunHeadlessSlotRenderProofAsync` writing
-  `artifacts/slot-render-proof.txt`. It asserts both surfaces resolve and that a
-  2x DPI change re-renders 794px → 1588px. **Reintroducing cause A makes the
-  proof exit 1**, so it is a regression test that can actually fail.
-- Core 154 passed, Fidelity 48 passed, UiSmoke 1 passed.
-- Confirmed in a real window (launched, screenshotted): the sample renders on
-  open with a rendered thumbnail, and zooming to 150% re-renders sharp.
-
-Still outstanding from the render work:
-
-1. A real `ILogger` seam to replace `Trace.TraceWarning`.
-2. A retry affordance on the error panel (it reports, but cannot yet retry).
-3. The `Fit` button calls `ZoomReset()` (100%), so it does not fit to width
-   despite its tooltip. Separate small bug, noticed while tracing zoom.
-4. `tests/PageForge.Api.Tests` was not run; the working tree carries unreviewed
-   API changes from an earlier session.
-
-## 3. Why the interface looks dated — concrete findings
-
-`App.xaml` is **three lines with no `Application.Resources` at all**. There is no
-theme, no control template, no design tokens, no typography scale. Every
-control is stock WPF Aero2 — the 2010 look — painted over with hardcoded hex
-literals scattered through the XAML (`#2b2b2b`, `#1e1e1e`, `#3a3a3a`, `#555`,
-`#444`, `#bbb`, `#ddd`, `#999`). That is the whole reason it reads as an old
-application: grey 3-D bevelled buttons and a square default TabControl on a dark
-strip.
-
-Specific problems, in the order they hurt:
-
-- **One 30-button toolbar.** `DocumentView.xaml` puts navigation, zoom,
-  rotation, Organize, Annotate, Edit, object, form, redact, undo/redo, OCR,
-  Protect and search in a single horizontal `StackPanel`. It overflows off-screen
-  on narrower windows with no overflow handling, and it exposes every mode at
-  once with no hierarchy.
-- **Unicode glyphs as icons** (`⇩ ⟲ ⟳ ✂ ⧉ ✱ 🗨 ✒ ⚟ ✎ ⬒ ☑ ✖ ↩ ↪ ⇺ 🔒`). These
-  render inconsistently per font fallback, do not scale or recolor, and several
-  are semantically opaque. A real icon font (Fluent/Lucide) or vector paths is
-  needed.
-- **No window chrome work.** Default title bar, no Mica/acrylic backdrop, no
-  rounded corners — the Windows 11 cues users read as "modern".
-- **Colors are not tokens.** Phase 6 raised contrast to WCAG 2.1 AA by editing
-  hex literals in place. Any restyle will silently undo that unless the palette
-  first becomes named brushes with the contrast ratios recorded.
-- **Fixed 270 px sidebar**, no collapse, no splitter, no responsive behavior.
-- **No light theme and no system-theme following.** Dark is hardcoded.
-- **No empty state.** With no document open the user sees a bare grey area.
-- **Density and spacing are ad hoc** — `Padding="8,3"`, `"10,3"`, `"12,4"`
-  chosen per control.
-- **Imperative view wiring.** `DocumentView.xaml.cs` is 1254 lines assigning
-  `ItemsSource` and text by hand (`Refresh()`, `RefreshAndScroll()`) instead of
-  binding. This is what will make a restyle expensive, so it is worth
-  addressing as part of the same work.
-
-## 4. Libraries worth adding (and the licence constraint)
-
-PageForge is **AGPLv3**. Any UI dependency must be AGPL-compatible and must be
-recorded in `THIRD-PARTY-NOTICES.md`. Permissive (MIT/Apache-2.0) is fine;
-commercial component suites (Syncfusion, DevExpress, Telerik) are a licence and
-distribution problem for an AGPL open-source beta and should be ruled out.
-
-Recommended, minimal set:
-
-| Package | Licence | Why |
-|---|---|---|
-| **WPF-UI** (`lepoco/wpfui`) | MIT | The single highest-leverage addition. Fluent/Windows 11 control styles, Mica backdrop, `NavigationView`, `TitleBar`, the Fluent System Icons set, and light/dark theming that can follow the OS. Merges into `App.xaml` resources. |
-| **CommunityToolkit.Mvvm** | MIT | Source-generated `ObservableProperty`/`RelayCommand`. Replaces the hand-rolled `ObservableObject` and lets the 1254-line code-behind become bindings — the prerequisite for restyling cheaply. |
-| **Microsoft.Xaml.Behaviors.Wpf** | MIT | Proper behaviors/triggers, replacing the hand-rolled attached-property `Loaded` hooks — which is exactly where the render bug lived. |
-| **Microsoft.Extensions.DependencyInjection + Logging** | MIT | Real DI and a logging seam so render failures are observable instead of `Trace`. |
-
-Optional / evaluate later:
-
-- **MahApps.Metro** (MIT) — an alternative to WPF-UI with a more "Metro" look.
-  Pick one, not both.
-- **Material Design In XAML Toolkit** (MIT) — only if you deliberately want
-  Material rather than a native Windows look. For a Windows PDF editor, native
-  Fluent is the better read.
-- **Dirkster.AvalonDock** (MIT) — dockable/floating panels, if the sidebar
-  should become a real tool-window system.
-- **Fluent System Icons** (MIT) — ships with WPF-UI; use it instead of the
-  Unicode glyphs.
-
-Explicitly **not** recommended: any web/React/Tailwind/shadcn route, unless you
-first decide to rebuild the shell as WebView2 + a web UI — which is a strategic
-re-platform, not a restyle, and would put the whole PDF surface behind an
-interop boundary the current MuPDF bitmap pipeline is not designed for.
-
-Note that the post-beta plan of record is a WinUI 3 port (TSD §12.1). Effort
-spent on WPF chrome is partly throwaway if that port happens soon. WPF-UI is
-the right hedge: its visual language is WinUI's, so the design tokens, icon set
-and layout decisions port even though the XAML does not.
-
-## 5. Proposed plan
-
-**Phase R — make it render. DONE (`bdd3a18`).** See §2. No visual changes went
-into that commit beyond the error panel. Opening a PDF now reliably shows pages,
-and zoom re-renders instead of blanking.
-
-**Phase U0 — design tokens, no visual change.**
-Extract every hex literal into a `Themes/` resource dictionary as named brushes
-with recorded contrast ratios; add a typography and spacing scale. Verify the
-Phase 6 WCAG evidence in `docs/phase6-evidence` still holds. The app should
-look identical after this phase.
-
-**Phase U1 — adopt WPF-UI.**
-Add the package, merge its dictionaries into `App.xaml`, map the Phase U0 tokens
-onto its theme resources, switch `MainWindow` to a Fluent window with Mica and a
-custom title bar, and enable OS theme following (this delivers light mode).
-Update `THIRD-PARTY-NOTICES.md`.
-
-**Phase U2 — restructure the toolbar.**
-Replace the 30-button row with a small persistent command bar (open, page nav,
-zoom, search) plus a mode/tool switcher for Organize / Annotate / Edit / Forms /
-Redact, each revealing only its own contextual controls. Swap Unicode glyphs for
-Fluent icons with text labels. Add overflow so nothing is unreachable at
-1280 px.
-
-**Phase U3 — the document surface.**
-Real page shadows and a proper canvas background, a collapsible sidebar with a
-splitter, a designed empty state, loading skeletons per page, and the visible
-render-error/retry state from Phase R.
-
-**Phase U4 — MVVM cleanup.**
-Move `DocumentView.xaml.cs` logic to commands and bindings using
-CommunityToolkit.Mvvm. Do this incrementally, one surface at a time, keeping the
-UiSmoke automation green — it looks up controls by `AutomationId`, so preserve
-those names through every rename.
+- **Phase U3 — the document surface.** Page shadows and a proper canvas
+  background, a designed empty state (with no document open the user still sees
+  a bare panel), per-page loading skeletons, and a **collapsible sidebar with a
+  splitter** — it is still a fixed `Width="270"` with no collapse
+  (`DocumentView.xaml:355`).
+- **Phase U4 — MVVM cleanup.** `DocumentView.xaml.cs` is **1,335 lines** of
+  imperative wiring, assigning `ItemsSource` and text by hand (`Refresh()`,
+  `RefreshAndScroll()`) instead of binding. There is **no `ICommand` anywhere in
+  the shell** — every control is a `Click` handler. This is what makes any
+  future UI change expensive, and it is where the original render bug lived. Do
+  it incrementally, one surface at a time, keeping UiSmoke green: it looks up
+  controls by `AutomationId`, so preserve those names through every rename.
+- **No fit-to-width.** The old "Fit" button called `ZoomReset()` (100%) despite
+  its tooltip; it was renamed "Reset zoom to 100%", so it is honest now, but
+  actual fit-to-width / fit-page does not exist.
+- **No automated cover for the error panel or the retry button.** The XAML binds
+  and compiles, but no test forces a render failure, so neither the panel nor
+  the error-path logging is proven on screen. A `--smoke` proof that injects a
+  failing render would cover both.
 
 Accessibility is a gate on every UI phase, not a phase of its own: Phase 6
 reached WCAG 2.1 AA and the restyle must not regress contrast, keyboard paths,
-automation names or heading structure.
+automation names or heading structure. Verify `docs/phase6-evidence` still holds
+after each phase.
 
-## 6. Open questions for the user
+## 4. Dependency policy
 
-1. Is the WinUI 3 port still planned, and roughly when? If it is imminent,
-   Phase U should be scoped to WPF-UI theming only, skipping deeper WPF work.
-2. Light theme, dark theme, or follow-the-OS as the default?
-3. Is there any brand direction — colors, logo, product name treatment — or
-   should the restyle stay neutral Fluent?
-4. Is adding NuGet dependencies to the desktop shell acceptable given the AGPL
-   notices burden, or is a hand-rolled theme preferred?
+PageForge is **AGPLv3**. Any UI dependency must be AGPL-compatible and recorded
+in `THIRD-PARTY-NOTICES.md`. Permissive (MIT/Apache-2.0) is fine; commercial
+suites (Syncfusion, DevExpress, Telerik) are a licence and distribution problem
+for an AGPL open-source beta and are ruled out.
+
+Taken so far, both MIT and both recorded: **WPF-UI** 4.3.0 (Fluent control
+styles, Mica, the icon set) and **Microsoft.Extensions.Logging** 8.0.1.
+
+Still worth taking when the relevant phase starts:
+
+| Package | Licence | Why |
+|---|---|---|
+| **CommunityToolkit.Mvvm** | MIT | Source-generated `ObservableProperty`/`RelayCommand`. The prerequisite for Phase U4 — it is what lets the 1,335-line code-behind become bindings. |
+| **Microsoft.Xaml.Behaviors.Wpf** | MIT | Proper behaviors/triggers, replacing the hand-rolled attached-property `Loaded` hooks — exactly where the render bug lived. |
+| **Microsoft.Extensions.DependencyInjection** | MIT | A real container, so `AppLog`'s static holder can become injection. `AppLog.Factory` is the single seam to repoint. |
+
+Explicitly **not** recommended: any web/React/Tailwind/shadcn route, unless you
+first decide to rebuild the shell as WebView2 + a web UI — a strategic
+re-platform, not a restyle, and it would put the whole PDF surface behind an
+interop boundary the current MuPDF bitmap pipeline is not designed for.
+
+Note that the post-beta plan of record is a WinUI 3 port (TSD §12.1). WPF-UI is
+the right hedge: its visual language is WinUI's, so the tokens, icon set and
+layout decisions port even though the XAML does not.
+
+## 5. The API's outstanding debt
+
+`0c1d119` made the hosted CI lane (`PAGEFORGE_HOSTED_CI=1`, real Postgres +
+MinIO) pass: it provisions the schema, drains `OcrJobWorker` before the host's
+provider is disposed, and drops the Windows Event Log provider that could be
+disposed mid-write.
+
+**`services/PageForge.Api` has no `Migrations/` folder.** `MigrateAsync()` was
+therefore a silent no-op and the hosted lane's database stayed empty; the fix
+was `EnsureCreatedAsync()`, which builds the schema from the model. That is a
+test-lane provision, **not a production story** — `EnsureCreated` cannot evolve
+a schema. Real EF migrations are owed before the API is deployed anywhere
+durable.
+
+## 6. Answers to the questions this note used to ask
+
+1. **Light, dark, or follow-the-OS?** Follow-the-OS, implemented. Both token
+   dictionaries exist and `ThemeManager` swaps them live.
+2. **Brand direction?** Yes — LiVi Software Company. The palette is ported from
+   the sibling product FrameForge, and the app icon is the LiVi tile.
+3. **Are NuGet dependencies acceptable?** Yes, with the licence discipline in §4.
+4. **WinUI 3 port timing?** Still unanswered, and still the question that
+   decides how much deeper WPF work is worth doing. It does not block U3; it
+   does bear on how much of U4 to attempt.
 
 ## 7. Next session starts here
 
-Phase R is committed on `fix/viewer-render-phase-r` (`bdd3a18`); it has not been
-merged or pushed. Next step is Phase U0 (design tokens, no visual change) — but
-**the four questions in §6 are still unanswered and should be asked before Phase
-U1 picks a direction**, because the answer to Q1 (WinUI port timing) decides how
-much WPF work is worth doing at all.
+Branch `fix/viewer-render-phase-r` is pushed and well ahead of
+`origin/main`; **no PR has been opened and nothing is merged**. The working tree
+is clean.
 
-Uncommitted working-tree state at the time of writing, all pre-existing and
-**not reviewed in this session**: `services/PageForge.Api/Program.cs`,
-`tests/PageForge.Api.Tests/PageForgeApiFactory.cs`, and an untracked
-`docs/INSTALL.md`. Someone should decide whether those land or get reverted.
+Suites all green at the time of writing: Core 154, Fidelity 48, API hermetic 47,
+UiSmoke 1, and `--smoke` exits 0.
+
+Next step is **Phase U3**, doing U4 incrementally alongside it as each surface is
+touched. Before deep U4 work, get an answer on the WinUI port timing (§6.4).
