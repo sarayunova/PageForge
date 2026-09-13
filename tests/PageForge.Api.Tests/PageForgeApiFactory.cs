@@ -61,6 +61,12 @@ public sealed class PageForgeApiFactory : WebApplicationFactory<Program>
     /// </summary>
     private static string? HostedDefaultConnection { get; set; }
 
+    /// <summary>Serializes the hosted lane's one-time schema migration across the
+    /// per-class hosts, which all share a single real database.</summary>
+    private static readonly object HostedSchemaGate = new();
+
+    private static bool _hostedSchemaReady;
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
@@ -105,6 +111,34 @@ public sealed class PageForgeApiFactory : WebApplicationFactory<Program>
                 // (email capture, fixed JWT) are unchanged so the 46 e-identity and
                 // e-sign assertions behave identically in both modes.
                 builder.UseSetting("Database:AutoMigrate", "true");
+
+                // ...but do not rely on it. Database:AutoMigrate drives a block in
+                // Program.cs that sits between builder.Build() and app.Run(), and
+                // WebApplicationFactory captures the host at build time and never
+                // runs the rest of the entry point. That block therefore does not
+                // execute here, the schema was never created, and every hosted test
+                // failed with 42P01 "relation OcrJobItems does not exist" - which is
+                // exactly what the lane did the first time it got far enough to run.
+                //
+                // The hermetic branch below has always provisioned its own schema
+                // for this reason. The hosted branch now does the same, with Migrate
+                // rather than EnsureCreated so it applies the real migrations - the
+                // same ones a deployment applies.
+                //
+                // Once per process: every test class builds its own host against one
+                // shared database, and migrating the same database concurrently
+                // races.
+                lock (HostedSchemaGate)
+                {
+                    if (!_hostedSchemaReady)
+                    {
+                        ServiceProvider hostedSp = services.BuildServiceProvider();
+                        using IServiceScope hostedScope = hostedSp.CreateScope();
+                        var hostedDb = hostedScope.ServiceProvider.GetRequiredService<AppDbContext>();
+                        hostedDb.Database.Migrate();
+                        _hostedSchemaReady = true;
+                    }
+                }
             }
 
             // Replace the config-selected email sender with a capture sink so

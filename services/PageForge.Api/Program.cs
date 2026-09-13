@@ -203,14 +203,18 @@ if (bool.TryParse(builder.Configuration["Database:AutoMigrate"], out bool migrat
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-    // Deterministic schema-before-start in the HOSTED lane: this API has NO EF
-    // migrations (no Migrations/ folder), so MigrateAsync() is a silent NO-OP that
-    // leaves the real Postgres empty — and OcrJobWorker's startup sweep then hits
-    // Npgsql.PostgresException 42P01 "relation OcrJobItems does not exist".
-    // Building/validating the real schema from the model is the deterministic
-    // provision; hermetic never enters here (AutoMigrate gate is off → block
-    // untaken → byte-neutral 47/47).
-    await db.Database.EnsureCreatedAsync();
+    // Applies the migrations in services/PageForge.Api/Migrations - seven of them,
+    // through AddOcrJobs, which is what creates OcrJobItems.
+    //
+    // This briefly became EnsureCreatedAsync on the belief that the project had no
+    // migrations at all. It has; and EnsureCreated is the wrong tool here anyway,
+    // because it only builds a schema when the DATABASE does not exist. The hosted
+    // lane's Postgres container pre-creates "pageforge" via POSTGRES_DB, so
+    // EnsureCreated found a database, returned false, created no tables, and
+    // OcrJobWorker's startup sweep hit 42P01 "relation OcrJobItems does not exist"
+    // - the very error the change was meant to prevent. EnsureCreated also cannot
+    // evolve a schema, so it could never have been right for a deployed API.
+    await db.Database.MigrateAsync();
 }
 
 app.Run();
