@@ -244,7 +244,19 @@ jobs:
           --health-timeout 5s
           --health-retries 10
       minio:
-        image: minio/minio:latest
+        # quay.io, and a pinned release, for two separate reasons.
+        #
+        # minio/minio on Docker Hub stopped serving anonymous pulls, so this job
+        # died in Initialize containers - before checkout, so before any of our code
+        # ran - with "pull access denied for minio/minio, repository does not exist
+        # or may require 'docker login'". quay.io is MinIO's own registry and still
+        # serves the image unauthenticated.
+        #
+        # The tag is pinned because ":latest" is what let an upstream change break
+        # this lane with no way to tell a registry problem from a regression in the
+        # PR that happened to be running. A dated release also means a MinIO
+        # behaviour change arrives when someone bumps it deliberately.
+        image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
         env:
           MINIO_ROOT_USER: minioadmin
           MINIO_ROOT_PASSWORD: minioadmin
