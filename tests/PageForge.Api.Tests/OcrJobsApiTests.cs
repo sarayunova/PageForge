@@ -158,7 +158,21 @@ public sealed class OcrJobsApiTests : IDisposable
         push.Content = new ByteArrayContent(Encoding.UTF8.GetBytes("ocr-content"));
         push.Content.Headers.ContentType = new MediaTypeHeaderValue("application/pdf");
         HttpResponseMessage pushResp = await _client.SendAsync(push);
-        Assert.Equal(HttpStatusCode.Created, pushResp.StatusCode);
+
+        // Diagnostic only - no behaviour change. This assertion has failed in the
+        // api-hosted lane as a bare "Expected: Created, Actual: BadRequest", which
+        // says nothing about why. PushVersion itself has no 400 path (201 or 409
+        // only), so the status comes from ErrorHandlingMiddleware, which maps
+        // ArgumentException to 400 and passes exception.Message straight into the
+        // response body. The app logs the exception too, but xUnit does not capture
+        // host console output, so the body is the only channel that reaches CI.
+        // Read it into the failure message; remove once the cause is known.
+        if (pushResp.StatusCode != HttpStatusCode.Created)
+        {
+            string pushBody = await pushResp.Content.ReadAsStringAsync();
+            Assert.Fail(
+                $"Version push returned {(int)pushResp.StatusCode} {pushResp.StatusCode}; body: {pushBody}");
+        }
 
         using JsonDocument versions = await SendAsync("GET", $"/api/v1/documents/{docId}/versions", token);
         return versions.RootElement[0].GetProperty("id").GetGuid();
