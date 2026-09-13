@@ -386,6 +386,82 @@ public class UiSmokeTests
     }
 
     /// <summary>
+    /// Closing the last document must leave something useful on screen.
+    ///
+    /// Every other fact here runs with the sample document open, so the zero-tab
+    /// path had no cover at all - the same blind spot that let the mode panels ship
+    /// invisible. It also pins the wiring rather than just the markup: the empty
+    /// state's visibility is set from the two call sites that change the tab count,
+    /// because TabControl.Items is not observable, so a refactor that drops the
+    /// UpdateEmptyState call from CloseTab would leave the user staring at a blank
+    /// window with no failing test anywhere.
+    /// </summary>
+    [Fact]
+    public async Task Closing_the_last_document_shows_the_empty_state()
+    {
+        await using PageForgeApp app = await PageForgeApp.LaunchAsync();
+        await app.WaitForVisibleAsync("PageIndicatorText");
+
+        // The empty state must not be showing while a document is open. WPF keeps a
+        // Collapsed element in the automation tree and marks it offscreen rather
+        // than removing it, so absence is the wrong thing to assert - IsOffscreen is
+        // what actually distinguishes "not rendered" from "rendered".
+        AutomationElement? hiddenHeading = app.FindByName("No document open");
+        Assert.True(
+            hiddenHeading is null || hiddenHeading.Current.IsOffscreen,
+            "The empty state is showing while a document is open.");
+
+        // Close every tab. The close button is named "Close <document name>".
+        for (int i = 0; i < 5; i++)
+        {
+            AutomationElement? close = FindByNamePrefix(app, "Close ");
+            if (close is null)
+            {
+                break;
+            }
+
+            PageForgeApp.Activate(close);
+            await Task.Delay(500);
+        }
+
+        AutomationElement heading = await WaitForOnScreenAsync(app, "No document open");
+        Assert.False(heading.Current.IsOffscreen, "The empty state heading is offscreen.");
+
+        AutomationElement open = app.FindByName("Open a PDF")
+            ?? throw new InvalidOperationException(
+                "The empty state offers no way to open a document.");
+
+        System.Windows.Rect r = open.Current.BoundingRectangle;
+        System.Windows.Rect window = app.Window.Current.BoundingRectangle;
+        Assert.True(r.Width > 0 && r.Height > 0, "The empty state's Open button has no size.");
+        Assert.True(
+            r.Left >= window.Left && r.Right <= window.Right,
+            "The empty state's Open button is outside the window.");
+    }
+
+    /// <summary>
+    /// Waits for an element to be rendered, by exact automation name. Presence is
+    /// not enough: a Collapsed element stays in the tree marked offscreen, so
+    /// waiting for it to merely exist would return immediately and prove nothing.
+    /// </summary>
+    private static async Task<AutomationElement> WaitForOnScreenAsync(PageForgeApp app, string name)
+    {
+        DateTime deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        while (DateTime.UtcNow < deadline)
+        {
+            AutomationElement? el = app.FindByName(name);
+            if (el is not null && !el.Current.IsOffscreen)
+            {
+                return el;
+            }
+
+            await Task.Delay(200);
+        }
+
+        throw new TimeoutException($"Timed out waiting for '{name}' to be on screen.");
+    }
+
+    /// <summary>
     /// No text anywhere in the window may carry mojibake.
     ///
     /// Five button labels shipped reading "Insertâ€¦" instead of "Insert…" because a
