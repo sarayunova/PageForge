@@ -263,24 +263,34 @@ public class UiSmokeTests
         await using PageForgeApp app = await PageForgeApp.LaunchAsync();
         await app.WaitForVisibleAsync("PageIndicatorText");
 
-        await AssertModeAsync(
-            app, "FormsModeTab", "Form fill mode",
-            page: "Form fill page",
-            panelHeader: "Fields on this page",
-            commands: ["New text field…", "Flatten form…"]);
+        // Overflow is a function of width, so the default size proves nothing about
+        // the sizes users actually pick. 900 is MainWindow's declared MinWidth -
+        // the narrowest the app says it supports, so the narrowest it must hold up
+        // at. The toolbar overflow this test exists for was invisible at 1200 and
+        // obvious at 900.
+        foreach ((double width, double height) in new[] { (1200.0, 820.0), (900.0, 600.0) })
+        {
+            await app.ResizeAsync(width, height);
 
-        await AssertModeAsync(
-            app, "RedactModeTab", "Redact mode",
-            page: "Redact page",
-            panelHeader: "Regions marked on this page",
-            commands: ["Undo redaction", "Save redacted…", "Apply redactions…"]);
+            await AssertModeAsync(
+                app, "FormsModeTab", "Form fill mode",
+                page: "Form fill page",
+                panelHeader: "Fields on this page",
+                commands: ["New text field…", "Flatten form…"]);
 
-        // Object edit has no side panel; only its command row is at issue.
-        await AssertModeAsync(
-            app, "EditModeTab", "Object editing mode",
-            page: null,
-            panelHeader: null,
-            commands: ["Replace…"]);
+            await AssertModeAsync(
+                app, "RedactModeTab", "Redact mode",
+                page: "Redact page",
+                panelHeader: "Regions marked on this page",
+                commands: ["Undo redaction", "Save redacted…", "Apply redactions…"]);
+
+            // Object edit has no side panel; only its command row is at issue.
+            await AssertModeAsync(
+                app, "EditModeTab", "Object editing mode",
+                page: null,
+                panelHeader: null,
+                commands: ["Replace…"]);
+        }
     }
 
     private static async Task AssertModeAsync(
