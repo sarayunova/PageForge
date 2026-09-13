@@ -7,25 +7,27 @@
     Regenerates the application icon from the brand source art.
 
 .DESCRIPTION
-    The brand source (assets/brand/pageforge-icon-source.png) is a wide
-    presentation render: the icon badge is a rounded square sitting on a blurred
-    decorative backdrop. That backdrop must not ship inside the icon, so this
-    script crops to the badge, masks the rounded corners to transparent
-    (otherwise the corners carry backdrop bleed), and writes:
+    The brand source (assets/brand/pageforge-icon-source.png) is the flat
+    full-bleed app tile: a bold white document-and-pencil glyph on solid LiVi
+    blue, drawn edge to edge with the tile's own rounded corners and a white
+    field outside them. That white field must not ship inside the icon, so this
+    script masks the rounded corners to transparent and writes:
 
       src/PageForge.App.Wpf/Assets/pageforge.ico      - 16..256px, for Windows chrome
       src/PageForge.App.Wpf/Assets/pageforge-256.png  - for in-app display
 
-    The default crop parameters are the ones the shipped icon was cut with; they
-    are defaults rather than constants so the script still works if the source
-    art is re-exported at a different framing. Re-run it and commit the outputs
-    whenever the source art changes - the .ico is a build input, and leaving it
-    as an unreproducible binary would make it impossible to revise.
+    The crop parameters are defaults rather than constants so the script still
+    works if the source art is re-exported at different framing; the defaults
+    take the whole 1024px square, which is how the current art is framed.
 
-    Known limitation: at 16px the artwork's document-and-pencil detail collapses
-    into a blue blob. It reads as the right app by colour and silhouette, but the
-    motif is not legible. Fixing that properly needs a simplified glyph drawn for
-    small sizes rather than a downscale of the full badge.
+    The flat art was chosen over the earlier gradient badge (kept alongside it
+    as assets/brand/pageforge-icon-alt-badge.png) precisely because its heavy
+    white strokes survive the downscale: the motif stays legible at 16px, where
+    the gradient badge's thin navy outlines collapsed into a blue blob.
+
+    Re-run this script and commit the outputs whenever the source art changes -
+    the .ico is a build input, and leaving it as an unreproducible binary would
+    make it impossible to revise.
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File tools/make-icon.ps1
@@ -34,12 +36,12 @@ param(
     [string] $Source,
     [string] $OutDir,
     # Badge bounding box within the source render.
-    [int] $X = 808,
-    [int] $Y = 143,
-    [int] $Size = 1219,
+    [int] $X = 0,
+    [int] $Y = 0,
+    [int] $Size = 1024,
     # Corner radius as a fraction of the badge width, matching the artwork's own
     # rounding. 0 leaves the crop square.
-    [double] $CornerFraction = 0.155
+    [double] $CornerFraction = 0.16
 )
 
 $ErrorActionPreference = 'Stop'
