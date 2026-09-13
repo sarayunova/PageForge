@@ -49,6 +49,54 @@
     <CornerRadius x:Key="ControlCornerRadius">4</CornerRadius>
     <CornerRadius x:Key="PanelCornerRadius">0</CornerRadius>
 
+    <!--
+        Tool-group selector tab. A RadioButton retemplated as a flat tab: the group
+        is genuinely a radio group (one choice, arrow-key navigation, correct UIA
+        semantics) but reads as a tab strip, with the selection marked by an accent
+        underline rather than a radio dot.
+
+        The underline is deliberately not the only selection cue - the label also
+        changes colour and weight - because colour alone would fail WCAG 1.4.1.
+    -->
+    <Style x:Key="ToolGroupTabStyle" TargetType="RadioButton">
+        <Setter Property="FontFamily" Value="{StaticResource AppFontFamily}" />
+        <Setter Property="FontSize" Value="{StaticResource FontSizeBase}" />
+        <Setter Property="Foreground" Value="{DynamicResource ContentMutedBrush}" />
+        <Setter Property="Padding" Value="14,7" />
+        <Setter Property="Margin" Value="0,0,2,0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Border x:Name="Root" Background="Transparent"
+                            BorderBrush="Transparent" BorderThickness="0,0,0,2"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter x:Name="Label"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          TextElement.Foreground="{TemplateBinding Foreground}" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Root" Property="Background"
+                                    Value="{DynamicResource SurfaceHoverBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Root" Property="BorderBrush"
+                                    Value="{DynamicResource AccentBrush}" />
+                            <Setter TargetName="Label" Property="TextElement.Foreground"
+                                    Value="{DynamicResource ContentBrush}" />
+                            <Setter TargetName="Label" Property="TextElement.FontWeight" Value="SemiBold" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Root" Property="Background"
+                                    Value="{DynamicResource SurfaceActiveBrush}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- Uppercase, tracked panel-header label (FrameForge Panel.tsx). -->
     <Style x:Key="PanelHeaderTextStyle" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="{StaticResource AppFontFamily}" />

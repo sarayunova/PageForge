@@ -189,6 +189,29 @@ internal sealed class PageForgeApp : IAsyncDisposable
         return FindOne(() => tab.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.AutomationIdProperty, automationId)));
     }
 
+    /// <summary>
+    /// Finds a caption emitted by <c>HeadingTextBlock</c> (class name "Heading").
+    ///
+    /// Matching on the class as well as the name is what makes this unambiguous:
+    /// a plain by-name search can land on a different control that happens to
+    /// share the caption's accessible name, and then assert against the wrong
+    /// element's class.
+    /// </summary>
+    public AutomationElement? FindHeadingInSelectedTab(string name)
+    {
+        AutomationElement? tab = FindSelectedTabItem();
+        if (tab is null)
+        {
+            return null;
+        }
+
+        var condition = new AndCondition(
+            new PropertyCondition(AutomationElement.NameProperty, name),
+            new PropertyCondition(AutomationElement.ClassNameProperty, "Heading"));
+
+        return FindOne(() => tab.FindFirst(TreeScope.Descendants, condition));
+    }
+
     public AutomationElement? FindInSelectedTabByName(string name)
     {
         AutomationElement? tab = FindSelectedTabItem();
