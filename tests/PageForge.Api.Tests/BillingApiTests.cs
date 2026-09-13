@@ -106,8 +106,18 @@ public sealed class BillingApiTests : IDisposable
 
         Assert.Equal("pro", body.RootElement.GetProperty("plan").GetString());
         Assert.Equal(stripeSubId, body.RootElement.GetProperty("stripeSubscriptionId").GetString());
-        Assert.Equal(periodEnd, body.RootElement
-            .GetProperty("currentPeriodEnd").GetDateTime().ToUniversalTime());
+        // Compared with tolerance, not for exactness. PostgreSQL timestamptz keeps
+        // microseconds - six fractional digits - while a .NET DateTime tick is 100
+        // nanoseconds, seven. A round trip through the real database therefore
+        // drops the last digit (…9278648Z came back …9278640Z), and the hermetic
+        // in-memory provider never showed it because it keeps the DateTime as-is.
+        // A millisecond is far tighter than anything this test cares about and far
+        // wider than the storage granularity.
+        DateTime actualPeriodEnd = body.RootElement
+            .GetProperty("currentPeriodEnd").GetDateTime().ToUniversalTime();
+        Assert.True(
+            (actualPeriodEnd - periodEnd).Duration() < TimeSpan.FromMilliseconds(1),
+            $"currentPeriodEnd round-tripped as {actualPeriodEnd:O}, expected {periodEnd:O}.");
     }
 
     // --- Helpers ------------------------------------------------------------
