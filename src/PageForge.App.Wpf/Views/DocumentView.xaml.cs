@@ -25,6 +25,14 @@ public partial class DocumentView : UserControl
     private System.Windows.Point _mouseDownPoint;
     private int _lastAnnotatedPage = -1;
 
+    /// <summary>The sidebar's default width, and the narrowest it may be dragged
+    /// to before the thumbnail strip stops being usable.</summary>
+    private const double SidebarMinWidth = 180;
+
+    /// <summary>The width to restore the sidebar to, carrying whatever the user
+    /// last dragged it to rather than always the default.</summary>
+    private double _sidebarWidth = 270;
+
     /// <summary>The page the surface was last refreshed for, so a StateChanged
     /// raised by zoom or rotation can be told apart from one raised by navigation.</summary>
     private int _lastRefreshedPage = -1;
@@ -80,6 +88,54 @@ public partial class DocumentView : UserControl
     /// the surface stale. The view model now raises StateChanged and the view
     /// decides only what it alone can do.
     /// </summary>
+    /// <summary>
+    /// Hides or shows the sidebar, remembering the width the user dragged it to so
+    /// restoring it does not snap back to the default.
+    ///
+    /// The column is collapsed rather than the panel, because the splitter sits
+    /// between the columns: hiding only the panel would leave a drag handle
+    /// floating against nothing.
+    /// </summary>
+    private void SidebarToggle_Changed(object sender, RoutedEventArgs e)
+    {
+        // IsChecked="True" in the XAML raises Checked while the control tree is
+        // still being parsed, and the toggle is declared in the toolbar - long
+        // before the sidebar's column further down the file. The x:Name fields are
+        // assigned in document order, so they are all still null at that point and
+        // touching one throws inside InitializeComponent. The document then fails
+        // to open with a bare "Failed to open" dialog and no trail.
+        if (SidebarColumn is null || Sidebar is null || SidebarSplitter is null)
+        {
+            return;
+        }
+
+        bool show = SidebarToggle.IsChecked == true;
+
+        if (show)
+        {
+            SidebarColumn.MinWidth = SidebarMinWidth;
+            SidebarColumn.Width = new GridLength(_sidebarWidth, GridUnitType.Pixel);
+        }
+        else
+        {
+            // Remember the current width first - and only a real one, so a double
+            // toggle cannot record the collapsed 0 as the width to restore to.
+            if (SidebarColumn.ActualWidth > 1)
+            {
+                _sidebarWidth = SidebarColumn.ActualWidth;
+            }
+
+            // MinWidth has to go first, or it holds the column open at 180.
+            SidebarColumn.MinWidth = 0;
+            SidebarColumn.Width = new GridLength(0);
+        }
+
+        Sidebar.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        SidebarSplitter.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        System.Windows.Automation.AutomationProperties.SetName(
+            SidebarToggle, show ? "Hide the sidebar" : "Show the sidebar");
+    }
+
     /// <summary>Shows a tool mode's hint while it is on, and takes it down again
     /// when it is off so the document's own status shows through.</summary>
     private void ShowModeHint(bool on, string hint)

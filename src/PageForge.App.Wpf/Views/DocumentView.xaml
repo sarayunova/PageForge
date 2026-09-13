@@ -45,6 +45,13 @@
                     Padding="8,5">
                 <DockPanel LastChildFill="False">
                     <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+                        <ToggleButton x:Name="SidebarToggle" IsChecked="True"
+                                      AutomationProperties.Name="Show the sidebar"
+                                      Checked="SidebarToggle_Changed" Unchecked="SidebarToggle_Changed"
+                                      Padding="8,3" Margin="0,0,8,0"
+                                      ToolTip="Hide or show the thumbnails, bookmarks, search and annotations panel">
+                            <ui:SymbolIcon Symbol="PanelLeft24" FontSize="14" />
+                        </ToggleButton>
                         <Button x:Name="SkipToPageButton"
                                 AutomationProperties.Name="Skip to the document"
                                 Click="SkipToPage_Click" Padding="10,3"
@@ -351,8 +358,23 @@
             </Border>
         </StackPanel>
 
+        <!--
+            Sidebar, splitter and page surface share a Grid rather than being
+            docked. A fixed 270px sidebar was a Phase U3 gap: a DockPanel offers
+            no way to drag the boundary, and the width that suits a thumbnail
+            strip is not the width that suits a long outline. The column carries
+            the width now, so the splitter and the collapse toggle have exactly
+            one thing to change between them.
+        -->
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="SidebarColumn" Width="270" MinWidth="180" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" MinWidth="320" />
+            </Grid.ColumnDefinitions>
+
         <!-- Left sidebar -->
-        <Grid DockPanel.Dock="Left" x:Name="Sidebar" Width="270" Margin="0,4,4,4" Background="{DynamicResource SurfacePanelBrush}">
+        <Grid Grid.Column="0" x:Name="Sidebar" Margin="0,4,4,4" Background="{DynamicResource SurfacePanelBrush}">
             <TabControl Background="{DynamicResource SurfacePanelBrush}">
                 <TabItem Header="Pages">
                     <ListBox x:Name="ThumbList" ItemsSource="{Binding ThumbnailItems}" Background="{DynamicResource SurfacePanelBrush}" SelectionChanged="ThumbList_SelectionChanged"
@@ -435,8 +457,16 @@
             </TabControl>
         </Grid>
 
+        <!-- Drag handle. Focusable with a keyboard name, because a mouse-only
+             way to resize a panel is not a way at all (WCAG 2.1.1). -->
+        <GridSplitter x:Name="SidebarSplitter" Grid.Column="1" Width="5" HorizontalAlignment="Stretch"
+                      Background="{DynamicResource EdgeBrush}"
+                      Focusable="True"
+                      AutomationProperties.Name="Resize the sidebar"
+                      ToolTip="Drag to resize the sidebar, or focus it and use the arrow keys" />
+
         <!-- Center: page surface + status -->
-        <DockPanel>
+        <DockPanel Grid.Column="2">
             <StatusBar DockPanel.Dock="Bottom" Background="{DynamicResource SurfaceRaisedBrush}">
                 <ProgressBar Width="110" Height="12" IsIndeterminate="True" Margin="0,0,8,0"
                              Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"
@@ -525,5 +555,6 @@
             </ListBox>
             </Grid>
         </DockPanel>
+        </Grid>
     </DockPanel>
 </UserControl>
