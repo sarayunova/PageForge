@@ -1165,8 +1165,21 @@ public sealed class DocumentTabViewModel : ObservableObject
     public bool IsReorderMode
     {
         get => _isReorderMode;
-        set => SetProperty(ref _isReorderMode, value);
+        set
+        {
+            if (SetProperty(ref _isReorderMode, value))
+            {
+                OnPropertyChanged(nameof(ThumbnailItems));
+            }
+        }
     }
+
+    /// <summary>What the thumbnail strip shows: the reorder staging list while
+    /// reorder mode is on, the live page slots otherwise. The view used to make this
+    /// choice itself in three places, so any path that forgot one left the strip
+    /// showing the wrong list.</summary>
+    public IReadOnlyList<PageSlotViewModel> ThumbnailItems =>
+        _isReorderMode ? ReorderItems : Pages;
 
     /// <summary>Begins reorder staging: snapshots the current page slots into
     /// <see cref="ReorderItems"/> and turns on reorder mode.</summary>
