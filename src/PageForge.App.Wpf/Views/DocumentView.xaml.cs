@@ -65,11 +65,7 @@ public partial class DocumentView : UserControl
         _lastRefreshedPage = vm.Core.CurrentPage;
         vm.StateChanged += OnViewModelStateChanged;
 
-        ThumbList.ItemsSource = vm.IsReorderMode ? vm.ReorderItems : vm.Pages;
         ReorderToggle.IsChecked = vm.IsReorderMode;
-        OutlineTreeView.ItemsSource = vm.OutlineTree;
-        SearchList.ItemsSource = vm.SearchHits;
-        AnnotationList.ItemsSource = vm.Annotations;
         ContinuousToggle.IsChecked = vm.IsContinuous;
 
         Refresh();
@@ -126,7 +122,6 @@ public partial class DocumentView : UserControl
             return;
         }
 
-        PageList.ItemsSource = _vm.VisiblePages;
 
         _vm.ApplyZoomToPages();
         RenderRealizedPages();
@@ -243,21 +238,12 @@ public partial class DocumentView : UserControl
             return;
         }
 
-        if (_vm.IsContinuous)
+        // The list itself is bound; only the scroll position is the view's to set,
+        // and only in continuous mode, where the page the user moved to may be far
+        // outside the realized range.
+        if (_vm.IsContinuous && _vm.CurrentPageSlot is { } current)
         {
-            if (PageList.Items.IsNullOrEmpty() || !ReferenceEquals(PageList.Items[0], _vm.Pages[0]))
-            {
-                PageList.ItemsSource = _vm.Pages;
-            }
-
-            if (_vm.CurrentPageSlot is { } current)
-            {
-                PageList.ScrollIntoView(current);
-            }
-        }
-        else
-        {
-            PageList.ItemsSource = _vm.VisiblePages;
+            PageList.ScrollIntoView(current);
         }
 
 
@@ -349,13 +335,11 @@ public partial class DocumentView : UserControl
         if (ReorderToggle.IsChecked == true)
         {
             _vm.EnterReorderMode();
-            ThumbList.ItemsSource = _vm.ReorderItems;
             _vm?.ShowStatusHint("Reorder mode: drag thumbnails, or Ctrl+Up/Ctrl+Down to move the selected page, then Save order…");
         }
         else
         {
             _vm.ExitReorderMode();
-            ThumbList.ItemsSource = _vm.Pages;
         }
 
         _dragStartIndex = -1;

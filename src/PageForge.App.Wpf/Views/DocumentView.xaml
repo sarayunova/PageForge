@@ -355,7 +355,7 @@
         <Grid DockPanel.Dock="Left" x:Name="Sidebar" Width="270" Margin="0,4,4,4" Background="{DynamicResource SurfacePanelBrush}">
             <TabControl Background="{DynamicResource SurfacePanelBrush}">
                 <TabItem Header="Pages">
-                    <ListBox x:Name="ThumbList" Background="{DynamicResource SurfacePanelBrush}" SelectionChanged="ThumbList_SelectionChanged"
+                    <ListBox x:Name="ThumbList" ItemsSource="{Binding ThumbnailItems}" Background="{DynamicResource SurfacePanelBrush}" SelectionChanged="ThumbList_SelectionChanged"
                              AllowDrop="True" PreviewMouseLeftButtonDown="ThumbList_PreviewMouseLeftButtonDown"
                              PreviewMouseMove="ThumbList_PreviewMouseMove" Drop="ThumbList_Drop"
                              PreviewKeyDown="ThumbList_PreviewKeyDown"
@@ -383,7 +383,7 @@
                     </ListBox>
                 </TabItem>
                 <TabItem Header="Bookmarks">
-                    <TreeView x:Name="OutlineTreeView" Background="{DynamicResource SurfacePanelBrush}"
+                    <TreeView x:Name="OutlineTreeView" ItemsSource="{Binding OutlineTree}" Background="{DynamicResource SurfacePanelBrush}"
                               BorderThickness="0"
                               SelectedItemChanged="OutlineTreeView_SelectedItemChanged">
                         <TreeView.ItemTemplate>
@@ -398,7 +398,7 @@
                     </TreeView>
                 </TabItem>
                 <TabItem Header="Search">
-                    <ListBox x:Name="SearchList" Background="{DynamicResource SurfacePanelBrush}" SelectionChanged="SearchList_SelectionChanged"
+                    <ListBox x:Name="SearchList" ItemsSource="{Binding SearchHits}" Background="{DynamicResource SurfacePanelBrush}" SelectionChanged="SearchList_SelectionChanged"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
@@ -415,7 +415,7 @@
                 <TabItem Header="Annotations">
                     <DockPanel Background="{DynamicResource SurfacePanelBrush}">
                         <controls:HeadingTextBlock DockPanel.Dock="Top" Text="Annotations on current page" HeadingLevel="3" Foreground="{DynamicResource ContentMutedBrush}" FontSize="12" Margin="4,4,4,2" />
-                        <ListBox x:Name="AnnotationList" Background="{DynamicResource SurfacePanelBrush}"
+                        <ListBox x:Name="AnnotationList" ItemsSource="{Binding Annotations}" Background="{DynamicResource SurfacePanelBrush}"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
@@ -448,7 +448,7 @@
                 <locals:ObjectEditView x:Name="ObjectView" Visibility="Collapsed" />
                 <locals:FormFillView x:Name="FormView" Visibility="Collapsed" />
                 <locals:RedactView x:Name="RedactViewHost" Visibility="Collapsed" />
-                <ListBox x:Name="PageList" Background="{DynamicResource CanvasBrush}"
+                <ListBox x:Name="PageList" ItemsSource="{Binding VisiblePages}" Background="{DynamicResource CanvasBrush}"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                      VirtualizingPanel.IsVirtualizing="True"
                      VirtualizingPanel.VirtualizationMode="Recycling"
