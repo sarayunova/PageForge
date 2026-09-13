@@ -7,6 +7,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
+using Microsoft.Extensions.Logging;
 using PageForge.App.Wpf.ViewModels;
 using PageForge.App.Wpf.Views;
 using PageForge.Core.View;
@@ -35,6 +36,13 @@ public partial class MainWindow : Controls.FluentShellWindow
             if (sample is not null)
             {
                 await OpenDocumentAsync(sample);
+            }
+            else
+            {
+                // No sample to auto-open, so this is the empty state's real first
+                // appearance. It is only evaluated here and after an open or close,
+                // never before, so it cannot flash over a document still loading.
+                UpdateEmptyState();
             }
         };
     }
@@ -69,6 +77,8 @@ public partial class MainWindow : Controls.FluentShellWindow
         }
         catch (Exception ex)
         {
+            Diagnostics.AppLog.For(typeof(MainWindow)).LogWarning(
+                ex, "Could not open the source repository link.");
             MessageBox.Show($"Could not open the source repository.\n\n{ex.Message}",
                 "PageForge", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
@@ -108,9 +118,17 @@ public partial class MainWindow : Controls.FluentShellWindow
 
             DocTabs.Items.Add(tab);
             DocTabs.SelectedItem = tab;
+            UpdateEmptyState();
         }
         catch (Exception ex)
         {
+            // Log before telling the user. The dialog carries only ex.Message, and
+            // twice now a failure here has had to be diagnosed from a screenshot of
+            // an empty window because the stack trace went nowhere - most recently a
+            // NullReferenceException thrown inside DocumentView's
+            // InitializeComponent, which the message alone did not begin to explain.
+            Diagnostics.AppLog.For(typeof(MainWindow)).LogError(
+                ex, "Failed to open {Path}.", path);
             MessageBox.Show($"Failed to open:\n{path}\n\n{ex.Message}", "PageForge", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
@@ -119,6 +137,21 @@ public partial class MainWindow : Controls.FluentShellWindow
     {
         DocTabs.Items.Remove(tab);
         _ = vm.Core.DisposeAsync().AsTask();
+        UpdateEmptyState();
+    }
+
+    /// <summary>
+    /// Shows the empty state only when there is nothing else to look at.
+    ///
+    /// Driven from the two places that change the tab count rather than bound to
+    /// it: TabControl.Items is not an observable collection, so a binding on
+    /// Items.Count would set itself once at load and never update.
+    /// </summary>
+    private void UpdateEmptyState()
+    {
+        bool empty = DocTabs.Items.Count == 0;
+        EmptyState.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
+        DocTabs.Visibility = empty ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private static DocumentTabViewModel CreateTabViewModel()

@@ -89,6 +89,44 @@
             </ui:TitleBar.TrailingContent>
         </ui:TitleBar>
 
-        <TabControl x:Name="DocTabs" Background="Transparent" BorderThickness="0" />
+        <Grid>
+            <TabControl x:Name="DocTabs" Background="Transparent" BorderThickness="0" />
+
+            <!--
+                Empty state. With no document open the user used to get a bare
+                panel: nothing said what this application was for or what to do
+                next, and the only way forward - Open PDF… - lives in the title
+                bar, which is not where a first-time user looks.
+
+                Collapsed by default and shown only once there are no tabs, so it
+                never flashes over a document that is still loading.
+            -->
+            <StackPanel x:Name="EmptyState" Visibility="Collapsed"
+                        HorizontalAlignment="Center" VerticalAlignment="Center"
+                        MaxWidth="420">
+                <Image Source="Assets/pageforge-256.png" Width="72" Height="72"
+                       Opacity="0.9" Margin="0,0,0,20"
+                       RenderOptions.BitmapScalingMode="HighQuality" />
+                <controls:HeadingTextBlock HeadingLevel="2"
+                                           Text="No document open"
+                                           Foreground="{DynamicResource ContentBrush}"
+                                           FontSize="20" FontWeight="SemiBold"
+                                           HorizontalAlignment="Center" />
+                <TextBlock Text="Open a PDF to view, annotate, edit, fill forms or redact it. Everything happens on this machine — nothing is uploaded."
+                           Foreground="{DynamicResource ContentMutedBrush}"
+                           TextWrapping="Wrap" TextAlignment="Center"
+                           Margin="0,10,0,22" />
+                <Button x:Name="EmptyStateOpenButton"
+                        AutomationProperties.Name="Open a PDF"
+                        Click="Open_Click" Padding="16,7"
+                        HorizontalAlignment="Center"
+                        ToolTip="Choose a PDF to open">
+                    <StackPanel Orientation="Horizontal">
+                        <ui:SymbolIcon Symbol="DocumentAdd24" FontSize="16" Margin="0,0,8,0" />
+                        <TextBlock Text="Open PDF…" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </Grid>
     </DockPanel>
 </controls:FluentShellWindow>
