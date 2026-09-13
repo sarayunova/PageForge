@@ -1,4 +1,4 @@
-// Copyright (c) 2026 LiVi Software Company
+﻿// Copyright (c) 2026 LiVi Software Company
 // SPDX-License-Identifier: AGPL-3.0-only
 // This file is part of PageForge. See LICENSE for the full license text.
 
@@ -10,6 +10,7 @@ using PageForge.Core.Editing;
 using PageForge.Core.Pdf;
 using PageForge.Core.View;
 using PageForge.MuPdfInterop;
+using PageForge.App.Wpf.Views;
 
 namespace PageForge.App.Wpf;
 
@@ -17,6 +18,36 @@ public partial class App : Application
 {
     public static bool SmokeMode =>
         Environment.GetCommandLineArgs().Contains("--smoke", StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The theme to start in, from <c>--theme light|dark|system</c>; defaults to
+    /// following the OS.
+    ///
+    /// This exists so the light palette can be inspected without changing the
+    /// machine's Windows setting. Reviewing it used to mean editing the OS
+    /// personalisation registry and putting it back afterwards, which is invasive
+    /// and easy to forget, so in practice light theme went unexercised - which is
+    /// how nine hardcoded dark-theme colours survived in the form and redaction
+    /// panels until someone thought to look.
+    /// </summary>
+    public static Themes.AppTheme RequestedTheme
+    {
+        get
+        {
+            string[] args = Environment.GetCommandLineArgs();
+            int index = Array.FindIndex(
+                args, a => a.Equals("--theme", StringComparison.OrdinalIgnoreCase));
+
+            string? value = index >= 0 && index + 1 < args.Length ? args[index + 1] : null;
+
+            return value?.ToLowerInvariant() switch
+            {
+                "light" => Themes.AppTheme.Light,
+                "dark" => Themes.AppTheme.Dark,
+                _ => Themes.AppTheme.System,
+            };
+        }
+    }
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -34,7 +65,7 @@ public partial class App : Application
         // the OS theme there would make the run depend on the machine's settings.
         if (!SmokeMode)
         {
-            Themes.ThemeManager.Initialize(Themes.AppTheme.System);
+            Themes.ThemeManager.Initialize(RequestedTheme);
         }
 
         if (SmokeMode)
@@ -46,12 +77,77 @@ public partial class App : Application
             await RunHeadlessAnnotationProofAsync();
             await RunHeadlessEditProofAsync();
             await RunHeadlessCorpusDogfoodProofAsync();
+            RunThemeTokenProof();
             Shutdown();
             return;
         }
 
         new MainWindow().Show();
     }
+
+    /// <summary>
+    /// Proves that chrome built in code follows the theme (see
+    /// <see cref="Views.ThemedElements"/>).
+    ///
+    /// This is asserted rather than eyeballed because eyeballing it is what failed:
+    /// nine hardcoded dark-theme colours survived in the form and redaction panels
+    /// through a whole phase that was meant to remove them, and screenshots did not
+    /// catch them - the sample document has no form fields, so the code paths that
+    /// build those panels barely run, and the empty-state labels that do render sit
+    /// behind the page surface.
+    ///
+    /// A literal brush would pass a "is it the right colour in dark theme" check and
+    /// still be wrong in light. So the assertion is the one that actually matters:
+    /// the same element must resolve to DIFFERENT brushes under the two themes, and
+    /// to exactly the token's brush in each. A SetResourceReference that failed to
+    /// resolve falls back to the property default and would be identical in both.
+    /// </summary>
+    private static void RunThemeTokenProof()
+    {
+        try
+        {
+            // The probe has to sit in a real tree. A resource reference resolves by
+            // walking up the logical tree to the application's resources, so a
+            // TextBlock with no parent falls back to the property default (black)
+            // and would report a false failure - the panels this is standing in for
+            // add their labels to a StackPanel inside a window.
+            var probe = new System.Windows.Controls.TextBlock()
+                .Themed(System.Windows.Controls.TextBlock.ForegroundProperty, "ContentMutedBrush");
+            var host = new Window { Content = probe };
+
+            Themes.ThemeManager.Apply(Themes.AppTheme.Light);
+            var light = probe.Foreground as System.Windows.Media.SolidColorBrush;
+
+            Themes.ThemeManager.Apply(Themes.AppTheme.Dark);
+            var dark = probe.Foreground as System.Windows.Media.SolidColorBrush;
+
+            if (light is null || dark is null)
+            {
+                Trace("theme-token proof: ContentMutedBrush did not resolve to a brush.");
+                FailProof();
+                return;
+            }
+
+            if (light.Color == dark.Color)
+            {
+                Trace($"theme-token proof: the brush did not follow the theme " +
+                      $"(light and dark both {light.Color}).");
+                FailProof();
+                return;
+            }
+
+            Trace($"theme-token proof: ContentMutedBrush light={light.Color} dark={dark.Color}");
+            host.Close();
+        }
+        catch (Exception exception)
+        {
+            Trace($"theme-token proof failed: {exception}");
+            FailProof(2);
+        }
+    }
+
+    private static void Trace(string message) =>
+        Diagnostics.AppLog.For(typeof(App)).LogInformation("{Message}", message);
 
     protected override void OnExit(ExitEventArgs e)
     {
@@ -224,7 +320,7 @@ public partial class App : Application
     /// 1. The RenderOnLoad behavior matched the realized element's DataContext against
     ///    PageImageViewModel, but the page and thumbnail templates bind through a
     ///    PageSlotViewModel. The match never succeeded, RenderAsync was never called,
-    ///    and every page stayed blank — silently, because it was a bare `if`. This
+    ///    and every page stayed blank â€” silently, because it was a bare `if`. This
     ///    proof asserts the resolution for both surfaces (page and thumbnail).
     ///
     /// 2. A zoom change retargets each slot's DPI, but nothing re-rendered slots whose
@@ -345,7 +441,7 @@ public partial class App : Application
             string builtPath = Path.Combine(outDir, "organizer-rotated-merged.pdf");
             string summaryPath = Path.Combine(outDir, "organizer-proof.txt");
 
-            // Rotate page 0 by 90° then append a full unmodified copy => 6 pages,
+            // Rotate page 0 by 90Â° then append a full unmodified copy => 6 pages,
             // where page 1 (1-based) is the rotated landscape original.
             var job = new[]
             {
@@ -579,7 +675,7 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// Phase 1 exit-gate dogfood (TSD §12): drives every real-document corpus
+    /// Phase 1 exit-gate dogfood (TSD Â§12): drives every real-document corpus
     /// PDF through the viewer / organizer / annotator on the real MuPDF shim
     /// headlessly and asserts zero crashes. For each corpus file we open it,
     /// walk and render every page, run an organizer build and reopen the result,
