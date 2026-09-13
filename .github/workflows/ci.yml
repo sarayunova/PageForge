@@ -226,9 +226,24 @@ jobs:
     needs: [native-build]
     env:
       PAGEFORGE_HOSTED_CI: "1"
-      # The hosted lane uses the SAME native shim the native-build job published,
-      # so the shell OCR path is exercised exactly as it is in managed-build.
-      PAGEFORGE_REQUIRE_NATIVE: "1"
+      # PAGEFORGE_REQUIRE_NATIVE is deliberately NOT set here, and the OCR engine
+      # tests are filtered out of the run below.
+      #
+      # native-build runs on windows-latest and publishes pageforge_mupdf.dll - a
+      # Windows library. This is the only ubuntu-latest job in the workflow, so the
+      # artifact it downloads can never be loaded here: the three
+      # OcrNativeEngineTests failed with "Unable to load shared library
+      # 'pageforge_mupdf' ... pageforge_mupdf.so: cannot open shared object file".
+      #
+      # The flag was also actively misleading. Its guard only checks that the DLL
+      # exists, so on Linux it passed while asserting an engine that cannot run -
+      # the exact silent-green failure the comment in PageForge.MuPdfInterop.csproj
+      # warns about.
+      #
+      # Nothing is lost: managed-build runs this same suite on Windows with the real
+      # engine present and the flag set. This lane exists to exercise real Postgres
+      # and real MinIO, which it does. Running the engine here would need a Linux
+      # build of the shim, which does not exist yet.
     services:
       postgres:
         image: postgres:16-alpine
@@ -294,7 +309,10 @@ jobs:
             'tests/PageForge.Api.Tests')
           $failed = @()
           foreach ($s in $suites) {
-            dotnet test $s -c Release --no-build
+            # OcrNativeEngineTests need the MuPDF shim, which is only built for
+            # Windows; see the env block above. They run in managed-build instead.
+            dotnet test $s -c Release --no-build `
+              --filter "FullyQualifiedName!~OcrNativeEngineTests"
             if ($LASTEXITCODE -ne 0) { $failed += "$s (exit $LASTEXITCODE)" }
           }
           if ($failed) {
