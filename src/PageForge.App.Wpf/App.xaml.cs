@@ -21,6 +21,14 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
+        // Before any window is shown, so nothing renders with the wrong palette.
+        // Skipped in smoke mode: the headless proofs draw no chrome, and following
+        // the OS theme there would make the run depend on the machine's settings.
+        if (!SmokeMode)
+        {
+            Themes.ThemeManager.Initialize(Themes.AppTheme.System);
+        }
+
         if (SmokeMode)
         {
             await RunHeadlessProofAsync();

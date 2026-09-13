@@ -16,35 +16,35 @@
 
     <DockPanel>
         <!-- Top toolbar -->
-        <Border DockPanel.Dock="Top" Background="#2b2b2b" Padding="6,4">
+        <Border DockPanel.Dock="Top" Background="{DynamicResource SurfaceRaisedBrush}" Padding="6,4">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <Button Content="⇩ Skip to page" x:Name="SkipToPageButton"
                         AutomationProperties.Name="Skip to the document"
                         Click="SkipToPage_Click" Padding="8,3"
                         ToolTip="Move keyboard focus to the document surface (WCAG 2.4.1 bypass)" />
-                <Separator Margin="6,0" Width="1" Background="#555" />
+                <Separator Margin="6,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
                 <ToggleButton x:Name="ContinuousToggle" Content="Continuous"
                               AutomationProperties.Name="Continuous scroll mode"
                               Checked="ContinuousToggle_Changed"
                               Unchecked="ContinuousToggle_Changed" Padding="10,3" />
-                <Separator Margin="6,0" Width="1" Background="#555" />
+                <Separator Margin="6,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
                 <Button Content="◀ Prev" AutomationProperties.Name="Previous page"
                         Click="Previous_Click" Padding="8,3" />
-                <TextBlock x:Name="PageIndicatorText" Foreground="#ddd" VerticalAlignment="Center"
+                <TextBlock x:Name="PageIndicatorText" Foreground="{DynamicResource ContentBrush}" VerticalAlignment="Center"
                            Margin="10,0" MinWidth="70" TextAlignment="Center" />
                 <Button Content="Next ▶" x:Name="NextButton" AutomationProperties.Name="Next page"
                         Click="Next_Click" Padding="8,3" />
-                <Separator Margin="6,0" Width="1" Background="#555" />
+                <Separator Margin="6,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
                 <Button Content="−" AutomationProperties.Name="Zoom out" Click="ZoomOut_Click" Padding="10,3" ToolTip="Zoom out" />
-                <TextBlock x:Name="ZoomText" Foreground="#ddd" VerticalAlignment="Center"
+                <TextBlock x:Name="ZoomText" Foreground="{DynamicResource ContentBrush}" VerticalAlignment="Center"
                            Margin="8,0" MinWidth="46" TextAlignment="Center" />
                 <Button Content="+" AutomationProperties.Name="Zoom in" Click="ZoomIn_Click" Padding="10,3" ToolTip="Zoom in" />
                 <Button Content="Fit" AutomationProperties.Name="Fit to width" Click="ZoomFit_Click" Padding="8,3" ToolTip="Fit width" />
-                <Separator Margin="6,0" Width="1" Background="#555" />
+                <Separator Margin="6,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
                 <Button Content="⟲" AutomationProperties.Name="Rotate counter-clockwise" Click="RotateCCW_Click" Padding="10,3" ToolTip="Rotate counter-clockwise" />
                 <Button Content="⟳" AutomationProperties.Name="Rotate clockwise" Click="RotateCW_Click" Padding="10,3" ToolTip="Rotate clockwise" />
-                <Separator Margin="6,0" Width="1" Background="#555" />
-                <controls:HeadingTextBlock Text="Organize" HeadingLevel="2" Foreground="#bbb" VerticalAlignment="Center" Margin="0,0,6,0" AutomationProperties.Name="Organize tools" />
+                <Separator Margin="6,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
+                <controls:HeadingTextBlock Text="Organize" HeadingLevel="2" Foreground="{DynamicResource ContentMutedBrush}" VerticalAlignment="Center" Margin="0,0,6,0" AutomationProperties.Name="Organize tools" />
                 <Button Content="⟳ page" AutomationProperties.Name="Rotate page" Click="OrganizeRotatePage_Click" Padding="8,3" ToolTip="Save a rotated copy of the current page to a new file" />
                 <Button Content="✕ page" AutomationProperties.Name="Delete page" Click="OrganizeDeletePage_Click" Padding="8,3" ToolTip="Delete the current page into a new file" />
                 <Button Content="✂ page" AutomationProperties.Name="Extract page" Click="OrganizeExtractPage_Click" Padding="8,3" ToolTip="Extract the current page to a new file" />
@@ -53,14 +53,14 @@
                               Checked="ReorderToggle_Changed" Unchecked="ReorderToggle_Changed"
                               Padding="8,3" ToolTip="Drag thumbnails to reorder pages, then save" />
                 <Button Content="Save order…" x:Name="SaveOrderButton" AutomationProperties.Name="Save page order" Click="SaveOrder_Click" Padding="8,3" ToolTip="Write the reordered pages to a new PDF" />
-                <Separator Margin="6,0" Width="1" Background="#555" />
-                <controls:HeadingTextBlock Text="Annotate" HeadingLevel="2" Foreground="#bbb" VerticalAlignment="Center" Margin="0,0,6,0" AutomationProperties.Name="Annotate tools" />
+                <Separator Margin="6,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
+                <controls:HeadingTextBlock Text="Annotate" HeadingLevel="2" Foreground="{DynamicResource ContentMutedBrush}" VerticalAlignment="Center" Margin="0,0,6,0" AutomationProperties.Name="Annotate tools" />
                 <Button Content="✱ highlight" AutomationProperties.Name="Add highlight" Click="AnnotateHighlight_Click" Padding="8,3" ToolTip="Add a highlight over the top of the current page" />
                 <Button Content="🗨 note" AutomationProperties.Name="Add text note" Click="AnnotateText_Click" Padding="8,3" ToolTip="Add a text note to the current page" />
                 <Button Content="✒ ink" AutomationProperties.Name="Add ink stroke" Click="AnnotateInk_Click" Padding="8,3" ToolTip="Add an ink stroke to the current page" />
                 <Button Content="⚟ flatten…" AutomationProperties.Name="Flatten annotations" Click="AnnotateFlatten_Click" Padding="8,3" ToolTip="Save a copy with selected annotation types baked into static content" />
-                <Separator Margin="6,0" Width="1" Background="#555" />
-                <controls:HeadingTextBlock Text="Edit" HeadingLevel="2" Foreground="#bbb" VerticalAlignment="Center" Margin="0,0,6,0" AutomationProperties.Name="Edit tools" />
+                <Separator Margin="6,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
+                <controls:HeadingTextBlock Text="Edit" HeadingLevel="2" Foreground="{DynamicResource ContentMutedBrush}" VerticalAlignment="Center" Margin="0,0,6,0" AutomationProperties.Name="Edit tools" />
                 <ToggleButton x:Name="EditModeToggle" Content="✎ text" AutomationProperties.Name="Edit text mode"
                               Checked="EditModeToggle_Changed" Unchecked="EditModeToggle_Changed"
                               Padding="8,3" ToolTip="Click a word on the page to edit it; edits grow the box and warn on collision" />
@@ -77,17 +77,17 @@
                 <Button Content="↪ Redo" AutomationProperties.Name="Redo" Click="EditRedo_Click" Padding="8,3" ToolTip="Redo last undone edit (Ctrl+Y)" />
                 <Button Content="⇺ OCR…" AutomationProperties.Name="Run OCR" Click="Ocr_Click" Padding="8,3" ToolTip="Render a searchable copy: recognize the document's text offline and embed it (FR-OCR-01)" />
                 <Button Content="🔒 Protect…" AutomationProperties.Name="Protect document" Click="Protect_Click" Padding="8,3" ToolTip="Write an encrypted copy protected by an open password (FR-SEC-01)" />
-                <Separator Margin="6,0" Width="1" Background="#555" />
+                <Separator Margin="6,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
                 <TextBox x:Name="SearchBox" AutomationProperties.Name="Search document text" Width="200" KeyDown="SearchBox_KeyDown" />
                 <Button Content="Search" AutomationProperties.Name="Search" Click="Search_Click" Padding="10,3" />
             </StackPanel>
         </Border>
 
         <!-- Left sidebar -->
-        <Grid DockPanel.Dock="Left" x:Name="Sidebar" Width="270" Margin="0,4,4,4" Background="#1e1e1e">
-            <TabControl Background="#1e1e1e">
+        <Grid DockPanel.Dock="Left" x:Name="Sidebar" Width="270" Margin="0,4,4,4" Background="{DynamicResource SurfacePanelBrush}">
+            <TabControl Background="{DynamicResource SurfacePanelBrush}">
                 <TabItem Header="Pages">
-                    <ListBox x:Name="ThumbList" Background="#1e1e1e" SelectionChanged="ThumbList_SelectionChanged"
+                    <ListBox x:Name="ThumbList" Background="{DynamicResource SurfacePanelBrush}" SelectionChanged="ThumbList_SelectionChanged"
                              AllowDrop="True" PreviewMouseLeftButtonDown="ThumbList_PreviewMouseLeftButtonDown"
                              PreviewMouseMove="ThumbList_PreviewMouseMove" Drop="ThumbList_Drop"
                              PreviewKeyDown="ThumbList_PreviewKeyDown"
@@ -99,15 +99,15 @@
                         </ListBox.ItemsPanel>
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <Border BorderBrush="#444" BorderThickness="1" Margin="4"
-                                        Background="#1e1e1e" Cursor="Hand">
+                                <Border BorderBrush="{DynamicResource EdgeBrush}" BorderThickness="1" Margin="4"
+                                        Background="{DynamicResource SurfacePanelBrush}" Cursor="Hand">
                                     <StackPanel>
                                         <Image Source="{Binding Thumbnail.Bitmap}"
                                                Width="160" Height="200" Stretch="Uniform"
                                                AutomationProperties.Name="{Binding AccessibleThumbnailName}"
                                                views:PageImageBehavior.RenderOnLoad="True" />
                                         <TextBlock Text="{Binding DisplayNumber, StringFormat=Page {0}}"
-                                                   Foreground="#bbb" FontSize="12" Margin="4,2" />
+                                                   Foreground="{DynamicResource ContentMutedBrush}" FontSize="12" Margin="4,2" />
                                     </StackPanel>
                                 </Border>
                             </DataTemplate>
@@ -115,29 +115,29 @@
                     </ListBox>
                 </TabItem>
                 <TabItem Header="Bookmarks">
-                    <TreeView x:Name="OutlineTreeView" Background="#1e1e1e"
+                    <TreeView x:Name="OutlineTreeView" Background="{DynamicResource SurfacePanelBrush}"
                               BorderThickness="0"
                               SelectedItemChanged="OutlineTreeView_SelectedItemChanged">
                         <TreeView.ItemTemplate>
                             <HierarchicalDataTemplate ItemsSource="{Binding Children}">
                                 <StackPanel Orientation="Horizontal" Margin="0,2">
-                                    <TextBlock Text="{Binding Title}" Foreground="#ddd" FontSize="12"
+                                    <TextBlock Text="{Binding Title}" Foreground="{DynamicResource ContentBrush}" FontSize="12"
                                                FontWeight="{Binding FontWeightPx}" />
-                                    <TextBlock Text="{Binding PageLabel}" Foreground="#999" Margin="8,0,0,0" />
+                                    <TextBlock Text="{Binding PageLabel}" Foreground="{DynamicResource ContentMutedBrush}" Margin="8,0,0,0" />
                                 </StackPanel>
                             </HierarchicalDataTemplate>
                         </TreeView.ItemTemplate>
                     </TreeView>
                 </TabItem>
                 <TabItem Header="Search">
-                    <ListBox x:Name="SearchList" Background="#1e1e1e" SelectionChanged="SearchList_SelectionChanged"
+                    <ListBox x:Name="SearchList" Background="{DynamicResource SurfacePanelBrush}" SelectionChanged="SearchList_SelectionChanged"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <StackPanel Margin="2,4">
-                                    <TextBlock Foreground="#7fd" FontSize="12"
+                                    <TextBlock Foreground="{DynamicResource AccentTextBrush}" FontSize="12"
                                                Text="{Binding PageLabel}" />
-                                    <TextBlock Text="{Binding Snippet}" Foreground="#ccc" FontSize="12"
+                                    <TextBlock Text="{Binding Snippet}" Foreground="{DynamicResource ContentMutedBrush}" FontSize="12"
                                                TextWrapping="Wrap" />
                                 </StackPanel>
                             </DataTemplate>
@@ -145,18 +145,18 @@
                     </ListBox>
                 </TabItem>
                 <TabItem Header="Annotations">
-                    <DockPanel Background="#1e1e1e">
-                        <controls:HeadingTextBlock DockPanel.Dock="Top" Text="Annotations on current page" HeadingLevel="3" Foreground="#999" FontSize="12" Margin="4,4,4,2" />
-                        <ListBox x:Name="AnnotationList" Background="#1e1e1e"
+                    <DockPanel Background="{DynamicResource SurfacePanelBrush}">
+                        <controls:HeadingTextBlock DockPanel.Dock="Top" Text="Annotations on current page" HeadingLevel="3" Foreground="{DynamicResource ContentMutedBrush}" FontSize="12" Margin="4,4,4,2" />
+                        <ListBox x:Name="AnnotationList" Background="{DynamicResource SurfacePanelBrush}"
                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
                                     <StackPanel Margin="2,4">
-                                        <TextBlock Foreground="#9df" FontSize="12"
+                                        <TextBlock Foreground="{DynamicResource AccentTextBrush}" FontSize="12"
                                                    Text="{Binding TypeName}" />
-                                        <TextBlock Foreground="#ccc" FontSize="12"
+                                        <TextBlock Foreground="{DynamicResource ContentMutedBrush}" FontSize="12"
                                                    Text="{Binding Description}" TextWrapping="Wrap" />
-                                        <TextBlock Foreground="#999" FontSize="12"
+                                        <TextBlock Foreground="{DynamicResource ContentMutedBrush}" FontSize="12"
                                                    Text="{Binding Bounds}" />
                                     </StackPanel>
                                 </DataTemplate>
@@ -169,18 +169,18 @@
 
         <!-- Center: page surface + status -->
         <DockPanel>
-            <StatusBar DockPanel.Dock="Bottom" Background="#2b2b2b">
+            <StatusBar DockPanel.Dock="Bottom" Background="{DynamicResource SurfaceRaisedBrush}">
                 <ProgressBar Width="110" Height="12" IsIndeterminate="True" Margin="0,0,8,0"
                              Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"
                              AutomationProperties.Name="Working" />
-                <TextBlock x:Name="StatusText" Foreground="#bbb"
+                <TextBlock x:Name="StatusText" Foreground="{DynamicResource ContentMutedBrush}"
                            AutomationProperties.LiveSetting="Assertive" />
             </StatusBar>
             <Grid>
                 <locals:ObjectEditView x:Name="ObjectView" Visibility="Collapsed" />
                 <locals:FormFillView x:Name="FormView" Visibility="Collapsed" />
                 <locals:RedactView x:Name="RedactViewHost" Visibility="Collapsed" />
-                <ListBox x:Name="PageList" Background="#3a3a3a"
+                <ListBox x:Name="PageList" Background="{DynamicResource CanvasBrush}"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                      VirtualizingPanel.IsVirtualizing="True"
                      VirtualizingPanel.VirtualizationMode="Recycling"
@@ -204,8 +204,8 @@
                 </ListBox.ItemContainerStyle>
                 <ListBox.ItemTemplate>
                     <DataTemplate>
-                        <Border BorderBrush="#555" BorderThickness="1" Margin="8,10"
-                                Background="White"
+                        <Border BorderBrush="{DynamicResource PageBorderBrush}" BorderThickness="1" Margin="8,10"
+                                Background="{DynamicResource PageSheetBrush}"
                                 LayoutTransform="{Binding DataContext.Rotation, Converter={StaticResource RotationToTransform}, RelativeSource={RelativeSource AncestorType=ListBox}}">
                             <Grid>
                                 <!-- Stretch=None is deliberate and fidelity-critical:
@@ -219,20 +219,20 @@
                                        views:PageImageBehavior.RenderOnLoad="True" />
                                 <!-- A render that fails must say so on the page
                                      rather than leaving a blank sheet. -->
-                                <Border Background="#7f1d1d" Padding="12,8" MinWidth="240"
+                                <Border Background="{DynamicResource DangerSurfaceBrush}" Padding="12,8" MinWidth="240"
                                         HorizontalAlignment="Center" VerticalAlignment="Center"
                                         Visibility="{Binding Image.HasRenderError, Converter={StaticResource BoolToVis}}">
                                     <StackPanel>
-                                        <controls:HeadingTextBlock HeadingLevel="3" Foreground="#ffffff"
+                                        <controls:HeadingTextBlock HeadingLevel="3" Foreground="{DynamicResource DangerSurfaceForegroundBrush}"
                                                                    FontWeight="Bold" TextWrapping="Wrap"
                                                                    Text="{Binding DisplayNumber, StringFormat=Page {0} could not be rendered}" />
-                                        <TextBlock Foreground="#ffe4e4" FontSize="12" TextWrapping="Wrap"
+                                        <TextBlock Foreground="{DynamicResource DangerSurfaceMutedForegroundBrush}" FontSize="12" TextWrapping="Wrap"
                                                    Margin="0,4,0,0"
                                                    AutomationProperties.LiveSetting="Polite"
                                                    Text="{Binding Image.RenderError}" />
                                     </StackPanel>
                                 </Border>
-                                <Border x:Name="WordHighlight" BorderBrush="#2b8cff"
+                                <Border x:Name="WordHighlight" BorderBrush="{DynamicResource SelectionBrush}"
                                         BorderThickness="2" Visibility="Collapsed"
                                         IsHitTestVisible="False"
                                         HorizontalAlignment="Left" VerticalAlignment="Top" />

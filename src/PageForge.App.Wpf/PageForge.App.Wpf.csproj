@@ -26,9 +26,10 @@
   <!-- FR-OCR-01: ship the vendored Tesseract traineddata so OCR works offline
        with no TESSDATA_PREFIX on the machine. -->
   <ItemGroup>
-    <None Include="..\..\tools\tessdata\eng.traineddata"
-          CopyToOutputDirectory="PreserveNewest"
-          Link="tessdata\eng.traineddata" />
+    <None Include="..\..\tools\tessdata\eng.traineddata" CopyToOutputDirectory="PreserveNewest" Link="tessdata\eng.traineddata" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="WPF-UI" Version="4.3.0" />
   </ItemGroup>
 
 </Project>

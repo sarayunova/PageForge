@@ -6,10 +6,16 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="PageForge — Phase 1 Viewer (WPF fallback)"
         Width="1200" Height="820"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource SurfaceAppBrush}"
+        Foreground="{DynamicResource ContentBrush}"
+        FontFamily="{StaticResource AppFontFamily}"
+        FontSize="{StaticResource FontSizeBase}"
+        TextOptions.TextFormattingMode="Display"
+        UseLayoutRounding="True">
 
     <DockPanel>
-        <Border DockPanel.Dock="Top" Background="#2b2b2b" Padding="8,6">
+        <Border DockPanel.Dock="Top" Background="{DynamicResource SurfaceRaisedBrush}" Padding="8,6">
             <DockPanel>
                 <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
                     <Button Content="Open PDF…" x:Name="OpenPdfButton" AutomationProperties.Name="Open PDF…" Click="Open_Click" Padding="12,4"
@@ -17,10 +23,10 @@
                 </StackPanel>
                 <!-- AGPL §13 source availability: point users at the public repository (TSD §7). -->
                 <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center"
-                           Foreground="#e8e8e8">
+                           Foreground="{DynamicResource ContentBrush}">
                     <Hyperlink Click="ViewSource_Click"
                                ToolTip="AGPLv3: view the exact source running here"
-                               Foreground="#7fc4ff">
+                               Foreground="{DynamicResource AccentTextBrush}">
                         View source
                     </Hyperlink>
                 </TextBlock>

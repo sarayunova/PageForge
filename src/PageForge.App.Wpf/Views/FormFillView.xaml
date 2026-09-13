@@ -8,18 +8,18 @@
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
     </UserControl.Resources>
 
-    <DockPanel Background="#3a3a3a">
+    <DockPanel Background="{DynamicResource CanvasBrush}">
         <!-- Form-fill toolbar -->
-        <Border DockPanel.Dock="Top" Background="#2b2b2b" Padding="6,4">
+        <Border DockPanel.Dock="Top" Background="{DynamicResource SurfaceRaisedBrush}" Padding="6,4">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock Text="Fill form" Foreground="#9df" FontWeight="Bold"
+                <TextBlock Text="Fill form" Foreground="{DynamicResource AccentTextBrush}" FontWeight="Bold"
                            VerticalAlignment="Center" Margin="0,0,10,0" />
                 <TextBlock x:Name="HintText" Text="Set a field value; values appear on the page at once."
-                           Foreground="#bbb" VerticalAlignment="Center" Margin="0,0,10,0"
+                           Foreground="{DynamicResource ContentMutedBrush}" VerticalAlignment="Center" Margin="0,0,10,0"
                            AutomationProperties.LiveSetting="Polite" />
                 <Button Content="New text field…" Click="NewField_Click" Padding="8,3"
                         ToolTip="Create a new AcroForm text field on this page (with required/max-length validation)" />
-                <Separator Margin="6,0" Width="1" Background="#555" />
+                <Separator Margin="6,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
                 <Button Content="Flatten form…" Click="Flatten_Click" Padding="8,3"
                         ToolTip="Bake every field value into static page content (fields stop being interactive)" />
             </StackPanel>
@@ -28,17 +28,17 @@
         <Grid>
             <!-- Right: fields panel -->
             <DockPanel DockPanel.Dock="Right" Width="300" Margin="4">
-                <Border DockPanel.Dock="Top" Background="#2b2b2b" Padding="6,4">
-                    <TextBlock Text="Fields on this page" Foreground="#ddd" FontWeight="Bold" />
+                <Border DockPanel.Dock="Top" Background="{DynamicResource SurfaceRaisedBrush}" Padding="6,4">
+                    <TextBlock Text="Fields on this page" Foreground="{DynamicResource ContentBrush}" FontWeight="Bold" />
                 </Border>
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Background="#252525">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Background="{DynamicResource SurfaceAppBrush}">
                     <StackPanel x:Name="FieldsPanel" />
                 </ScrollViewer>
             </DockPanel>
 
             <!-- Left: page + overlay -->
             <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
-                          Background="#3a3a3a">
+                          Background="{DynamicResource CanvasBrush}">
                 <Grid x:Name="PageHost" Background="White" Margin="24">
                     <Image x:Name="PageImage" Stretch="None" SnapsToDevicePixels="True"
                        AutomationProperties.Name="Form fill page" />

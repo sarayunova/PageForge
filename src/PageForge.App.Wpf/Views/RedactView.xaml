@@ -8,18 +8,18 @@
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
     </UserControl.Resources>
 
-    <DockPanel Background="#3a3a3a">
+    <DockPanel Background="{DynamicResource CanvasBrush}">
         <!-- Redact toolbar -->
-        <Border DockPanel.Dock="Top" Background="#2b2b2b" Padding="6,4">
+        <Border DockPanel.Dock="Top" Background="{DynamicResource SurfaceRaisedBrush}" Padding="6,4">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock Text="Redact" Foreground="#f99" FontWeight="Bold"
+                <TextBlock Text="Redact" Foreground="{DynamicResource DangerBrush}" FontWeight="Bold"
                            VerticalAlignment="Center" Margin="0,0,10,0" />
                 <TextBlock x:Name="HintText" Text="Drag a box over content to remove, or use the keyboard: Enter begins a box, arrows size it, Ctrl+arrows move it, Enter places it, Esc cancels. Apply deletes the covered text and paints it black (undoable)."
-                           Foreground="#bbb" VerticalAlignment="Center" Margin="0,0,10,0"
+                           Foreground="{DynamicResource ContentMutedBrush}" VerticalAlignment="Center" Margin="0,0,10,0"
                            AutomationProperties.LiveSetting="Polite" />
                 <Button Content="↩ Undo" AutomationProperties.Name="Undo redaction" Click="Undo_Click" Padding="8,3"
                         ToolTip="Undo the last redaction apply (restores the covered content from a snapshot)" />
-                <Separator Margin="6,0" Width="1" Background="#555" />
+                <Separator Margin="6,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
                 <Button Content="Save redacted…" Click="SaveRedacted_Click" Padding="8,3"
                         ToolTip="Write a new PDF with the redactions applied and the covered content permanently gone" />
             </StackPanel>
@@ -28,13 +28,13 @@
         <Grid>
             <!-- Right: marked regions + apply -->
             <DockPanel DockPanel.Dock="Right" Width="300" Margin="4">
-                <Border DockPanel.Dock="Top" Background="#2b2b2b" Padding="6,4">
-                    <TextBlock Text="Regions marked on this page" Foreground="#ddd" FontWeight="Bold" />
+                <Border DockPanel.Dock="Top" Background="{DynamicResource SurfaceRaisedBrush}" Padding="6,4">
+                    <TextBlock Text="Regions marked on this page" Foreground="{DynamicResource ContentBrush}" FontWeight="Bold" />
                 </Border>
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Background="#252525">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Background="{DynamicResource SurfaceAppBrush}">
                     <StackPanel x:Name="RegionsPanel" />
                 </ScrollViewer>
-                <Border DockPanel.Dock="Bottom" Background="#2b2b2b" Padding="6,4">
+                <Border DockPanel.Dock="Bottom" Background="{DynamicResource SurfaceRaisedBrush}" Padding="6,4">
                     <Button x:Name="ApplyButton" Content="Apply redactions…" IsEnabled="False"
                             Click="Apply_Click" Padding="10,4" HorizontalAlignment="Right"
                             ToolTip="Delete every marked region's content now (undoable via ↩ Undo)" />
@@ -43,7 +43,7 @@
 
             <!-- Left: page + overlay -->
             <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
-                          Background="#3a3a3a">
+                          Background="{DynamicResource CanvasBrush}">
                 <Grid x:Name="PageHost" Background="White" Margin="24">
                     <Image x:Name="PageImage" Stretch="None" SnapsToDevicePixels="True"
                        AutomationProperties.Name="Redact page" />
