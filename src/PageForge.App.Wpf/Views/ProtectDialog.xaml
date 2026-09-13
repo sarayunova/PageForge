@@ -10,7 +10,7 @@
         FontFamily="Segoe UI" TextOptions.TextFormattingMode="Display">
     <StackPanel Margin="14">
         <TextBlock Text="Choose passwords for the protected copy (FR-SEC-01)."
-                   TextWrapping="Wrap" Margin="0,0,0,10" Foreground="#555555" />
+                   TextWrapping="Wrap" Margin="0,0,0,10" Foreground="{DynamicResource EdgeStrongBrush}" />
 
         <TextBlock Text="Open password (required to open the copy)" />
         <PasswordBox x:Name="OpenPasswordBox" AutomationProperties.Name="Open password" Margin="0,2,0,8" PasswordChanged="Passwords_Changed" />

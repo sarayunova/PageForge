@@ -1,3 +1,37 @@
+<!-- Copyright (c) 2026 LiVi Software Company
+     SPDX-License-Identifier: AGPL-3.0-only
+     This file is part of PageForge. See LICENSE for the full license text. -->
 <Application x:Class="PageForge.App.Wpf.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" />
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <!--
+                Order matters and is load-bearing:
+
+                1. WPF-UI's ThemesDictionary + ControlsDictionary supply the Fluent
+                   control templates (buttons, tabs, lists, scrollbars, the title
+                   bar). Without these the stock WPF Aero2 templates stay light
+                   grey no matter what our surface tokens say, which is what made
+                   the shell read as a 2010 application.
+                2. Typography.xaml: theme-independent type and metric tokens.
+                3. The theme token dictionary is NOT merged here - ThemeManager
+                   inserts Tokens.Dark.xaml or Tokens.Light.xaml at index 0 before
+                   the first window is shown and swaps it in place afterwards.
+                   Merging one statically as well would leave a stale copy behind
+                   the live one and whichever came later would win regardless of
+                   the chosen theme.
+
+                ThemesDictionary's Theme here is only the pre-startup default;
+                ThemeManager re-applies the real one (which may follow the OS)
+                through ApplicationThemeManager before any window appears.
+            -->
+            <ResourceDictionary.MergedDictionaries>
+                <ui:ThemesDictionary Theme="Dark" />
+                <ui:ControlsDictionary />
+                <ResourceDictionary Source="Themes/Typography.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>
