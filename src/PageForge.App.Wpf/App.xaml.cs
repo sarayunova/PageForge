@@ -5,6 +5,7 @@
 using System.IO;
 using System.Text;
 using System.Windows;
+using Microsoft.Extensions.Logging;
 using PageForge.Core.Editing;
 using PageForge.Core.Pdf;
 using PageForge.Core.View;
@@ -20,6 +21,13 @@ public partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        // Before anything that can fail, so a startup failure has a trail.
+        Diagnostics.AppLog.Initialize();
+        Diagnostics.AppLog.For(typeof(App)).LogInformation(
+            "PageForge starting. Version {Version}, smoke mode {SmokeMode}.",
+            typeof(App).Assembly.GetName().Version?.ToString() ?? "unknown",
+            SmokeMode);
 
         // Before any window is shown, so nothing renders with the wrong palette.
         // Skipped in smoke mode: the headless proofs draw no chrome, and following
@@ -43,6 +51,13 @@ public partial class App : Application
         }
 
         new MainWindow().Show();
+    }
+
+    protected override void OnExit(ExitEventArgs e)
+    {
+        // Flush and release the log file before the process goes away.
+        Diagnostics.AppLog.Shutdown();
+        base.OnExit(e);
     }
 
     /// <summary>

@@ -271,6 +271,17 @@ public partial class DocumentView : UserControl
         Refresh();
     }
 
+    /// <summary>Retries the render behind a visible page error panel. The button
+    /// lives in the page template, so the failed page is the one whose DataContext
+    /// the button carries.</summary>
+    private async void PageRetryRender_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: PageSlotViewModel slot })
+        {
+            await slot.Image.RetryAsync();
+        }
+    }
+
     private void RotateCW_Click(object sender, RoutedEventArgs e)
     {
         _vm?.RotateClockwise();

@@ -4,6 +4,7 @@
 
 using System.Windows;
 using System.Windows.Media.Imaging;
+using Microsoft.Extensions.Logging;
 using PageForge.Core.View;
 
 namespace PageForge.App.Wpf.ViewModels;
@@ -209,6 +210,30 @@ public sealed class PageImageViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Re-attempts a render the user was told had failed. Clearing the error first
+    /// is what makes the attempt visible: the error panel disappears, and comes back
+    /// only if this attempt fails too. Rethrows nothing — the caller is a UI event
+    /// handler and the outcome is already on screen.
+    /// </summary>
+    public async Task RetryAsync(CancellationToken ct = default)
+    {
+        RenderError = null;
+
+        try
+        {
+            await RenderAsync(ct).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            // Superseded; the slot keeps whatever it has.
+        }
+        catch (Exception)
+        {
+            // RenderAsync has already set RenderError, which is what the user reads.
+        }
+    }
+
     /// <summary>True when the cache cannot satisfy a request at the current DPI.</summary>
     private bool NeedsRender() =>
         _bitmap == null || Math.Abs(_bitmapDpi - _renderDpi) > DpiEpsilon;
@@ -222,6 +247,11 @@ public sealed class PageImageViewModel : ObservableObject
 /// </summary>
 public static class PageImageBehavior
 {
+    /// <summary>Resolved per call rather than cached in a static field: this type
+    /// can be loaded before <see cref="Diagnostics.AppLog.Initialize"/> runs, and a
+    /// cached logger would then be the no-op one for the life of the process.</summary>
+    private static ILogger Log => Diagnostics.AppLog.For<PageImageViewModel>();
+
     public static readonly DependencyProperty RenderOnLoadProperty =
         DependencyProperty.RegisterAttached(
             "RenderOnLoad",
@@ -263,8 +293,11 @@ public static class PageImageBehavior
             // A failed render must never escape this async-void seam and take the
             // app down. RenderError is already set and bound to a visible error
             // state, so the user is told; this is only the diagnostic trail.
-            System.Diagnostics.Trace.TraceWarning(
-                $"PageForge: render failed for page {image.DisplayNumber}: {exception.Message}");
+            Log.LogError(
+                exception,
+                "Render failed for page {PageNumber} at {Dpi} DPI.",
+                image.DisplayNumber,
+                image.RenderDpi);
         }
     }
 
