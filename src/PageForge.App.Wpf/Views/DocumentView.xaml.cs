@@ -71,7 +71,6 @@ public partial class DocumentView : UserControl
         SearchList.ItemsSource = vm.SearchHits;
         AnnotationList.ItemsSource = vm.Annotations;
         ContinuousToggle.IsChecked = vm.IsContinuous;
-        StatusText.Text = vm.Status;
 
         Refresh();
     }
@@ -85,6 +84,20 @@ public partial class DocumentView : UserControl
     /// the surface stale. The view model now raises StateChanged and the view
     /// decides only what it alone can do.
     /// </summary>
+    /// <summary>Shows a tool mode's hint while it is on, and takes it down again
+    /// when it is off so the document's own status shows through.</summary>
+    private void ShowModeHint(bool on, string hint)
+    {
+        if (on)
+        {
+            _vm?.ShowStatusHint(hint);
+        }
+        else
+        {
+            _vm?.ClearStatusHint();
+        }
+    }
+
     private void OnViewModelStateChanged(object? sender, EventArgs e)
     {
         if (_vm is null)
@@ -114,7 +127,6 @@ public partial class DocumentView : UserControl
         }
 
         PageList.ItemsSource = _vm.VisiblePages;
-        StatusText.Text = _vm.Status;
 
         _vm.ApplyZoomToPages();
         RenderRealizedPages();
@@ -248,7 +260,6 @@ public partial class DocumentView : UserControl
             PageList.ItemsSource = _vm.VisiblePages;
         }
 
-        StatusText.Text = _vm.Status;
 
         if (ObjectView.Visibility == Visibility.Visible)
         {
@@ -311,7 +322,6 @@ public partial class DocumentView : UserControl
 
         _vm.SearchQuery = SearchBox.Text;
         await _vm.RunSearchAsync();
-        StatusText.Text = _vm.Status;
     }
 
     private void ThumbList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -340,13 +350,12 @@ public partial class DocumentView : UserControl
         {
             _vm.EnterReorderMode();
             ThumbList.ItemsSource = _vm.ReorderItems;
-            StatusText.Text = "Reorder mode: drag thumbnails, or Ctrl+Up/Ctrl+Down to move the selected page, then Save order…";
+            _vm?.ShowStatusHint("Reorder mode: drag thumbnails, or Ctrl+Up/Ctrl+Down to move the selected page, then Save order…");
         }
         else
         {
             _vm.ExitReorderMode();
             ThumbList.ItemsSource = _vm.Pages;
-            StatusText.Text = _vm.Status;
         }
 
         _dragStartIndex = -1;
@@ -431,7 +440,6 @@ public partial class DocumentView : UserControl
         {
             int[] order = _vm.BuildOrder();
             await _vm.ReorderAsync(order, path);
-            StatusText.Text = _vm.Status;
             OpenDocumentRequested?.Invoke(path);
         }
         catch (Exception ex)
@@ -480,7 +488,7 @@ public partial class DocumentView : UserControl
 
         _vm.MoveReorderItem(index, target);
         ThumbList.SelectedIndex = target;
-        StatusText.Text = "Reorder mode: drag thumbnails, or Ctrl+Up/Ctrl+Down to move the selected page, then Save order…";
+        _vm?.ShowStatusHint("Reorder mode: drag thumbnails, or Ctrl+Up/Ctrl+Down to move the selected page, then Save order…");
         e.Handled = true;
     }
 
@@ -656,7 +664,7 @@ public partial class DocumentView : UserControl
             _wordIndex = -1;
             if (_wordRuns.Count == 0)
             {
-                StatusText.Text = "Edit mode: this page has no editable words.";
+                _vm?.ShowStatusHint("Edit mode: this page has no editable words.");
                 return;
             }
 
@@ -664,7 +672,7 @@ public partial class DocumentView : UserControl
         }
         catch (Exception ex)
         {
-            StatusText.Text = $"Edit mode: could not load words ({ex.Message}).";
+            _vm?.ShowStatusHint($"Edit mode: could not load words ({ex.Message}).");
         }
     }
 
@@ -697,7 +705,7 @@ public partial class DocumentView : UserControl
             }
         }
 
-        StatusText.Text = $"Edit mode: word {index + 1} of {_wordRuns.Count}: “{run.Text}” — Enter to edit, Tab for the next word, Esc to stop.";
+        _vm?.ShowStatusHint($"Edit mode: word {index + 1} of {_wordRuns.Count}: “{run.Text}” — Enter to edit, Tab for the next word, Esc to stop.");
     }
 
     private async void CommitSelectedWordAsync()
@@ -783,7 +791,6 @@ public partial class DocumentView : UserControl
         try
         {
             await _vm.AddHighlightAsync();
-            StatusText.Text = _vm.Status;
         }
         catch (Exception ex)
         {
@@ -801,7 +808,6 @@ public partial class DocumentView : UserControl
         try
         {
             await _vm.AddTextNoteAsync();
-            StatusText.Text = _vm.Status;
         }
         catch (Exception ex)
         {
@@ -819,7 +825,6 @@ public partial class DocumentView : UserControl
         try
         {
             await _vm.AddInkAsync();
-            StatusText.Text = _vm.Status;
         }
         catch (Exception ex)
         {
@@ -844,7 +849,6 @@ public partial class DocumentView : UserControl
         {
             var types = new HashSet<AnnotationType> { AnnotationType.Highlight };
             await _vm.FlattenExportAsync(types, path);
-            StatusText.Text = _vm.Status;
             OpenDocumentRequested?.Invoke(path);
         }
         catch (Exception ex)
@@ -870,9 +874,9 @@ public partial class DocumentView : UserControl
             RedactModeToggle.IsChecked = false;
         }
 
-        StatusText.Text = (EditModeToggle?.IsChecked == true)
-            ? "Edit mode: click a word, or Tab / Shift+Tab to pick one and Enter to edit it, Esc to stop"
-            : _vm?.Status ?? string.Empty;
+        ShowModeHint(
+            EditModeToggle?.IsChecked == true,
+            "Edit mode: click a word, or Tab / Shift+Tab to pick one and Enter to edit it, Esc to stop");
         ClearWordCycle();
     }
 
@@ -901,9 +905,7 @@ public partial class DocumentView : UserControl
 
         ObjectView.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
         PageList.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
-        StatusText.Text = on
-            ? "Object edit mode: select, move, resize, or replace image/vector objects"
-            : _vm?.Status ?? string.Empty;
+        ShowModeHint(on, "Object edit mode: select, move, resize, or replace image/vector objects");
     }
 
     private void FormModeToggle_Changed(object sender, RoutedEventArgs e)
@@ -933,9 +935,7 @@ public partial class DocumentView : UserControl
         ObjectView.Visibility = on ? Visibility.Collapsed : ObjectView.Visibility;
         RedactViewHost.Visibility = on ? Visibility.Collapsed : RedactViewHost.Visibility;
         PageList.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
-        StatusText.Text = on
-            ? "Fill form mode: set field values, then flatten the form to static content"
-            : _vm?.Status ?? string.Empty;
+        ShowModeHint(on, "Fill form mode: set field values, then flatten the form to static content");
     }
 
     private void RedactModeToggle_Changed(object sender, RoutedEventArgs e)
@@ -965,9 +965,7 @@ public partial class DocumentView : UserControl
         ObjectView.Visibility = on ? Visibility.Collapsed : ObjectView.Visibility;
         FormView.Visibility = on ? Visibility.Collapsed : FormView.Visibility;
         PageList.Visibility = on ? Visibility.Collapsed : Visibility.Visible;
-        StatusText.Text = on
-            ? "Redact mode: drag boxes over sensitive content, then Apply redactions… to remove it"
-            : _vm?.Status ?? string.Empty;
+        ShowModeHint(on, "Redact mode: drag boxes over sensitive content, then Apply redactions… to remove it");
     }
 
     private async void EditUndo_Click(object sender, RoutedEventArgs e)
@@ -980,7 +978,6 @@ public partial class DocumentView : UserControl
         try
         {
             await _vm.UndoEditAsync();
-            StatusText.Text = _vm.Status;
         }
         catch (Exception ex)
         {
@@ -998,7 +995,6 @@ public partial class DocumentView : UserControl
         try
         {
             await _vm.RedoEditAsync();
-            StatusText.Text = _vm.Status;
         }
         catch (Exception ex)
         {
@@ -1031,7 +1027,7 @@ public partial class DocumentView : UserControl
             PdfTextRun? run = await _vm.HitTestAsync(xPt, yPt).ConfigureAwait(true);
             if (run is null)
             {
-                StatusText.Text = "No editable text at that point (edit mode).";
+                _vm?.ShowStatusHint("No editable text at that point (edit mode).");
                 return;
             }
 
@@ -1057,7 +1053,6 @@ public partial class DocumentView : UserControl
         TextEditOutcome outcome = await _vm!.EditTextRunAsync(run.Index, newText, allowCollision: false).ConfigureAwait(true);
         if (outcome.Succeeded)
         {
-            StatusText.Text = _vm.Status;
             return;
         }
 
@@ -1073,18 +1068,21 @@ public partial class DocumentView : UserControl
             if (confirm == MessageBoxResult.Yes)
             {
                 TextEditOutcome forced = await _vm.EditTextRunAsync(run.Index, newText, allowCollision: true).ConfigureAwait(true);
-                StatusText.Text = forced.Succeeded ? _vm.Status : forced.Message ?? "Edit not applied.";
+                if (!forced.Succeeded)
+                {
+                    _vm.ShowStatusHint(forced.Message ?? "Edit not applied.");
+                }
             }
             else
             {
-                StatusText.Text = "Edit cancelled.";
+                _vm?.ShowStatusHint("Edit cancelled.");
             }
 
             return;
         }
 
         // FR-EDIT-03 font fidelity: the text can't be painted faithfully.
-        StatusText.Text = outcome.Message ?? "Edit not applied.";
+        _vm?.ShowStatusHint(outcome.Message ?? "Edit not applied.");
         MessageBox.Show(outcome.Message ?? "The new text cannot be rendered by the run's font.", "Font fidelity", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
@@ -1151,7 +1149,6 @@ public partial class DocumentView : UserControl
         try
         {
             await _vm.RotateCurrentPageAsync(1, path);
-            StatusText.Text = _vm.Status;
             OpenDocumentRequested?.Invoke(path);
         }
         catch (Exception ex)
@@ -1176,7 +1173,6 @@ public partial class DocumentView : UserControl
         try
         {
             await _vm.DeleteCurrentPageAsync(path);
-            StatusText.Text = _vm.Status;
             OpenDocumentRequested?.Invoke(path);
         }
         catch (Exception ex)
@@ -1201,7 +1197,6 @@ public partial class DocumentView : UserControl
         try
         {
             await _vm.ExtractCurrentPageAsync(path);
-            StatusText.Text = _vm.Status;
             OpenDocumentRequested?.Invoke(path);
         }
         catch (Exception ex)
@@ -1238,7 +1233,6 @@ public partial class DocumentView : UserControl
             int otherCount = await CountPagesAsync(open.FileName);
             int insertAt = _vm.Core.CurrentPage;
             await _vm.InsertFileAtAsync(open.FileName, otherCount, insertAt, outPath);
-            StatusText.Text = _vm.Status;
             OpenDocumentRequested?.Invoke(outPath);
         }
         catch (Exception ex)
@@ -1263,7 +1257,6 @@ public partial class DocumentView : UserControl
         try
         {
             await _vm.RunOcrAsync(path);
-            StatusText.Text = _vm.Status;
             OpenDocumentRequested?.Invoke(path);
         }
         catch (Exception ex)
@@ -1294,7 +1287,6 @@ public partial class DocumentView : UserControl
         try
         {
             await _vm.RunProtectAsync(path, dialog.Options);
-            StatusText.Text = _vm.Status;
 
             // Deliberately NOT opening the protected file here: the viewer has no
             // password prompt yet, so opening it would render nothing useful.

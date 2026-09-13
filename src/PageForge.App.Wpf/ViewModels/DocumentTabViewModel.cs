@@ -212,6 +212,7 @@ public sealed class DocumentTabViewModel : ObservableObject
     private IReadOnlyList<SearchResultViewModel> _searchHits = Array.Empty<SearchResultViewModel>();
     private IReadOnlyList<AnnotationRowViewModel> _currentPageAnnotations = Array.Empty<AnnotationRowViewModel>();
     private string _status = string.Empty;
+    private string? _statusHint;
     private string _searchQuery = string.Empty;
     private bool _isContinuous;
     private bool _isBusy;
@@ -305,10 +306,51 @@ public sealed class DocumentTabViewModel : ObservableObject
         private set => SetProperty(ref _currentPageAnnotations, value);
     }
 
-    public string Status
+    /// <summary>
+    /// The status line: a mode hint if the view has pushed one, otherwise the last
+    /// thing that happened to the document.
+    ///
+    /// The two have different owners and different lifetimes. Document outcomes
+    /// ("redacted: saved ...") belong to the view model and are set by the
+    /// operations themselves. Mode hints ("Edit mode: click a word ...") belong to
+    /// the view, describe how to use a tool that is currently on, and must stop
+    /// being shown when it is turned off. Keeping them in one field meant turning a
+    /// mode off could not restore what the line said before - the view wrote
+    /// `_vm.Status` back over itself, which by then was already the hint.
+    /// </summary>
+    public string Status => _statusHint ?? _status;
+
+    /// <summary>Sets the document-outcome half of the status line. A real outcome
+    /// always supersedes a mode hint: the hint says how to use a tool, the outcome
+    /// says what just happened to the document.</summary>
+    private string DocumentStatus
     {
         get => _status;
-        private set => SetProperty(ref _status, value);
+        set
+        {
+            _status = value;
+            _statusHint = null;
+            OnPropertyChanged(nameof(Status));
+        }
+    }
+
+    /// <summary>Pushes a mode hint onto the status line, replacing any previous one.
+    /// Called by the view when a tool mode is switched on.</summary>
+    public void ShowStatusHint(string hint)
+    {
+        _statusHint = hint;
+        OnPropertyChanged(nameof(Status));
+    }
+
+    /// <summary>Drops the mode hint so the document status shows through again.
+    /// Called by the view when a tool mode is switched off.</summary>
+    public void ClearStatusHint()
+    {
+        if (_statusHint is not null)
+        {
+            _statusHint = null;
+            OnPropertyChanged(nameof(Status));
+        }
     }
 
     public string SearchQuery
@@ -426,7 +468,7 @@ public sealed class DocumentTabViewModel : ObservableObject
                 OutlineTree.Add(node);
             }
 
-            Status = _doc.Outline.HasItems
+            DocumentStatus = _doc.Outline.HasItems
                 ? $"{_doc.PageCount} pages · {_doc.Outline.Items.Count} bookmarks"
                 : $"{_doc.PageCount} pages";
         }
@@ -560,7 +602,7 @@ public sealed class DocumentTabViewModel : ObservableObject
         if (string.IsNullOrWhiteSpace(SearchQuery))
         {
             SearchHits = Array.Empty<SearchResultViewModel>();
-            Status = string.Empty;
+            DocumentStatus = string.Empty;
             return;
         }
 
@@ -569,7 +611,7 @@ public sealed class DocumentTabViewModel : ObservableObject
         {
             IReadOnlyList<SearchHit> hits = await _doc.SearchAsync(SearchQuery, ct).ConfigureAwait(false);
             SearchHits = hits.Select(h => new SearchResultViewModel { Hit = h }).ToArray();
-            Status = $"{hits.Count} match(es)";
+            DocumentStatus = $"{hits.Count} match(es)";
         }
         finally
         {
@@ -756,7 +798,7 @@ public sealed class DocumentTabViewModel : ObservableObject
             await AnnotationService
                 .FlattenForExportAsync(_doc.Engine, _doc.PageCount, typesToFlatten, outputPath, ct)
                 .ConfigureAwait(false);
-            Status = $"flatten: wrote {_doc.PageCount} pages -> {Path.GetFileName(outputPath)}";
+            DocumentStatus = $"flatten: wrote {_doc.PageCount} pages -> {Path.GetFileName(outputPath)}";
             return _doc.PageCount;
         }
         finally
@@ -818,7 +860,7 @@ public sealed class DocumentTabViewModel : ObservableObject
 
             IEditCommand pushed = await _editStack
                 .PushAsync(new TextEditCommand(_doc.Engine, page, runIndex, newText), ct).ConfigureAwait(false);
-            Status = $"edited text (undo available)";
+            DocumentStatus = $"edited text (undo available)";
             await RefreshCurrentPageRenderAsync(ct).ConfigureAwait(false);
             return TextEditOutcome.Success();
         }
@@ -849,7 +891,7 @@ public sealed class DocumentTabViewModel : ObservableObject
             int page = Math.Min(_doc.CurrentPage, _doc.PageCount - 1);
             await _editStack
                 .PushAsync(new ObjectEditCommand(_doc.Engine, page, objectId, newBounds), ct).ConfigureAwait(false);
-            Status = $"moved/resized object {objectId} (undo available)";
+            DocumentStatus = $"moved/resized object {objectId} (undo available)";
             await RefreshCurrentPageRenderAsync(ct).ConfigureAwait(false);
         }
         finally
@@ -871,7 +913,7 @@ public sealed class DocumentTabViewModel : ObservableObject
             int page = Math.Min(_doc.CurrentPage, _doc.PageCount - 1);
             await _editStack
                 .PushAsync(new ReplaceObjectCommand(_doc.Engine, page, objectId, replacement), ct).ConfigureAwait(false);
-            Status = $"replaced object {objectId} (undo available)";
+            DocumentStatus = $"replaced object {objectId} (undo available)";
             await RefreshCurrentPageRenderAsync(ct).ConfigureAwait(false);
         }
         finally
@@ -899,7 +941,7 @@ public sealed class DocumentTabViewModel : ObservableObject
             GuardPageCount();
             int page = Math.Min(_doc.CurrentPage, _doc.PageCount - 1);
             await _doc.Engine.SetFormFieldValueAsync(page, fieldId, value, ct).ConfigureAwait(false);
-            Status = $"filled field {fieldId}";
+            DocumentStatus = $"filled field {fieldId}";
             await RefreshCurrentPageRenderAsync(ct).ConfigureAwait(false);
         }
         finally
@@ -917,7 +959,7 @@ public sealed class DocumentTabViewModel : ObservableObject
         {
             GuardPageCount();
             await _doc.Engine.FlattenFormAsync(ct).ConfigureAwait(false);
-            Status = "flattened form (fields are no longer interactive)";
+            DocumentStatus = "flattened form (fields are no longer interactive)";
             await RefreshCurrentPageRenderAsync(ct).ConfigureAwait(false);
         }
         finally
@@ -938,7 +980,7 @@ public sealed class DocumentTabViewModel : ObservableObject
             GuardPageCount();
             int page = Math.Min(_doc.CurrentPage, _doc.PageCount - 1);
             await _doc.Engine.CreateFormFieldAsync(page, spec, ct).ConfigureAwait(false);
-            Status = $"created form field '{spec.Name}'";
+            DocumentStatus = $"created form field '{spec.Name}'";
             await RefreshCurrentPageRenderAsync(ct).ConfigureAwait(false);
         }
         finally
@@ -958,7 +1000,7 @@ public sealed class DocumentTabViewModel : ObservableObject
             GuardPageCount();
             int page = Math.Min(_doc.CurrentPage, _doc.PageCount - 1);
             await RedactionService.MarkRegionAsync(_doc.Engine, page, bounds, ct).ConfigureAwait(false);
-            Status = "marked a redaction region — apply to remove the covered content";
+            DocumentStatus = "marked a redaction region — apply to remove the covered content";
         }
         finally
         {
@@ -979,7 +1021,7 @@ public sealed class DocumentTabViewModel : ObservableObject
             int page = Math.Min(_doc.CurrentPage, _doc.PageCount - 1);
             var cmd = RedactionService.ApplyAsync(_doc.Engine, page, options: null);
             await _editStack.PushAsync(cmd, ct).ConfigureAwait(false);
-            Status = $"{cmd.Name} — {cmd.AppliedCount} region(s) removed (undo available)";
+            DocumentStatus = $"{cmd.Name} — {cmd.AppliedCount} region(s) removed (undo available)";
             await RefreshCurrentPageRenderAsync(ct).ConfigureAwait(false);
             return cmd.AppliedCount;
         }
@@ -998,7 +1040,7 @@ public sealed class DocumentTabViewModel : ObservableObject
         try
         {
             await _doc.Engine.SaveAsAsync(outputPath, ct).ConfigureAwait(false);
-            Status = $"redacted: saved {Path.GetFileName(outputPath)} — covered content is permanently gone";
+            DocumentStatus = $"redacted: saved {Path.GetFileName(outputPath)} — covered content is permanently gone";
         }
         finally
         {
@@ -1017,7 +1059,7 @@ public sealed class DocumentTabViewModel : ObservableObject
         try
         {
             OcrResult result = await OcrService.OcrAsync(_doc.Engine, outputPath, options: null, ct).ConfigureAwait(false);
-            Status = $"OCR: {result.PageCount} page(s) recognized → {Path.GetFileName(outputPath)} is now searchable";
+            DocumentStatus = $"OCR: {result.PageCount} page(s) recognized → {Path.GetFileName(outputPath)} is now searchable";
             return result;
         }
         finally
@@ -1041,7 +1083,7 @@ public sealed class DocumentTabViewModel : ObservableObject
             string methodName = options.Method == PdfEncryptionMethod.Aes256 ? "AES-256"
                 : options.Method == PdfEncryptionMethod.Aes128 ? "AES-128"
                 : options.Method == PdfEncryptionMethod.Rc4_128 ? "RC4-128" : "RC4-40";
-            Status = $"protected: saved {Path.GetFileName(outputPath)} ({methodName}) — the open password unlocks it";
+            DocumentStatus = $"protected: saved {Path.GetFileName(outputPath)} ({methodName}) — the open password unlocks it";
         }
         finally
         {
@@ -1058,7 +1100,7 @@ public sealed class DocumentTabViewModel : ObservableObject
             IEditCommand? undone = await _editStack.UndoAsync(ct).ConfigureAwait(false);
             if (undone is not null)
             {
-                Status = $"undo: {undone.Name}";
+                DocumentStatus = $"undo: {undone.Name}";
                 await RefreshCurrentPageRenderAsync(ct).ConfigureAwait(false);
             }
         }
@@ -1077,7 +1119,7 @@ public sealed class DocumentTabViewModel : ObservableObject
             IEditCommand? redone = await _editStack.RedoAsync(ct).ConfigureAwait(false);
             if (redone is not null)
             {
-                Status = $"redo: {redone.Name}";
+                DocumentStatus = $"redo: {redone.Name}";
                 await RefreshCurrentPageRenderAsync(ct).ConfigureAwait(false);
             }
         }
@@ -1221,7 +1263,7 @@ public sealed class DocumentTabViewModel : ObservableObject
         try
         {
             int count = await build.ConfigureAwait(false);
-            Status = $"{op}: wrote {count} pages -> {Path.GetFileName(outputPath)}";
+            DocumentStatus = $"{op}: wrote {count} pages -> {Path.GetFileName(outputPath)}";
             return count;
         }
         finally

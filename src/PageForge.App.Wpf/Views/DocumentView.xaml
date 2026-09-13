@@ -441,7 +441,7 @@
                 <ProgressBar Width="110" Height="12" IsIndeterminate="True" Margin="0,0,8,0"
                              Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"
                              AutomationProperties.Name="Working" />
-                <TextBlock x:Name="StatusText" Foreground="{DynamicResource ContentMutedBrush}"
+                <TextBlock x:Name="StatusText" Text="{Binding Status}" Foreground="{DynamicResource ContentMutedBrush}"
                            AutomationProperties.LiveSetting="Assertive" />
             </StatusBar>
             <Grid>
