@@ -101,10 +101,9 @@ public partial class FormFillView : UserControl
                 Text = _justFlattened
                     ? "This page has no form fields left — the form has been flattened."
                     : "This page has no fillable form fields.",
-                Foreground = new SolidColorBrush(Color.FromRgb(0xb0, 0xb0, 0xb0)),
                 Margin = new Thickness(8),
                 TextWrapping = TextWrapping.Wrap,
-            };
+            }.Themed(TextBlock.ForegroundProperty, "ContentMutedBrush");
             FieldsPanel.Children.Add(none);
             Hint(_justFlattened
                 ? "No fields left on this page after flattening."
@@ -140,30 +139,28 @@ public partial class FormFillView : UserControl
 
         var card = new Border
         {
-            Background = new SolidColorBrush(Color.FromRgb(0x2d, 0x2d, 0x2d)),
-            BorderBrush = new SolidColorBrush(Color.FromRgb(0x44, 0x44, 0x44)),
             BorderThickness = new Thickness(1),
             Margin = new Thickness(4),
             Padding = new Thickness(6),
-        };
+        }
+            .Themed(Border.BackgroundProperty, "SurfaceRaisedBrush")
+            .Themed(Border.BorderBrushProperty, "EdgeBrush");
 
         var stack = new StackPanel();
         var label = new TextBlock
         {
             Text = field.Label,
-            Foreground = Brushes.White,
             FontWeight = FontWeights.SemiBold,
             TextWrapping = TextWrapping.Wrap,
-        };
+        }.Themed(TextBlock.ForegroundProperty, "ContentBrush");
         stack.Children.Add(label);
 
         var kindTag = new TextBlock
         {
             Text = field.Kind.ToString(),
-            Foreground = new SolidColorBrush(Color.FromRgb(0xb0, 0xb0, 0xb0)),
             FontSize = 10,
             Margin = new Thickness(0, 0, 0, 4),
-        };
+        }.Themed(TextBlock.ForegroundProperty, "ContentMutedBrush");
         stack.Children.Add(kindTag);
 
         var row = new StackPanel { Orientation = Orientation.Horizontal };
@@ -312,17 +309,15 @@ public partial class FormFillView : UserControl
             Width = 380,
             SizeToContent = SizeToContent.Height,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Background = new SolidColorBrush(Color.FromRgb(0x2b, 0x2b, 0x2b)),
             ResizeMode = ResizeMode.NoResize,
-        };
+        }.Themed(Window.BackgroundProperty, "SurfaceAppBrush");
 
         var grid = new StackPanel { Margin = new Thickness(12) };
         grid.Children.Add(new TextBlock
         {
             Text = "Field name (shown on this page, e.g. TaxRef):",
-            Foreground = Brushes.White,
             Margin = new Thickness(0, 0, 0, 6),
-        });
+        }.Themed(TextBlock.ForegroundProperty, "ContentBrush"));
         var nameBox = new TextBox { Width = 330 };
         AutomationProperties.SetName(nameBox, "Field name");
         grid.Children.Add(nameBox);
