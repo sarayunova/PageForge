@@ -12,6 +12,8 @@
         <locals:RotationToTransformConverter x:Key="RotationToTransform" />
         <locals:ZoomPercentConverter x:Key="ZoomPercent" />
         <locals:IndentToWidthConverter x:Key="IndentToWidth" />
+        <locals:PointsToPixelsConverter x:Key="PointsToPixels" />
+        <locals:InverseBoolToVisibilityConverter x:Key="NotLoadedToVis" />
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
     </UserControl.Resources>
 
@@ -520,6 +522,40 @@
                                                   Color="#FF000000" Opacity="0.28" RenderingBias="Performance" />
                             </Border.Effect>
                             <Grid>
+                                <!-- Placeholder, shown until this page's bitmap
+                                     exists. Without it a page that has not rendered
+                                     yet is a zero-height sliver, so the scrollbar
+                                     grows as pages arrive and the surface jumps
+                                     under the reader. Sized from the page's own
+                                     points at the current DPI, because the image it
+                                     stands in for is exactly what does not exist
+                                     yet. -->
+                                <Border Visibility="{Binding Image.IsLoaded, Converter={StaticResource NotLoadedToVis}}"
+                                        Background="{DynamicResource SurfaceHoverBrush}">
+                                    <Border.Width>
+                                        <MultiBinding Converter="{StaticResource PointsToPixels}">
+                                            <Binding Path="Region.WidthPt" />
+                                            <Binding Path="Image.RenderDpi" />
+                                        </MultiBinding>
+                                    </Border.Width>
+                                    <Border.Height>
+                                        <MultiBinding Converter="{StaticResource PointsToPixels}">
+                                            <Binding Path="Region.HeightPt" />
+                                            <Binding Path="Image.RenderDpi" />
+                                        </MultiBinding>
+                                    </Border.Height>
+                                    <!-- Near the top, not centred. A page is usually
+                                         taller than the viewport, so a centred
+                                         message sits below the fold and the reader
+                                         sees an unexplained grey sheet - which is
+                                         exactly what the first version did. -->
+                                    <TextBlock Text="{Binding DisplayNumber, StringFormat=Rendering page {0}…}"
+                                               Foreground="{DynamicResource ContentMutedBrush}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Top"
+                                               Margin="0,32,0,0"
+                                               AutomationProperties.LiveSetting="Polite" />
+                                </Border>
+
                                 <!-- Stretch=None is deliberate and fidelity-critical:
                                      the bitmap shows at exactly the DPI it was
                                      rendered at, so zoom means "re-render sharper",
