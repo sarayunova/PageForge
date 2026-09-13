@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // This file is part of PageForge. See LICENSE for the full license text.
 
+using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.ComponentModel;
 using System.Collections.ObjectModel;
 using System.IO;
 using PageForge.Core.Editing;
@@ -332,6 +334,41 @@ public sealed class DocumentTabViewModel : ObservableObject
         get => _isBusy;
         set => SetProperty(ref _isBusy, value);
     }
+
+    // ---- Command-bar commands (Phase U4) -------------------------------------
+    //
+    // The always-available command bar drives the view model through ICommand
+    // rather than Click handlers. This is the first surface converted, and it is
+    // the shape the rest of the shell should follow: the button says what it
+    // invokes, the view model owns the behaviour, and the code-behind holds no
+    // copy of either.
+    //
+    // These are deliberately lazy-constructed rather than created in the
+    // constructor, so adding a command costs one property and nothing else has to
+    // be kept in step.
+
+    private RelayCommand? _nextPageCommand;
+    private RelayCommand? _previousPageCommand;
+    private RelayCommand? _zoomInCommand;
+    private RelayCommand? _zoomOutCommand;
+    private RelayCommand? _zoomResetCommand;
+    private RelayCommand? _rotateClockwiseCommand;
+    private RelayCommand? _rotateCounterClockwiseCommand;
+
+    public RelayCommand NextPageCommand => _nextPageCommand ??= new RelayCommand(NextPage);
+
+    public RelayCommand PreviousPageCommand => _previousPageCommand ??= new RelayCommand(PreviousPage);
+
+    public RelayCommand ZoomInCommand => _zoomInCommand ??= new RelayCommand(ZoomIn);
+
+    public RelayCommand ZoomOutCommand => _zoomOutCommand ??= new RelayCommand(ZoomOut);
+
+    public RelayCommand ZoomResetCommand => _zoomResetCommand ??= new RelayCommand(ZoomReset);
+
+    public RelayCommand RotateClockwiseCommand => _rotateClockwiseCommand ??= new RelayCommand(RotateClockwise);
+
+    public RelayCommand RotateCounterClockwiseCommand =>
+        _rotateCounterClockwiseCommand ??= new RelayCommand(RotateCounterClockwise);
 
     public event EventHandler? StateChanged;
 

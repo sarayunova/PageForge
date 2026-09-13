@@ -1,4 +1,4 @@
-<!-- Copyright (c) 2026 LiVi Software Company
+﻿<!-- Copyright (c) 2026 LiVi Software Company
      SPDX-License-Identifier: AGPL-3.0-only
      This file is part of PageForge. See LICENSE for the full license text. -->
 <UserControl x:Class="PageForge.App.Wpf.Views.DocumentView"
@@ -56,39 +56,39 @@
                         </Button>
                         <Separator Margin="8,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
 
-                        <Button AutomationProperties.Name="Previous page" Click="Previous_Click"
+                        <Button AutomationProperties.Name="Previous page" Command="{Binding PreviousPageCommand}"
                                 Padding="8,3" ToolTip="Previous page">
                             <ui:SymbolIcon Symbol="ArrowLeft24" FontSize="14" />
                         </Button>
-                        <TextBlock x:Name="PageIndicatorText" Foreground="{DynamicResource ContentBrush}"
+                        <TextBlock x:Name="PageIndicatorText" Text="{Binding PageIndicator}" Foreground="{DynamicResource ContentBrush}"
                                    VerticalAlignment="Center" Margin="10,0" MinWidth="70" TextAlignment="Center" />
-                        <Button x:Name="NextButton" AutomationProperties.Name="Next page" Click="Next_Click"
+                        <Button x:Name="NextButton" AutomationProperties.Name="Next page" Command="{Binding NextPageCommand}"
                                 Padding="8,3" ToolTip="Next page">
                             <ui:SymbolIcon Symbol="ArrowRight24" FontSize="14" />
                         </Button>
                         <Separator Margin="8,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
 
-                        <Button AutomationProperties.Name="Zoom out" Click="ZoomOut_Click"
+                        <Button AutomationProperties.Name="Zoom out" Command="{Binding ZoomOutCommand}"
                                 Padding="8,3" ToolTip="Zoom out">
                             <ui:SymbolIcon Symbol="ZoomOut24" FontSize="14" />
                         </Button>
-                        <TextBlock x:Name="ZoomText" Foreground="{DynamicResource ContentBrush}"
+                        <TextBlock x:Name="ZoomText" Text="{Binding Zoom, Converter={StaticResource ZoomPercent}}" Foreground="{DynamicResource ContentBrush}"
                                    VerticalAlignment="Center" Margin="8,0" MinWidth="46" TextAlignment="Center" />
-                        <Button AutomationProperties.Name="Zoom in" Click="ZoomIn_Click"
+                        <Button AutomationProperties.Name="Zoom in" Command="{Binding ZoomInCommand}"
                                 Padding="8,3" ToolTip="Zoom in">
                             <ui:SymbolIcon Symbol="ZoomIn24" FontSize="14" />
                         </Button>
-                        <Button AutomationProperties.Name="Reset zoom to 100%" Click="ZoomFit_Click"
+                        <Button AutomationProperties.Name="Reset zoom to 100%" Command="{Binding ZoomResetCommand}"
                                 Padding="8,3" ToolTip="Reset zoom to 100%">
                             <ui:SymbolIcon Symbol="ArrowMaximize24" FontSize="14" />
                         </Button>
                         <Separator Margin="8,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
 
-                        <Button AutomationProperties.Name="Rotate counter-clockwise" Click="RotateCCW_Click"
+                        <Button AutomationProperties.Name="Rotate counter-clockwise" Command="{Binding RotateCounterClockwiseCommand}"
                                 Padding="8,3" ToolTip="Rotate the view counter-clockwise">
                             <ui:SymbolIcon Symbol="ArrowRotateCounterclockwise24" FontSize="14" />
                         </Button>
-                        <Button AutomationProperties.Name="Rotate clockwise" Click="RotateCW_Click"
+                        <Button AutomationProperties.Name="Rotate clockwise" Command="{Binding RotateClockwiseCommand}"
                                 Padding="8,3" ToolTip="Rotate the view clockwise">
                             <ui:SymbolIcon Symbol="ArrowRotateClockwise24" FontSize="14" />
                         </Button>
@@ -196,7 +196,7 @@
                                 ToolTip="Insert another PDF before/after the current page">
                             <StackPanel Orientation="Horizontal">
                                 <ui:SymbolIcon Symbol="DocumentAdd24" FontSize="14" Margin="0,0,6,0" />
-                                <TextBlock Text="Insert…" VerticalAlignment="Center" />
+                                <TextBlock Text="Insertâ€¦" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
                         <Separator Margin="8,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
@@ -214,7 +214,7 @@
                                 ToolTip="Write the reordered pages to a new PDF">
                             <StackPanel Orientation="Horizontal">
                                 <ui:SymbolIcon Symbol="Save24" FontSize="14" Margin="0,0,6,0" />
-                                <TextBlock Text="Save order…" VerticalAlignment="Center" />
+                                <TextBlock Text="Save orderâ€¦" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
                     </StackPanel>
@@ -258,7 +258,7 @@
                                 ToolTip="Save a copy with selected annotation types baked into static content">
                             <StackPanel Orientation="Horizontal">
                                 <ui:SymbolIcon Symbol="Layer24" FontSize="14" Margin="0,0,6,0" />
-                                <TextBlock Text="Flatten…" VerticalAlignment="Center" />
+                                <TextBlock Text="Flattenâ€¦" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
                     </StackPanel>
@@ -335,7 +335,7 @@
                                 ToolTip="Render a searchable copy: recognize the document's text offline and embed it (FR-OCR-01)">
                             <StackPanel Orientation="Horizontal">
                                 <ui:SymbolIcon Symbol="ScanText24" FontSize="14" Margin="0,0,6,0" />
-                                <TextBlock Text="OCR…" VerticalAlignment="Center" />
+                                <TextBlock Text="OCRâ€¦" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
                         <Button AutomationProperties.Name="Protect document" Click="Protect_Click"
@@ -343,7 +343,7 @@
                                 ToolTip="Write an encrypted copy protected by an open password (FR-SEC-01)">
                             <StackPanel Orientation="Horizontal">
                                 <ui:SymbolIcon Symbol="LockClosed24" FontSize="14" Margin="0,0,6,0" />
-                                <TextBlock Text="Protect…" VerticalAlignment="Center" />
+                                <TextBlock Text="Protectâ€¦" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
                     </StackPanel>

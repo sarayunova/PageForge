@@ -25,6 +25,10 @@ public partial class DocumentView : UserControl
     private System.Windows.Point _mouseDownPoint;
     private int _lastAnnotatedPage = -1;
 
+    /// <summary>The page the surface was last refreshed for, so a StateChanged
+    /// raised by zoom or rotation can be told apart from one raised by navigation.</summary>
+    private int _lastRefreshedPage = -1;
+
     /// <summary>Editable words of the current page for the keyboard word-selection
     /// path (WCAG 2.1.1/2.4.3); valid only while edit mode is on.</summary>
     private IReadOnlyList<PdfTextRun> _wordRuns = Array.Empty<PdfTextRun>();
@@ -51,8 +55,15 @@ public partial class DocumentView : UserControl
 
     public void SetTab(DocumentTabViewModel vm)
     {
+        if (_vm is not null)
+        {
+            _vm.StateChanged -= OnViewModelStateChanged;
+        }
+
         _vm = vm;
         DataContext = vm;
+        _lastRefreshedPage = vm.Core.CurrentPage;
+        vm.StateChanged += OnViewModelStateChanged;
 
         ThumbList.ItemsSource = vm.IsReorderMode ? vm.ReorderItems : vm.Pages;
         ReorderToggle.IsChecked = vm.IsReorderMode;
@@ -65,6 +76,36 @@ public partial class DocumentView : UserControl
         Refresh();
     }
 
+    /// <summary>
+    /// Applies the view-side effects of a view-model state change (Phase U4).
+    ///
+    /// The command-bar buttons used to call the view model and then call Refresh()
+    /// or RefreshAndScroll() themselves, so the code-behind held a second copy of
+    /// what each command meant - and any command that forgot the second call left
+    /// the surface stale. The view model now raises StateChanged and the view
+    /// decides only what it alone can do.
+    /// </summary>
+    private void OnViewModelStateChanged(object? sender, EventArgs e)
+    {
+        if (_vm is null)
+        {
+            return;
+        }
+
+        // Navigation scrolls the new page into view; zoom and rotation must not,
+        // or the surface would jump under the user on every zoom step. The page
+        // number is what tells the two apart.
+        if (_vm.Core.CurrentPage != _lastRefreshedPage)
+        {
+            _lastRefreshedPage = _vm.Core.CurrentPage;
+            RefreshAndScroll();
+            RefreshAnnotationsIfNeeded();
+            return;
+        }
+
+        Refresh();
+    }
+
     private void Refresh()
     {
         if (_vm is null)
@@ -73,8 +114,6 @@ public partial class DocumentView : UserControl
         }
 
         PageList.ItemsSource = _vm.VisiblePages;
-        PageIndicatorText.Text = _vm.PageIndicator;
-        ZoomText.Text = $"{_vm.Zoom * 100.0:0}%";
         StatusText.Text = _vm.Status;
 
         _vm.ApplyZoomToPages();
@@ -209,8 +248,6 @@ public partial class DocumentView : UserControl
             PageList.ItemsSource = _vm.VisiblePages;
         }
 
-        PageIndicatorText.Text = _vm.PageIndicator;
-        ZoomText.Text = $"{_vm.Zoom * 100.0:0}%";
         StatusText.Text = _vm.Status;
 
         if (ObjectView.Visibility == Visibility.Visible)
@@ -231,18 +268,6 @@ public partial class DocumentView : UserControl
         ClearWordCycle();
     }
 
-    private void Previous_Click(object sender, RoutedEventArgs e)
-    {
-        _vm?.PreviousPage();
-        RefreshAndScroll();
-    }
-
-    private void Next_Click(object sender, RoutedEventArgs e)
-    {
-        _vm?.NextPage();
-        RefreshAndScroll();
-    }
-
     private void ContinuousToggle_Changed(object sender, RoutedEventArgs e)
     {
         if (_vm is not null)
@@ -251,24 +276,6 @@ public partial class DocumentView : UserControl
         }
 
         RefreshAndScroll();
-    }
-
-    private void ZoomIn_Click(object sender, RoutedEventArgs e)
-    {
-        _vm?.ZoomIn();
-        Refresh();
-    }
-
-    private void ZoomOut_Click(object sender, RoutedEventArgs e)
-    {
-        _vm?.ZoomOut();
-        Refresh();
-    }
-
-    private void ZoomFit_Click(object sender, RoutedEventArgs e)
-    {
-        _vm?.ZoomReset();
-        Refresh();
     }
 
     /// <summary>Retries the render behind a visible page error panel. The button
@@ -280,18 +287,6 @@ public partial class DocumentView : UserControl
         {
             await slot.Image.RetryAsync();
         }
-    }
-
-    private void RotateCW_Click(object sender, RoutedEventArgs e)
-    {
-        _vm?.RotateClockwise();
-        Refresh();
-    }
-
-    private void RotateCCW_Click(object sender, RoutedEventArgs e)
-    {
-        _vm?.RotateCounterClockwise();
-        Refresh();
     }
 
     private void SearchBox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)

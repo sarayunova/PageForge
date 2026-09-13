@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // This file is part of PageForge. See LICENSE for the full license text.
 
+using CommunityToolkit.Mvvm.ComponentModel;
 using System.Windows;
 using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging;
