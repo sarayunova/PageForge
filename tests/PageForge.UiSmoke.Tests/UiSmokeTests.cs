@@ -33,9 +33,19 @@ public class UiSmokeTests
 
         // WCAG 2.4.6/1.3.1: toolbar captions are real "Heading" control elements
         // in the automation tree, and the 2.4.1 content bypass exists.
-        AssertHeading(app, "Organize tools");
-        AssertHeading(app, "Annotate tools");
-        AssertHeading(app, "Edit tools");
+        // The toolbar is now a command bar plus a tool-group selector, so only the
+        // selected group's commands are mounted. Each group is selected in turn and
+        // its heading asserted, which also proves the selector actually swaps the
+        // contextual row rather than merely highlighting a tab.
+        AssertToolGroupHeading(app, "OrganizeModeTab", "Organize tools");
+        AssertToolGroupHeading(app, "AnnotateModeTab", "Annotate tools");
+        AssertToolGroupHeading(app, "EditModeTab", "Edit tools");
+        AssertToolGroupHeading(app, "FormsModeTab", "Form tools");
+        AssertToolGroupHeading(app, "RedactModeTab", "Redact tools");
+        AssertToolGroupHeading(app, "DocumentModeTab", "Document tools");
+
+        // Leave Organize selected: the reorder/save-order flow below lives there.
+        SelectToolGroup(app, "OrganizeModeTab");
         AutomationElement skip = app.FindInSelectedTabById("SkipToPageButton")
             ?? throw new InvalidOperationException("Skip-to-document button not found.");
         Assert.Equal("Skip to the document", skip.Current.Name);
@@ -90,9 +100,39 @@ public class UiSmokeTests
 
     private static void AssertHeading(PageForgeApp app, string captionName)
     {
-        AutomationElement? caption = app.FindInSelectedTabByName(captionName)
+        AutomationElement? caption = app.FindHeadingInSelectedTab(captionName)
             ?? throw new InvalidOperationException($"Heading caption '{captionName}' not found.");
         Assert.Equal("Heading", caption.Current.ClassName);
+    }
+
+    /// <summary>
+    /// Selects one tool group in the toolbar's group selector.
+    ///
+    /// By AutomationId, for the same reason the rest of this suite does it: a
+    /// button's content text is exposed as its own inner text element with the
+    /// same string, so an exact-name lookup is ambiguous between the control and
+    /// its label.
+    /// </summary>
+    private static void SelectToolGroup(PageForgeApp app, string tabAutomationId)
+    {
+        AutomationElement tab = app.FindInSelectedTabById(tabAutomationId)
+            ?? throw new InvalidOperationException($"Tool group tab '{tabAutomationId}' not found.");
+
+        // The tabs are RadioButtons, so they expose SelectionItem rather than Invoke.
+        var pattern = (SelectionItemPattern)tab.GetCurrentPattern(SelectionItemPattern.Pattern);
+        pattern.Select();
+    }
+
+    /// <summary>
+    /// Selects a tool group and asserts its contextual row carries the expected
+    /// heading (WCAG 1.3.1). The tab's own accessible name is deliberately distinct
+    /// from the heading's ("Organize tool group" vs "Organize tools") so the
+    /// heading lookup cannot accidentally match the tab.
+    /// </summary>
+    private static void AssertToolGroupHeading(PageForgeApp app, string tabAutomationId, string captionName)
+    {
+        SelectToolGroup(app, tabAutomationId);
+        AssertHeading(app, captionName);
     }
 
     private static async Task<string> WaitForText(PageForgeApp app, string automationId)

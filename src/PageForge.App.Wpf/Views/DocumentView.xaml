@@ -6,7 +6,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:views="clr-namespace:PageForge.App.Wpf.ViewModels"
              xmlns:locals="clr-namespace:PageForge.App.Wpf.Views"
-             xmlns:controls="clr-namespace:PageForge.App.Wpf.Controls">
+             xmlns:controls="clr-namespace:PageForge.App.Wpf.Controls"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
     <UserControl.Resources>
         <locals:RotationToTransformConverter x:Key="RotationToTransform" />
         <locals:ZoomPercentConverter x:Key="ZoomPercent" />
@@ -15,73 +16,340 @@
     </UserControl.Resources>
 
     <DockPanel>
-        <!-- Top toolbar -->
-        <Border DockPanel.Dock="Top" Background="{DynamicResource SurfaceRaisedBrush}" Padding="6,4">
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <Button Content="⇩ Skip to page" x:Name="SkipToPageButton"
-                        AutomationProperties.Name="Skip to the document"
-                        Click="SkipToPage_Click" Padding="8,3"
-                        ToolTip="Move keyboard focus to the document surface (WCAG 2.4.1 bypass)" />
-                <Separator Margin="6,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
-                <ToggleButton x:Name="ContinuousToggle" Content="Continuous"
-                              AutomationProperties.Name="Continuous scroll mode"
-                              Checked="ContinuousToggle_Changed"
-                              Unchecked="ContinuousToggle_Changed" Padding="10,3" />
-                <Separator Margin="6,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
-                <Button Content="◀ Prev" AutomationProperties.Name="Previous page"
-                        Click="Previous_Click" Padding="8,3" />
-                <TextBlock x:Name="PageIndicatorText" Foreground="{DynamicResource ContentBrush}" VerticalAlignment="Center"
-                           Margin="10,0" MinWidth="70" TextAlignment="Center" />
-                <Button Content="Next ▶" x:Name="NextButton" AutomationProperties.Name="Next page"
-                        Click="Next_Click" Padding="8,3" />
-                <Separator Margin="6,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
-                <Button Content="−" AutomationProperties.Name="Zoom out" Click="ZoomOut_Click" Padding="10,3" ToolTip="Zoom out" />
-                <TextBlock x:Name="ZoomText" Foreground="{DynamicResource ContentBrush}" VerticalAlignment="Center"
-                           Margin="8,0" MinWidth="46" TextAlignment="Center" />
-                <Button Content="+" AutomationProperties.Name="Zoom in" Click="ZoomIn_Click" Padding="10,3" ToolTip="Zoom in" />
-                <Button Content="Fit" AutomationProperties.Name="Fit to width" Click="ZoomFit_Click" Padding="8,3" ToolTip="Fit width" />
-                <Separator Margin="6,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
-                <Button Content="⟲" AutomationProperties.Name="Rotate counter-clockwise" Click="RotateCCW_Click" Padding="10,3" ToolTip="Rotate counter-clockwise" />
-                <Button Content="⟳" AutomationProperties.Name="Rotate clockwise" Click="RotateCW_Click" Padding="10,3" ToolTip="Rotate clockwise" />
-                <Separator Margin="6,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
-                <controls:HeadingTextBlock Text="Organize" HeadingLevel="2" Foreground="{DynamicResource ContentMutedBrush}" VerticalAlignment="Center" Margin="0,0,6,0" AutomationProperties.Name="Organize tools" />
-                <Button Content="⟳ page" AutomationProperties.Name="Rotate page" Click="OrganizeRotatePage_Click" Padding="8,3" ToolTip="Save a rotated copy of the current page to a new file" />
-                <Button Content="✕ page" AutomationProperties.Name="Delete page" Click="OrganizeDeletePage_Click" Padding="8,3" ToolTip="Delete the current page into a new file" />
-                <Button Content="✂ page" AutomationProperties.Name="Extract page" Click="OrganizeExtractPage_Click" Padding="8,3" ToolTip="Extract the current page to a new file" />
-                <Button Content="⧉ insert…" AutomationProperties.Name="Insert page" Click="OrganizeInsert_Click" Padding="8,3" ToolTip="Insert another PDF before/after the current page" />
-                <ToggleButton x:Name="ReorderToggle" Content="Reorder" AutomationProperties.Name="Reorder pages"
-                              Checked="ReorderToggle_Changed" Unchecked="ReorderToggle_Changed"
-                              Padding="8,3" ToolTip="Drag thumbnails to reorder pages, then save" />
-                <Button Content="Save order…" x:Name="SaveOrderButton" AutomationProperties.Name="Save page order" Click="SaveOrder_Click" Padding="8,3" ToolTip="Write the reordered pages to a new PDF" />
-                <Separator Margin="6,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
-                <controls:HeadingTextBlock Text="Annotate" HeadingLevel="2" Foreground="{DynamicResource ContentMutedBrush}" VerticalAlignment="Center" Margin="0,0,6,0" AutomationProperties.Name="Annotate tools" />
-                <Button Content="✱ highlight" AutomationProperties.Name="Add highlight" Click="AnnotateHighlight_Click" Padding="8,3" ToolTip="Add a highlight over the top of the current page" />
-                <Button Content="🗨 note" AutomationProperties.Name="Add text note" Click="AnnotateText_Click" Padding="8,3" ToolTip="Add a text note to the current page" />
-                <Button Content="✒ ink" AutomationProperties.Name="Add ink stroke" Click="AnnotateInk_Click" Padding="8,3" ToolTip="Add an ink stroke to the current page" />
-                <Button Content="⚟ flatten…" AutomationProperties.Name="Flatten annotations" Click="AnnotateFlatten_Click" Padding="8,3" ToolTip="Save a copy with selected annotation types baked into static content" />
-                <Separator Margin="6,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
-                <controls:HeadingTextBlock Text="Edit" HeadingLevel="2" Foreground="{DynamicResource ContentMutedBrush}" VerticalAlignment="Center" Margin="0,0,6,0" AutomationProperties.Name="Edit tools" />
-                <ToggleButton x:Name="EditModeToggle" Content="✎ text" AutomationProperties.Name="Edit text mode"
-                              Checked="EditModeToggle_Changed" Unchecked="EditModeToggle_Changed"
-                              Padding="8,3" ToolTip="Click a word on the page to edit it; edits grow the box and warn on collision" />
-                <ToggleButton x:Name="ObjectModeToggle" Content="⬒ object" AutomationProperties.Name="Object editing mode"
-                              Checked="ObjectModeToggle_Changed" Unchecked="ObjectModeToggle_Changed"
-                              Padding="8,3" ToolTip="Select, move, resize, or replace image/vector objects on the page" />
-                <ToggleButton x:Name="FormModeToggle" Content="☑ form" AutomationProperties.Name="Form fill mode"
-                              Checked="FormModeToggle_Changed" Unchecked="FormModeToggle_Changed"
-                              Padding="8,3" ToolTip="Fill AcroForm fields on the page, then flatten the form to static content" />
-                <ToggleButton x:Name="RedactModeToggle" Content="✖ redact" AutomationProperties.Name="Redact mode"
-                              Checked="RedactModeToggle_Changed" Unchecked="RedactModeToggle_Changed"
-                              Padding="8,3" ToolTip="Drag boxes over sensitive content; apply removes it and paints black (undoable)" />
-                <Button Content="↩ Undo" AutomationProperties.Name="Undo" Click="EditUndo_Click" Padding="8,3" ToolTip="Undo last edit (Ctrl+Z)" />
-                <Button Content="↪ Redo" AutomationProperties.Name="Redo" Click="EditRedo_Click" Padding="8,3" ToolTip="Redo last undone edit (Ctrl+Y)" />
-                <Button Content="⇺ OCR…" AutomationProperties.Name="Run OCR" Click="Ocr_Click" Padding="8,3" ToolTip="Render a searchable copy: recognize the document's text offline and embed it (FR-OCR-01)" />
-                <Button Content="🔒 Protect…" AutomationProperties.Name="Protect document" Click="Protect_Click" Padding="8,3" ToolTip="Write an encrypted copy protected by an open password (FR-SEC-01)" />
-                <Separator Margin="6,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
-                <TextBox x:Name="SearchBox" AutomationProperties.Name="Search document text" Width="200" KeyDown="SearchBox_KeyDown" />
-                <Button Content="Search" AutomationProperties.Name="Search" Click="Search_Click" Padding="10,3" />
-            </StackPanel>
-        </Border>
+        <!--
+            Top chrome, in three rows.
+
+            This used to be a single horizontal StackPanel holding roughly thirty
+            controls: navigation, zoom, rotation, and every Organize / Annotate /
+            Edit / Forms / Redact tool at once. It ran off the right edge of the
+            window with no overflow handling, so the last commands were simply
+            unreachable below about 1500px, and it offered no hierarchy - every
+            mode shouted equally.
+
+            Now: row 1 is the always-available command bar (bypass, page
+            navigation, zoom, rotation, view mode, undo/redo, search); row 2 is a
+            tool-group selector; row 3 shows only the selected group's commands.
+            The mode TOGGLES inside each group are unchanged - same names, same
+            handlers - so selecting a group only decides what is on screen, not
+            what the editor is doing.
+
+            The group selector uses RadioButtons sharing a GroupName so the mutual
+            exclusion is real rather than hand-maintained, and so UIA and the
+            keyboard get correct radio-group semantics for free.
+        -->
+        <StackPanel DockPanel.Dock="Top">
+
+            <!-- Row 1: always-available commands. -->
+            <Border Background="{DynamicResource SurfaceRaisedBrush}"
+                    BorderBrush="{DynamicResource EdgeBrush}" BorderThickness="0,0,0,1"
+                    Padding="8,5">
+                <DockPanel LastChildFill="False">
+                    <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button x:Name="SkipToPageButton"
+                                AutomationProperties.Name="Skip to the document"
+                                Click="SkipToPage_Click" Padding="10,3"
+                                ToolTip="Move keyboard focus to the document surface (WCAG 2.4.1 bypass)">
+                            <StackPanel Orientation="Horizontal">
+                                <ui:SymbolIcon Symbol="ArrowExportUp24" FontSize="14" Margin="0,0,6,0" />
+                                <TextBlock Text="Skip to page" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Separator Margin="8,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
+
+                        <Button AutomationProperties.Name="Previous page" Click="Previous_Click"
+                                Padding="8,3" ToolTip="Previous page">
+                            <ui:SymbolIcon Symbol="ArrowLeft24" FontSize="14" />
+                        </Button>
+                        <TextBlock x:Name="PageIndicatorText" Foreground="{DynamicResource ContentBrush}"
+                                   VerticalAlignment="Center" Margin="10,0" MinWidth="70" TextAlignment="Center" />
+                        <Button x:Name="NextButton" AutomationProperties.Name="Next page" Click="Next_Click"
+                                Padding="8,3" ToolTip="Next page">
+                            <ui:SymbolIcon Symbol="ArrowRight24" FontSize="14" />
+                        </Button>
+                        <Separator Margin="8,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
+
+                        <Button AutomationProperties.Name="Zoom out" Click="ZoomOut_Click"
+                                Padding="8,3" ToolTip="Zoom out">
+                            <ui:SymbolIcon Symbol="ZoomOut24" FontSize="14" />
+                        </Button>
+                        <TextBlock x:Name="ZoomText" Foreground="{DynamicResource ContentBrush}"
+                                   VerticalAlignment="Center" Margin="8,0" MinWidth="46" TextAlignment="Center" />
+                        <Button AutomationProperties.Name="Zoom in" Click="ZoomIn_Click"
+                                Padding="8,3" ToolTip="Zoom in">
+                            <ui:SymbolIcon Symbol="ZoomIn24" FontSize="14" />
+                        </Button>
+                        <Button AutomationProperties.Name="Reset zoom to 100%" Click="ZoomFit_Click"
+                                Padding="8,3" ToolTip="Reset zoom to 100%">
+                            <ui:SymbolIcon Symbol="ArrowMaximize24" FontSize="14" />
+                        </Button>
+                        <Separator Margin="8,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
+
+                        <Button AutomationProperties.Name="Rotate counter-clockwise" Click="RotateCCW_Click"
+                                Padding="8,3" ToolTip="Rotate the view counter-clockwise">
+                            <ui:SymbolIcon Symbol="ArrowRotateCounterclockwise24" FontSize="14" />
+                        </Button>
+                        <Button AutomationProperties.Name="Rotate clockwise" Click="RotateCW_Click"
+                                Padding="8,3" ToolTip="Rotate the view clockwise">
+                            <ui:SymbolIcon Symbol="ArrowRotateClockwise24" FontSize="14" />
+                        </Button>
+                        <Separator Margin="8,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
+
+                        <ToggleButton x:Name="ContinuousToggle" Content="Continuous"
+                                      AutomationProperties.Name="Continuous scroll mode"
+                                      Checked="ContinuousToggle_Changed"
+                                      Unchecked="ContinuousToggle_Changed" Padding="10,3"
+                                      ToolTip="Scroll all pages continuously instead of one at a time" />
+                        <Separator Margin="8,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
+
+                        <!-- Undo/redo are document-wide, not tool-specific, so they
+                             stay reachable whichever group is selected. -->
+                        <Button AutomationProperties.Name="Undo" Click="EditUndo_Click"
+                                Padding="8,3" ToolTip="Undo last edit (Ctrl+Z)">
+                            <ui:SymbolIcon Symbol="ArrowUndo24" FontSize="14" />
+                        </Button>
+                        <Button AutomationProperties.Name="Redo" Click="EditRedo_Click"
+                                Padding="8,3" ToolTip="Redo last undone edit (Ctrl+Y)">
+                            <ui:SymbolIcon Symbol="ArrowRedo24" FontSize="14" />
+                        </Button>
+                    </StackPanel>
+
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBox x:Name="SearchBox" AutomationProperties.Name="Search document text"
+                                 Width="200" KeyDown="SearchBox_KeyDown" VerticalAlignment="Center" />
+                        <Button AutomationProperties.Name="Search" Click="Search_Click"
+                                Padding="8,3" Margin="6,0,0,0" ToolTip="Search the document text">
+                            <ui:SymbolIcon Symbol="Search24" FontSize="14" />
+                        </Button>
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+
+            <!-- Row 2: tool-group selector. -->
+            <Border Background="{DynamicResource SurfacePanelBrush}"
+                    BorderBrush="{DynamicResource EdgeBrush}" BorderThickness="0,0,0,1"
+                    Padding="8,0">
+                <StackPanel Orientation="Horizontal" AutomationProperties.Name="Tool groups">
+                    <RadioButton x:Name="OrganizeModeTab" GroupName="ToolGroup" IsChecked="True"
+                                 Style="{StaticResource ToolGroupTabStyle}"
+                                 AutomationProperties.Name="Organize tool group"
+                                 Checked="ToolGroupTab_Checked" Content="Organize" />
+                    <RadioButton x:Name="AnnotateModeTab" GroupName="ToolGroup"
+                                 Style="{StaticResource ToolGroupTabStyle}"
+                                 AutomationProperties.Name="Annotate tool group"
+                                 Checked="ToolGroupTab_Checked" Content="Annotate" />
+                    <RadioButton x:Name="EditModeTab" GroupName="ToolGroup"
+                                 Style="{StaticResource ToolGroupTabStyle}"
+                                 AutomationProperties.Name="Edit tool group"
+                                 Checked="ToolGroupTab_Checked" Content="Edit" />
+                    <RadioButton x:Name="FormsModeTab" GroupName="ToolGroup"
+                                 Style="{StaticResource ToolGroupTabStyle}"
+                                 AutomationProperties.Name="Form tool group"
+                                 Checked="ToolGroupTab_Checked" Content="Forms" />
+                    <RadioButton x:Name="RedactModeTab" GroupName="ToolGroup"
+                                 Style="{StaticResource ToolGroupTabStyle}"
+                                 AutomationProperties.Name="Redact tool group"
+                                 Checked="ToolGroupTab_Checked" Content="Redact" />
+                    <RadioButton x:Name="DocumentModeTab" GroupName="ToolGroup"
+                                 Style="{StaticResource ToolGroupTabStyle}"
+                                 AutomationProperties.Name="Document tool group"
+                                 Checked="ToolGroupTab_Checked" Content="Document" />
+                </StackPanel>
+            </Border>
+
+            <!-- Row 3: the selected group's commands. Exactly one child is visible;
+                 ToolGroupTab_Checked does the swapping. -->
+            <Border Background="{DynamicResource SurfaceRaisedBrush}"
+                    BorderBrush="{DynamicResource EdgeBrush}" BorderThickness="0,0,0,1"
+                    Padding="8,5" MinHeight="38">
+                <Grid>
+                    <StackPanel x:Name="OrganizeGroup" Orientation="Horizontal" VerticalAlignment="Center">
+                        <controls:HeadingTextBlock Text="Organize" HeadingLevel="2"
+                                                   Foreground="{DynamicResource ContentMutedBrush}"
+                                                   VerticalAlignment="Center" Margin="0,0,10,0"
+                                                   AutomationProperties.Name="Organize tools" />
+                        <Button AutomationProperties.Name="Rotate page" Click="OrganizeRotatePage_Click"
+                                Padding="10,3" Margin="0,0,4,0"
+                                ToolTip="Save a rotated copy of the current page to a new file">
+                            <StackPanel Orientation="Horizontal">
+                                <ui:SymbolIcon Symbol="ArrowRotateClockwise24" FontSize="14" Margin="0,0,6,0" />
+                                <TextBlock Text="Rotate page" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button AutomationProperties.Name="Delete page" Click="OrganizeDeletePage_Click"
+                                Padding="10,3" Margin="0,0,4,0"
+                                ToolTip="Delete the current page into a new file">
+                            <StackPanel Orientation="Horizontal">
+                                <ui:SymbolIcon Symbol="Delete24" FontSize="14" Margin="0,0,6,0" />
+                                <TextBlock Text="Delete page" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button AutomationProperties.Name="Extract page" Click="OrganizeExtractPage_Click"
+                                Padding="10,3" Margin="0,0,4,0"
+                                ToolTip="Extract the current page to a new file">
+                            <StackPanel Orientation="Horizontal">
+                                <ui:SymbolIcon Symbol="Cut24" FontSize="14" Margin="0,0,6,0" />
+                                <TextBlock Text="Extract page" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button AutomationProperties.Name="Insert page" Click="OrganizeInsert_Click"
+                                Padding="10,3" Margin="0,0,4,0"
+                                ToolTip="Insert another PDF before/after the current page">
+                            <StackPanel Orientation="Horizontal">
+                                <ui:SymbolIcon Symbol="DocumentAdd24" FontSize="14" Margin="0,0,6,0" />
+                                <TextBlock Text="Insert…" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Separator Margin="8,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
+                        <ToggleButton x:Name="ReorderToggle" AutomationProperties.Name="Reorder pages"
+                                      Checked="ReorderToggle_Changed" Unchecked="ReorderToggle_Changed"
+                                      Padding="10,3" Margin="0,0,4,0"
+                                      ToolTip="Drag thumbnails to reorder pages, then save">
+                            <StackPanel Orientation="Horizontal">
+                                <ui:SymbolIcon Symbol="ReOrder24" FontSize="14" Margin="0,0,6,0" />
+                                <TextBlock Text="Reorder" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </ToggleButton>
+                        <Button x:Name="SaveOrderButton" AutomationProperties.Name="Save page order"
+                                Click="SaveOrder_Click" Padding="10,3"
+                                ToolTip="Write the reordered pages to a new PDF">
+                            <StackPanel Orientation="Horizontal">
+                                <ui:SymbolIcon Symbol="Save24" FontSize="14" Margin="0,0,6,0" />
+                                <TextBlock Text="Save order…" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+
+                    <StackPanel x:Name="AnnotateGroup" Orientation="Horizontal" VerticalAlignment="Center"
+                                Visibility="Collapsed">
+                        <controls:HeadingTextBlock Text="Annotate" HeadingLevel="2"
+                                                   Foreground="{DynamicResource ContentMutedBrush}"
+                                                   VerticalAlignment="Center" Margin="0,0,10,0"
+                                                   AutomationProperties.Name="Annotate tools" />
+                        <Button AutomationProperties.Name="Add highlight" Click="AnnotateHighlight_Click"
+                                Padding="10,3" Margin="0,0,4,0"
+                                ToolTip="Add a highlight over the top of the current page">
+                            <StackPanel Orientation="Horizontal">
+                                <ui:SymbolIcon Symbol="Highlight24" FontSize="14" Margin="0,0,6,0"
+                                               Foreground="{DynamicResource AnnotationHighlightBrush}" />
+                                <TextBlock Text="Highlight" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button AutomationProperties.Name="Add text note" Click="AnnotateText_Click"
+                                Padding="10,3" Margin="0,0,4,0"
+                                ToolTip="Add a text note to the current page">
+                            <StackPanel Orientation="Horizontal">
+                                <ui:SymbolIcon Symbol="Comment24" FontSize="14" Margin="0,0,6,0"
+                                               Foreground="{DynamicResource AnnotationNoteBrush}" />
+                                <TextBlock Text="Note" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button AutomationProperties.Name="Add ink stroke" Click="AnnotateInk_Click"
+                                Padding="10,3" Margin="0,0,4,0"
+                                ToolTip="Add an ink stroke to the current page">
+                            <StackPanel Orientation="Horizontal">
+                                <ui:SymbolIcon Symbol="InkingTool24" FontSize="14" Margin="0,0,6,0"
+                                               Foreground="{DynamicResource AnnotationInkBrush}" />
+                                <TextBlock Text="Ink" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Separator Margin="8,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
+                        <Button AutomationProperties.Name="Flatten annotations" Click="AnnotateFlatten_Click"
+                                Padding="10,3"
+                                ToolTip="Save a copy with selected annotation types baked into static content">
+                            <StackPanel Orientation="Horizontal">
+                                <ui:SymbolIcon Symbol="Layer24" FontSize="14" Margin="0,0,6,0" />
+                                <TextBlock Text="Flatten…" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+
+                    <StackPanel x:Name="EditGroup" Orientation="Horizontal" VerticalAlignment="Center"
+                                Visibility="Collapsed">
+                        <controls:HeadingTextBlock Text="Edit" HeadingLevel="2"
+                                                   Foreground="{DynamicResource ContentMutedBrush}"
+                                                   VerticalAlignment="Center" Margin="0,0,10,0"
+                                                   AutomationProperties.Name="Edit tools" />
+                        <ToggleButton x:Name="EditModeToggle" AutomationProperties.Name="Edit text mode"
+                                      Checked="EditModeToggle_Changed" Unchecked="EditModeToggle_Changed"
+                                      Padding="10,3" Margin="0,0,4,0"
+                                      ToolTip="Click a word on the page to edit it; edits grow the box and warn on collision">
+                            <StackPanel Orientation="Horizontal">
+                                <ui:SymbolIcon Symbol="TextT24" FontSize="14" Margin="0,0,6,0" />
+                                <TextBlock Text="Edit text" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </ToggleButton>
+                        <ToggleButton x:Name="ObjectModeToggle" AutomationProperties.Name="Object editing mode"
+                                      Checked="ObjectModeToggle_Changed" Unchecked="ObjectModeToggle_Changed"
+                                      Padding="10,3"
+                                      ToolTip="Select, move, resize, or replace image/vector objects on the page">
+                            <StackPanel Orientation="Horizontal">
+                                <ui:SymbolIcon Symbol="Shapes24" FontSize="14" Margin="0,0,6,0" />
+                                <TextBlock Text="Edit objects" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </ToggleButton>
+                    </StackPanel>
+
+                    <StackPanel x:Name="FormsGroup" Orientation="Horizontal" VerticalAlignment="Center"
+                                Visibility="Collapsed">
+                        <controls:HeadingTextBlock Text="Forms" HeadingLevel="2"
+                                                   Foreground="{DynamicResource ContentMutedBrush}"
+                                                   VerticalAlignment="Center" Margin="0,0,10,0"
+                                                   AutomationProperties.Name="Form tools" />
+                        <ToggleButton x:Name="FormModeToggle" AutomationProperties.Name="Form fill mode"
+                                      Checked="FormModeToggle_Changed" Unchecked="FormModeToggle_Changed"
+                                      Padding="10,3"
+                                      ToolTip="Fill AcroForm fields on the page, then flatten the form to static content">
+                            <StackPanel Orientation="Horizontal">
+                                <ui:SymbolIcon Symbol="Checkbox124" FontSize="14" Margin="0,0,6,0" />
+                                <TextBlock Text="Fill form" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </ToggleButton>
+                    </StackPanel>
+
+                    <StackPanel x:Name="RedactGroup" Orientation="Horizontal" VerticalAlignment="Center"
+                                Visibility="Collapsed">
+                        <controls:HeadingTextBlock Text="Redact" HeadingLevel="2"
+                                                   Foreground="{DynamicResource ContentMutedBrush}"
+                                                   VerticalAlignment="Center" Margin="0,0,10,0"
+                                                   AutomationProperties.Name="Redact tools" />
+                        <ToggleButton x:Name="RedactModeToggle" AutomationProperties.Name="Redact mode"
+                                      Checked="RedactModeToggle_Changed" Unchecked="RedactModeToggle_Changed"
+                                      Padding="10,3"
+                                      ToolTip="Drag boxes over sensitive content; apply removes it and paints black (undoable)">
+                            <StackPanel Orientation="Horizontal">
+                                <ui:SymbolIcon Symbol="Eraser24" FontSize="14" Margin="0,0,6,0"
+                                               Foreground="{DynamicResource DangerBrush}" />
+                                <TextBlock Text="Redact" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </ToggleButton>
+                    </StackPanel>
+
+                    <StackPanel x:Name="DocumentGroup" Orientation="Horizontal" VerticalAlignment="Center"
+                                Visibility="Collapsed">
+                        <controls:HeadingTextBlock Text="Document" HeadingLevel="2"
+                                                   Foreground="{DynamicResource ContentMutedBrush}"
+                                                   VerticalAlignment="Center" Margin="0,0,10,0"
+                                                   AutomationProperties.Name="Document tools" />
+                        <Button AutomationProperties.Name="Run OCR" Click="Ocr_Click"
+                                Padding="10,3" Margin="0,0,4,0"
+                                ToolTip="Render a searchable copy: recognize the document's text offline and embed it (FR-OCR-01)">
+                            <StackPanel Orientation="Horizontal">
+                                <ui:SymbolIcon Symbol="ScanText24" FontSize="14" Margin="0,0,6,0" />
+                                <TextBlock Text="OCR…" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button AutomationProperties.Name="Protect document" Click="Protect_Click"
+                                Padding="10,3"
+                                ToolTip="Write an encrypted copy protected by an open password (FR-SEC-01)">
+                            <StackPanel Orientation="Horizontal">
+                                <ui:SymbolIcon Symbol="LockClosed24" FontSize="14" Margin="0,0,6,0" />
+                                <TextBlock Text="Protect…" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </StackPanel>
 
         <!-- Left sidebar -->
         <Grid DockPanel.Dock="Left" x:Name="Sidebar" Width="270" Margin="0,4,4,4" Background="{DynamicResource SurfacePanelBrush}">

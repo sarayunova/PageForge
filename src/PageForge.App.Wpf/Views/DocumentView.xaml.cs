@@ -134,6 +134,41 @@ public partial class DocumentView : UserControl
         _ = _vm.RenderSlotsAsync(realized);
     }
 
+    /// <summary>
+    /// Shows the selected tool group's commands and hides the rest.
+    ///
+    /// This governs only what is on screen. The editing modes themselves are still
+    /// owned by the toggles inside each group (EditModeToggle, ObjectModeToggle,
+    /// FormModeToggle, RedactModeToggle) and their existing handlers, so selecting
+    /// a group never silently enters or leaves an editing mode — switching away
+    /// from Redact while redaction is armed would otherwise strand the user in a
+    /// mode whose control they can no longer see.
+    /// </summary>
+    private void ToolGroupTab_Checked(object sender, RoutedEventArgs e)
+    {
+        // Fires during InitializeComponent for the default-checked tab, before the
+        // named group panels exist.
+        if (OrganizeGroup is null)
+        {
+            return;
+        }
+
+        (RadioButton Tab, UIElement Group)[] groups =
+        {
+            (OrganizeModeTab, OrganizeGroup),
+            (AnnotateModeTab, AnnotateGroup),
+            (EditModeTab, EditGroup),
+            (FormsModeTab, FormsGroup),
+            (RedactModeTab, RedactGroup),
+            (DocumentModeTab, DocumentGroup),
+        };
+
+        foreach ((RadioButton tab, UIElement group) in groups)
+        {
+            group.Visibility = tab.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
+
     private void RefreshAnnotationsIfNeeded()
     {
         if (_vm is null)
