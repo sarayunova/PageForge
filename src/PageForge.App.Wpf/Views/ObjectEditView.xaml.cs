@@ -96,9 +96,14 @@ public partial class ObjectEditView : UserControl
             Overlay.Width = _pixelW;
             Overlay.Height = _pixelH;
 
+            // Assigned AFTER the render. It used to be assigned before, when Bitmap
+            // is still null, and nothing reassigned it - so this surface showed a
+            // blank sheet and objects were selected and dragged over white. The
+            // redact and form surfaces had the identical bug; all three were blank
+            // for the same reason, and none of them threw or logged.
             _page = new PageImageViewModel(_vm.Core, pageIndex, _vm.RenderDpi);
-            PageImage.Source = _page.Bitmap;
             await _page.RenderAsync().ConfigureAwait(true);
+            PageImage.Source = _page.Bitmap;
 
             IReadOnlyList<PdfPageObject> objects = await _vm.ListObjectsAsync().ConfigureAwait(true);
             Rebuild(objects);
