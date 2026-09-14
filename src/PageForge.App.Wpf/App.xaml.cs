@@ -78,6 +78,7 @@ public partial class App : Application
             await RunHeadlessEditProofAsync();
             await RunHeadlessCorpusDogfoodProofAsync();
             RunThemeTokenProof();
+            RunRedactGeometryProof();
             Shutdown();
             return;
         }
@@ -142,6 +143,55 @@ public partial class App : Application
         catch (Exception exception)
         {
             Trace($"theme-token proof failed: {exception}");
+            FailProof(2);
+        }
+    }
+
+    /// <summary>
+    /// Proves the PDF-to-screen conversion behind the redaction overlay.
+    ///
+    /// This is the part of U4 part two most likely to break and least likely to be
+    /// noticed: a wrong Y flip puts the box on the other half of the page, which a
+    /// passing test suite would never mention because nothing else asserts where a
+    /// region lands. It was confirmed once by screenshot; a screenshot does not run
+    /// in CI.
+    ///
+    /// A 200x400pt page with a region from (10,300) to (60,350), rendered at 144 DPI
+    /// (2x), so every expected number is checkable by hand: scale 2, left 20, width
+    /// 100, height 100, and a top of 800 - 350*2 = 100 measured down from the top.
+    /// </summary>
+    private static void RunRedactGeometryProof()
+    {
+        try
+        {
+            const double dpi = 144.0;
+            const double pageHeightPx = 400.0 * dpi / 72.0; // 800
+            var region = new ViewModels.RedactRegionViewModel(
+                new PageForge.Core.Pdf.PdfRect(10, 300, 60, 350), dpi, pageHeightPx);
+
+            (string name, double actual, double expected)[] checks =
+            [
+                ("Left", region.Left, 20),
+                ("Top", region.Top, 100),
+                ("Width", region.Width, 100),
+                ("Height", region.Height, 100),
+            ];
+
+            foreach ((string name, double actual, double expected) in checks)
+            {
+                if (Math.Abs(actual - expected) > 0.001)
+                {
+                    Trace($"redact-geometry proof: {name} was {actual}, expected {expected}.");
+                    FailProof();
+                    return;
+                }
+            }
+
+            Trace("redact-geometry proof: region maps to (20,100) 100x100 at 144 DPI.");
+        }
+        catch (Exception exception)
+        {
+            Trace($"redact-geometry proof failed: {exception}");
             FailProof(2);
         }
     }
