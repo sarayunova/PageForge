@@ -128,8 +128,7 @@ public partial class FormFillView : UserControl
         {
             // The outline over the field is a bound template now; only the
             // interactive card below is still built by hand.
-            FieldBoxes.Add(new FormFieldBoxViewModel(
-                field, _vm?.RenderDpi ?? 96.0, _pixelH));
+            FieldBoxes.Add(new FormFieldBoxViewModel(field, _vm?.RenderDpi ?? 96.0));
 
             FieldsPanel.Children.Add(BuildFieldRow(field));
         }

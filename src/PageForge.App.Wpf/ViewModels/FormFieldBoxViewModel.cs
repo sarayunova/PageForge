@@ -19,13 +19,25 @@ namespace PageForge.App.Wpf.ViewModels;
 /// </summary>
 public sealed class FormFieldBoxViewModel
 {
-    public FormFieldBoxViewModel(PdfFormField field, double renderDpi, double pageHeightPx)
+    /// <remarks>Takes no page height, unlike the redaction region: without a flip
+    /// there is nothing to measure back from.</remarks>
+    public FormFieldBoxViewModel(PdfFormField field, double renderDpi)
     {
-        ScreenBox box = PageBoxGeometry.ToScreen(field.Bounds, renderDpi, pageHeightPx);
-        Left = box.Left;
-        Top = box.Top;
-        Width = box.Width;
-        Height = box.Height;
+        // No Y flip, unlike the redaction overlay: PdfFormField.Bounds already
+        // arrive top-down. The old code flipped them, which mirrored every outline
+        // onto the opposite half of the page - invisible until now, because this
+        // surface never rendered the page underneath it.
+        //
+        // Measured against the fixture rather than assumed. In
+        // tools/sample-pdf/corpus/form-application.pdf the FullName field is
+        // 120..142 and Consent is 182..202; read top-down at 96 DPI those are 160px
+        // and 243px from the page top, which is exactly where their labels sit. Read
+        // bottom-up they land near the page foot, hundreds of pixels from anything.
+        double scale = renderDpi / 72.0;
+        Left = field.Bounds.X0 * scale;
+        Top = field.Bounds.Y0 * scale;
+        Width = Math.Max(0, (field.Bounds.X1 - field.Bounds.X0) * scale);
+        Height = Math.Max(0, (field.Bounds.Y1 - field.Bounds.Y0) * scale);
 
         AccessibleName = $"{field.Label} field outline";
     }
