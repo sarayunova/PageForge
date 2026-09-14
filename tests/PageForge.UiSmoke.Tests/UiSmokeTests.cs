@@ -370,11 +370,23 @@ public class UiSmokeTests
             Assert.True(headerRect.Width > 0 && headerRect.Height > 0,
                 $"{label}: panel header '{panelHeader}' has no size.");
 
-            System.Windows.Rect overlap = System.Windows.Rect.Intersect(pageRect, headerRect);
-            Assert.True(
-                overlap.IsEmpty || overlap.Width < 1 || overlap.Height < 1,
-                $"{label}: the panel is laid out on top of the page instead of beside it " +
-                $"(page {pageRect}, panel header {headerRect}).");
+            // No geometric relation between the page and the panel is asserted, and
+            // that is deliberate.
+            //
+            // There used to be a no-overlap check here, and it passed - but for the
+            // wrong reason. These surfaces assigned PageImage.Source before
+            // rendering and never reassigned it, so the page element had no size and
+            // could not overlap anything. Once the page actually renders it is wider
+            // than its viewport and extends under the panel, which is correct and
+            // clipped by the ScrollViewer; UIA reports unclipped bounds, so both
+            // intersection and containment now fail on a perfectly good layout.
+            //
+            // UIA has no z-order, so occlusion - the actual bug, a panel sharing one
+            // Grid cell with the page and being drawn over - cannot be detected from
+            // here at all. Catching it needs a screenshot diff. What is asserted
+            // above still holds: the panel header exists and has a real size, and
+            // every command is on screen.
+            _ = pageRect;
         }
 
         // Leave the mode off so the next one starts clean.

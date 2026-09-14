@@ -72,9 +72,14 @@ public partial class FormFillView : UserControl
             Overlay.Width = _pixelW;
             Overlay.Height = _pixelH;
 
+            // Assigned AFTER the render. It used to be assigned before, when
+            // Bitmap is still null, and nothing reassigned it afterwards - so this
+            // surface showed a blank sheet and the field outlines floated over
+            // white. Same silent shape as the original blank-viewer bug: no
+            // exception, no log, just nothing on screen.
             var page = new PageImageViewModel(_vm.Core, pageIndex, _vm.RenderDpi);
-            PageImage.Source = page.Bitmap;
             await page.RenderAsync().ConfigureAwait(true);
+            PageImage.Source = page.Bitmap;
 
             IReadOnlyList<PdfFormField> fields = await _vm.ListFormFieldsAsync().ConfigureAwait(true);
             Rebuild(fields);
