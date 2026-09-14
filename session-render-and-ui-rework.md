@@ -141,13 +141,9 @@ swap.
   a bare panel), per-page loading skeletons, and a **collapsible sidebar with a
   splitter** — it is still a fixed `Width="270"` with no collapse
   (`DocumentView.xaml:355`).
-- **Phase U4, part two — the per-mode child views.** `DocumentView.xaml.cs` is
-  down to **1,306 lines**, but `ObjectEditView`, `FormFillView` and `RedactView`
-  still expose imperative `Refresh()` methods the parent calls on every state
-  change. Each rebuilds overlay rectangles positioned from PDF geometry, so
-  converting them means an `ItemsControl` over a `Canvas` with bound positions,
-  per view. That is a design change rather than a mechanical one and probably
-  wants its own session.
+- **Phase U4, part two — started on `refactor/u4-child-views`, not finished.**
+  See §8. The conversion turned up more bugs than refactoring; the branch is
+  pushed and unmerged.
 - **No fit-to-width.** The old "Fit" button called `ZoomReset()` (100%) despite
   its tooltip; it was renamed "Reset zoom to 100%", so it is honest now, but
   actual fit-to-width / fit-page does not exist.
@@ -322,11 +318,8 @@ and CI already guards it.
 **Phase U3 is done** — collapsible/resizable sidebar (`a68e0b7`), empty state
 (`54c2c2f`), page shadows (`817dd8d`) and render placeholders (`844aec6`).
 
-Next is **U4 part two**: the per-mode child views. Each rebuilds overlay
-rectangles positioned from PDF geometry, so it means an `ItemsControl` over a
-`Canvas` with bound positions, per view — a design change rather than a
-mechanical one, and probably its own session. After that, per-run database
-isolation for the hosted API lane (§5). Before deep U4 work, get an answer on the
+**U4 part two is underway on `refactor/u4-child-views`** — pushed, unmerged, six
+commits. Read §8 before continuing it. Before deep U4 work, get an answer on the
 WinUI port timing (§6.4).
 
 One sequencing note, because it changes the answer to §6.4. Doing U4 **before**
@@ -351,3 +344,55 @@ or run. The four genuine rewrites once it is: worker-thread bitmaps (WinUI has n
 `Freeze()`), `MessageBox` → async `ContentDialog` (31 call sites), `DynamicResource`
 → `ThemeResource` (93 sites), and page rotation (`LayoutTransform` has no WinUI
 equivalent that resizes the layout slot).
+
+## 8. U4 part two — `refactor/u4-child-views` (pushed, unmerged)
+
+Six commits. Two of them are the refactor that was intended; four are defects it
+uncovered. That ratio is the point of the section: this code had no automated
+cover for *what it draws*, so nobody had ever looked at it.
+
+**All three mode surfaces were blank, and always had been.** `RedactView`,
+`FormFillView` and `ObjectEditView` each assigned `PageImage.Source = page.Bitmap`
+*before* awaiting the render — when `Bitmap` is still null — and never reassigned
+it. Redaction boxes were drawn over white, form outlines floated over nothing,
+objects were selected and dragged over nothing. No exception, no log; the same
+silent shape as the FR-VIEW-01 bug in §2. They were written from one template, so
+the mistake was copied rather than made three times. **Check this first on any new
+page-rendering surface.**
+
+**The form-field outlines were mirrored.** `PdfFormField.Bounds` arrive
+*top-down*, but the outline used the same Y flip the redaction overlay needs, so
+every field was drawn on the opposite half of the page. Redaction regions come
+from the engine bottom-up and genuinely do flip; form fields do not. The two
+overlays differ, and `PageBoxGeometry` is deliberately shared by only the ones
+that share a convention — generalising it further would have propagated this bug,
+not prevented it.
+
+**A test of mine was passing for the wrong reason.** The mode-panel check asserted
+the panel did not overlap the page; with the page unrendered, the element had no
+size and could not overlap anything. Once the page draws it is wider than its
+viewport and extends under the panel — correct, and clipped — but UIA reports
+unclipped bounds, so the assertion fails on good layout. It is removed: UIA has no
+z-order, so occlusion cannot be detected from there at all, and catching it needs
+a screenshot diff.
+
+### How the bugs were found, since it generalises
+
+Not by reading. By opening a document that actually exercises the path
+(`tools/sample-pdf/corpus/form-application.pdf` has two form fields; the default
+sample has none), and by zooming out so that "below the fold" could be told apart
+from "not drawn". When geometry looked wrong, one log line of the computed values
+settled it in a single run — the same instrument-first move that solved the MinIO
+race in §5.
+
+### Still open here
+
+- `ObjectEditView`'s overlay is not converted, and its box and selection-handle
+  geometry is **unverified** — the sample has no editable objects, so nothing
+  draws. Given the form overlay was mirrored, treat this as suspect until seen
+  against a document that has some.
+- The form-field *cards* in the side panel are still built in code. They carry a
+  live value and write back through `SetFormFieldValueAsync`, so binding them
+  needs a view model with a value and a command, not a rectangle.
+- A `--smoke` proof covers the redaction geometry (`RunRedactGeometryProof`).
+  Nothing equivalent covers the form or object overlays.
