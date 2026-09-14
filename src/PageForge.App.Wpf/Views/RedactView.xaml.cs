@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // This file is part of PageForge. See LICENSE for the full license text.
 
+using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -95,52 +96,40 @@ public partial class RedactView : UserControl
         }
     }
 
+    /// <summary>
+    /// The marked regions, in screen terms. Bound twice - as boxes over the page and
+    /// as rows in the side list - so the two cannot disagree about what is marked.
+    ///
+    /// Public because the XAML binds to it through a RelativeSource on the
+    /// UserControl; this view has no view model of its own to hang it from.
+    /// </summary>
+    public ObservableCollection<RedactRegionViewModel> Regions { get; } = new();
+
+    /// <summary>
+    /// Re-projects the regions for the current zoom.
+    ///
+    /// This used to build every Rectangle and TextBlock by hand, so the
+    /// PDF-to-screen conversion existed twice, and clearing Overlay to redraw them
+    /// also erased the in-progress drag. It now only refreshes a collection and the
+    /// templates draw it; Overlay keeps its own children for the rubber band, which
+    /// is transient view state rather than a marked region.
+    ///
+    /// Rebuilt rather than diffed: the values are a snapshot for one zoom level, so
+    /// every item changes when the scale does, and the count is small.
+    /// </summary>
     private void Rebuild(IReadOnlyList<PdfRect> regions)
     {
-        Overlay.Children.Clear();
-        RegionsPanel.Children.Clear();
-
+        Regions.Clear();
         foreach (PdfRect r in regions)
         {
-            var box = new Rectangle
-            {
-                Fill = new SolidColorBrush(Color.FromArgb(40, 0xd0, 0x10, 0x10)),
-                Stroke = new SolidColorBrush(Color.FromArgb(0xcc, 0xd0, 0x10, 0x10)),
-                StrokeThickness = 1,
-                StrokeDashArray = new DoubleCollection { 4, 2 },
-                Width = (r.X1 - r.X0) * _scale,
-                Height = (r.Y1 - r.Y0) * _scale,
-            };
-            Canvas.SetLeft(box, r.X0 * _scale);
-            Canvas.SetTop(box, _pixelH - r.Y1 * _scale);
-            Overlay.Children.Add(box);
+            Regions.Add(new RedactRegionViewModel(r, _vm?.RenderDpi ?? 96.0, _pixelH));
         }
 
-        if (regions.Count == 0)
-        {
-            RegionsPanel.Children.Add(new TextBlock
-            {
-                Text = _justApplied
-                    ? "Redactions applied and painted black. ↩ Undo restores the covered content; Save redacted… keeps it removed."
-                    : "No regions on this page yet — drag a box over the content to redact.",
-                Margin = new Thickness(8),
-                TextWrapping = TextWrapping.Wrap,
-            }.Themed(TextBlock.ForegroundProperty, "ContentMutedBrush"));
-        }
-        else
-        {
-            foreach (PdfRect r in regions)
-            {
-                string label = $"({r.X0:F0}, {r.Y0:F0}) → ({r.X1:F0}, {r.Y1:F0}) pt";
-                var region = new TextBlock
-                {
-                    Text = label,
-                    Margin = new Thickness(8, 6, 8, 6),
-                }.Themed(TextBlock.ForegroundProperty, "ContentBrush");
-                AutomationProperties.SetName(region, $"Redaction region {label}");
-                RegionsPanel.Children.Add(region);
-            }
-        }
+        // The empty-state wording differs after an apply, so it is set here while
+        // its visibility stays bound to the count.
+        NoRegionsText.Text = _justApplied
+            ? "Redactions applied and painted black. ↩ Undo restores the covered content; Save redacted… keeps it removed."
+            : "No regions on this page yet — drag a box over the content to redact.";
 
         ApplyButton.IsEnabled = regions.Count > 0;
     }

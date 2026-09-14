@@ -43,6 +43,20 @@ public sealed class PointsToPixelsConverter : IMultiValueConverter
         => throw new NotSupportedException();
 }
 
+/// <summary>Visible when the bound count is zero. For the empty-state text beside a
+/// bound list, so it cannot be left on screen by a code path that forgot to clear
+/// it - which is the failure mode a hand-built list invites.</summary>
+public sealed class ZeroCountToVisibilityConverter : IValueConverter
+{
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => value is int count && count == 0
+            ? System.Windows.Visibility.Visible
+            : System.Windows.Visibility.Collapsed;
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
 /// <summary>Visible when the bound boolean is false. For placeholders, which show
 /// precisely while the thing they stand in for is absent.</summary>
 public sealed class InverseBoolToVisibilityConverter : IValueConverter
