@@ -80,9 +80,13 @@ public partial class RedactView : UserControl
             Overlay.Width = _pixelW;
             Overlay.Height = _pixelH;
 
+            // Assigned AFTER the render. It used to be assigned before, when
+            // Bitmap is still null, and nothing reassigned it afterwards - so the
+            // redaction surface showed a blank sheet and the user was drawing boxes
+            // over white, with no way to see what they were covering.
             var page = new PageImageViewModel(_vm.Core, pageIndex, _vm.RenderDpi);
-            PageImage.Source = page.Bitmap;
             await page.RenderAsync().ConfigureAwait(true);
+            PageImage.Source = page.Bitmap;
 
             Rebuild(_regions);
         }
