@@ -54,6 +54,35 @@
                 <Grid x:Name="PageHost" Background="White" Margin="24">
                     <Image x:Name="PageImage" Stretch="None" SnapsToDevicePixels="True"
                        AutomationProperties.Name="Form fill page" />
+                    <!-- Field outlines, bound. Same shape as the redaction overlay:
+                         one collection, one template, and the PDF-to-screen
+                         conversion shared through PageBoxGeometry. -->
+                    <ItemsControl ItemsSource="{Binding FieldBoxes, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                  IsHitTestVisible="False">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <Canvas ClipToBounds="True" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemContainerStyle>
+                            <Style TargetType="ContentPresenter">
+                                <Setter Property="Canvas.Left" Value="{Binding Left}" />
+                                <Setter Property="Canvas.Top" Value="{Binding Top}" />
+                            </Style>
+                        </ItemsControl.ItemContainerStyle>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Rectangle Width="{Binding Width}" Height="{Binding Height}"
+                                           Fill="#0C2B8CFF" Stroke="#FF1F74C6" StrokeThickness="1"
+                                           AutomationProperties.Name="{Binding AccessibleName}">
+                                    <Rectangle.StrokeDashArray>
+                                        <DoubleCollection>3 2</DoubleCollection>
+                                    </Rectangle.StrokeDashArray>
+                                </Rectangle>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
                     <Canvas x:Name="Overlay" IsHitTestVisible="False" ClipToBounds="True" Focusable="True" />
                 </Grid>
             </ScrollViewer>
