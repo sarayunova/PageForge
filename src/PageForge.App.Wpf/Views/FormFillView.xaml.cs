@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // This file is part of PageForge. See LICENSE for the full license text.
 
+using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -88,9 +89,14 @@ public partial class FormFillView : UserControl
         }
     }
 
+    /// <summary>The field outlines drawn over the page, bound by the XAML through a
+    /// RelativeSource on the UserControl. Geometry only; the editable controls are
+    /// in the side panel.</summary>
+    public ObservableCollection<FormFieldBoxViewModel> FieldBoxes { get; } = new();
+
     private void Rebuild(IReadOnlyList<PdfFormField> fields)
     {
-        Overlay.Children.Clear();
+        FieldBoxes.Clear();
         FieldsPanel.Children.Clear();
 
         if (fields.Count == 0)
@@ -115,19 +121,10 @@ public partial class FormFillView : UserControl
 
         foreach (PdfFormField field in fields)
         {
-            // Dashed box over the field's rect (visual reference only, not interactive).
-            var border = new Rectangle
-            {
-                Fill = new SolidColorBrush(Color.FromArgb(12, 0x2b, 0x8c, 0xff)),
-                Stroke = new SolidColorBrush(Color.FromArgb(0xff, 0x1f, 0x74, 0xc6)),
-                StrokeThickness = 1,
-                StrokeDashArray = new DoubleCollection { 3, 2 },
-                Width = (field.Bounds.X1 - field.Bounds.X0) * _scale,
-                Height = (field.Bounds.Y1 - field.Bounds.Y0) * _scale,
-            };
-            Canvas.SetLeft(border, field.Bounds.X0 * _scale);
-            Canvas.SetTop(border, _pixelH - field.Bounds.Y1 * _scale);
-            Overlay.Children.Add(border);
+            // The outline over the field is a bound template now; only the
+            // interactive card below is still built by hand.
+            FieldBoxes.Add(new FormFieldBoxViewModel(
+                field, _vm?.RenderDpi ?? 96.0, _pixelH));
 
             FieldsPanel.Children.Add(BuildFieldRow(field));
         }

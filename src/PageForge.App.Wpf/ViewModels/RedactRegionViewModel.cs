@@ -15,26 +15,22 @@ namespace PageForge.App.Wpf.ViewModels;
 /// conversion existed twice and the two lists could disagree about what was on the
 /// page. They are now two templates over one collection.
 ///
-/// PDF coordinates have their origin at the bottom-left and are measured in
-/// points; WPF measures from the top-left in device-independent pixels. Both
-/// conversions happen here, once, at construction: the values are a snapshot for a
-/// particular zoom, and the collection is rebuilt when that changes.
+/// The PDF-to-screen conversion itself lives in PageBoxGeometry, shared with the
+/// other overlays. The values here are a snapshot for one zoom level, so the
+/// collection is rebuilt when the scale changes.
 /// </summary>
 public sealed class RedactRegionViewModel
 {
-    private const double PointsPerInch = 72.0;
-
     /// <param name="rect">The region in PDF points, origin bottom-left.</param>
     /// <param name="renderDpi">The DPI the page is currently rendered at.</param>
     /// <param name="pageHeightPx">The rendered page height, for the Y flip.</param>
     public RedactRegionViewModel(PdfRect rect, double renderDpi, double pageHeightPx)
     {
-        double scale = renderDpi / PointsPerInch;
-
-        Left = rect.X0 * scale;
-        Top = pageHeightPx - (rect.Y1 * scale);
-        Width = Math.Max(0, (rect.X1 - rect.X0) * scale);
-        Height = Math.Max(0, (rect.Y1 - rect.Y0) * scale);
+        ScreenBox box = PageBoxGeometry.ToScreen(rect, renderDpi, pageHeightPx);
+        Left = box.Left;
+        Top = box.Top;
+        Width = box.Width;
+        Height = box.Height;
 
         // Points, not pixels: the label describes the region in the document's own
         // units, so it does not change meaning when the user zooms.
