@@ -387,12 +387,122 @@ race in §5.
 
 ### Still open here
 
-- `ObjectEditView`'s overlay is not converted, and its box and selection-handle
-  geometry is **unverified** — the sample has no editable objects, so nothing
-  draws. Given the form overlay was mirrored, treat this as suspect until seen
-  against a document that has some.
+- **Closed in §9** — `ObjectEditView`'s overlay is not converted, and its box and
+  selection-handle geometry is **unverified**; the sample has no editable
+  objects, so nothing draws. Given the form overlay was mirrored, treat this as
+  suspect until seen against a document that has some. *It was right to be
+  suspect: four defects, two of them in the engine. Note also that the premise
+  was wrong — `scan-letters.pdf` has had image objects all along, and nobody had
+  looked.*
 - The form-field *cards* in the side panel are still built in code. They carry a
   live value and write back through `SetFormFieldValueAsync`, so binding them
   needs a view model with a value and a command, not a rectangle.
 - A `--smoke` proof covers the redaction geometry (`RunRedactGeometryProof`).
-  Nothing equivalent covers the form or object overlays.
+  Nothing equivalent covers the form or object overlays. *The object overlay has
+  one as of §9; the form overlay still does not.*
+
+## 9. U4 part three — the object-edit surface, and two engine bugs behind it
+
+The suspicion recorded in §8 was right, and it went deeper than the UI. Treating
+`ObjectEditView` as suspect turned up **four defects, two of them in the engine**,
+and FR-EDIT-04's move/resize did not work at all.
+
+### The evidence came first, and took one run
+
+`tools/sample-pdf/corpus/scan-letters.pdf` is the only corpus document with image
+objects (two pages, one full-page scan each) — the note in §8 said the object path
+had no fixture, but it did; nothing had looked. A twenty-line probe against the
+real shim printed the listed bounds, and the first line settled it:
+
+```
+page 0: 612x792pt, 1 object(s)
+  id=0 Image bounds=(0.0,0.0)-(780300.0,1306800.0)
+```
+
+**Bug 1 — listed bounds were in the wrong unit entirely.** `pf_obj_bbox` mapped
+the object's cm matrix over the point `(obj_w, obj_h)`, and `obj_w`/`obj_h` were
+read from the image XObject's `/Width` and `/Height` — its size in **pixels**. But
+an image XObject is always painted into the unit square (PDF 32000-1 §8.9.5.2);
+the cm carries the placement. So the bbox came out scaled by the pixel count:
+1275x1650 pixels on a 612x792pt page gives exactly 780300x1306800. Any overlay
+drawing those bounds would have drawn a box a thousand times the page. Both
+consumers of `obj_w`/`obj_h` wanted the unit square, so the lookup is gone.
+
+**Bug 2 — move/resize never moved anything, and this is the serious one.** With
+the bounds fixed, a move to (72,500)-(272,620) round-tripped as (0,0)-(1,1). The
+replacement operator was built as `"%g %g %g %g %g %g /%s Do"` — six numbers and
+**no `cm` operator to consume them**. The matrix was never applied; worse, the
+span being replaced covers the object's *original* `cm` too, so the object lost
+the placement it already had and was painted through the identity CTM: a 1pt
+square in the page corner. Every move and resize FR-EDIT-04 has ever performed
+did that. The fix emits the `cm`, and wraps the matrix in `q`/`Q` when the object
+had no `cm` of its own, since a matrix introduced there would otherwise stay in
+force and displace everything painted after it.
+
+### Why the fidelity gate did not catch either
+
+`ObjectEditFidelityTests` moved an object and then asserted: a receipt came back,
+its old and new operators differed, the document saved, reopened, listed a
+non-empty object collection, and rendered more than 100 bytes of PNG. **All of
+that is true of a document whose image has been shrunk to a point in the corner.**
+Nothing asserted *where the object landed* — the one fact the test exists for.
+
+It does now, to a quarter of a point, before and after save/reopen, plus a check
+that listed bounds lie on the page at all (which Bug 1 failed by three orders of
+magnitude). Both new assertions were confirmed to fail against the unfixed shim
+and pass against the fixed one, per the §3 rule. The reopen check also read page 0
+regardless of which page had been edited; it now reads the page that was.
+
+### Two more in the view
+
+**Bug 3 — the drag axis was mirrored.** `Overlay_MouseMove` computed
+`dyPdf = (cur.Y - start.Y) / _scale` with the comment *"screen Y grows down; PDF Y
+grows up"* on the same line, and did not negate. Dragging down moved the object
+up, and the N and S handles each grew the box where they should shrink it. The
+keyboard path beside it has always had the sign right (`Up` is `+step`), so the
+two disagreed in the same file. This is the third Y-flip defect in three
+overlays — see the form-field mirror in §8 — and the reason `PageBoxGeometry`
+keeps earning its place.
+
+**Bug 4 — the selection handles accumulated.** `RedrawSelectionVisuals` appended
+eight `Rectangle`s to the overlay Canvas and removed none, and it runs on every
+mouse-move of a drag. One drag across the page left hundreds of stale handles
+along the path the pointer took, and deselecting left the last eight on screen
+permanently.
+
+### The conversion itself
+
+`ObjectBoxViewModel` (observable, because a drag moves it and selection repaints
+it) now backs a bound `ItemsControl`, with selection styling in a `DataTrigger`.
+The handles stay in the `Canvas` — they are transient view state belonging to
+whichever box is selected, not items in their own right, the same split
+`RedactView` makes for its rubber band. Setting `Bounds` recomputes the screen
+rectangle through `PageBoxGeometry`, so the two cannot drift; the old code kept
+the object, a screen `Rect` and a `Rectangle` in a triple and updated them by hand
+at four call sites. Object bounds share the redaction overlay's flip, confirmed
+against the shim rather than assumed — they are PDF user space, bottom-left
+origin. The commit path now takes `PdfRect` directly instead of converting to
+screen coordinates and straight back, which deleted the last local copy of the
+flip in this file.
+
+`RunObjectGeometryProof` in `--smoke` covers the box, the direction it moves when
+its bounds change, the handle positions and the hit-test. It was confirmed to fail
+with the flip removed (`Top was 600, expected 100`).
+
+### Still open here
+
+- **The form overlay still has no `--smoke` proof.** The object and redaction
+  overlays now have one each.
+- The form-field *cards* in the side panel are still built in code (unchanged
+  from §8): they carry a live value and write back through
+  `SetFormFieldValueAsync`, so binding them needs a view model with a value and a
+  command, not a rectangle.
+- **A Form XObject's bbox is the mapped unit square, not its `/BBox`.** For a form
+  whose BBox is not the unit square that reports placement and scale rather than
+  the exact painted extent. Images are exact, and the corpus has no vector-object
+  fixture to measure a form against — worth one if vector editing is ever more
+  than nominal.
+- The object surface has still not been **seen** with a document loaded. The
+  geometry is proven by assertion at three levels and the moved object was
+  confirmed by rendering the edited PDF, but nobody has looked at the overlay
+  drawn over a page. Open `scan-letters.pdf` in object-edit mode and look.
