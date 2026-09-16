@@ -506,3 +506,50 @@ with the flip removed (`Top was 600, expected 100`).
   geometry is proven by assertion at three levels and the moved object was
   confirmed by rendering the edited PDF, but nobody has looked at the overlay
   drawn over a page. Open `scan-letters.pdf` in object-edit mode and look.
+
+## 10. Object replace — verified, and it works
+
+The remaining FR-EDIT-04 function, checked because its gate had the same
+assertion shape as the one that hid the move/resize bug: a receipt came back, it
+differed from the original, the document saved, reopened and rendered — all true
+of a replace that did nothing at all. Worse, the replacement source was a render
+of *the very page being edited*, so a working replace and a no-op replace
+produced near-identical pages.
+
+**It works.** Probed against `scan-letters.pdf` with a flat magenta square: the
+centre pixel goes `#FFFFFF` → `#FF00FF`, bounds are preserved exactly
+(0,0)-(612,792) through replace, undo restores the original, redo re-applies, and
+the swap survives save and reopen. So FR-EDIT-04 was one-for-two broken, not
+two-for-two.
+
+The gate now says so. It replaces with a generated solid-magenta PNG that nothing
+in the corpus resembles, and asserts on **rendered PNG bytes** rather than
+decoding pixels — byte equality of renders is already this suite's currency, and
+it avoids an imaging dependency that would need an AGPL check and a notices entry
+to draw a coloured square. Five assertions where there were none: the page must
+render differently after the replace, identically to the original after undo,
+identically to the replacement after redo, and identically to the replacement
+again after save and reopen through a fresh engine — plus bounds preserved, since
+the contract is that only the interior is swapped.
+
+The undo leg matters more than it looks. A replace leaves the old image in the
+document's resources and swaps only the name token before the `Do`, so an undo
+that failed to swap it back would leave the replacement on the page while every
+structural assertion still passed.
+
+Confirmed to fail: splicing the *original* name back in `pf_replace_object` —
+a perfect no-op that leaves every structural check intact — now fails the gate on
+`scan-letters.pdf`.
+
+`PdfRectAssert` is extracted and shared by both object gates rather than copied,
+for the reason §9 gives about duplicated geometry helpers.
+
+### Where the weak-assertion pattern does and does not reach
+
+Checked rather than assumed, before deciding how far to take this. It is **not**
+systemic. `RedactionFidelityTests` proves the covered text is genuinely gone from
+extraction and that untouched text on the same page survives — the hard FR-SEC-02
+gate, not a paint-over. `TextEditFidelityTests` proves the new string is present,
+the old one absent, the neighbouring run untouched and the run box recalculated.
+Both are strong. The weakness was confined to the object family, and both of its
+members are now covered.
