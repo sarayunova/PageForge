@@ -53,6 +53,10 @@ public sealed class ObjectReplaceFidelityTests
             bool replaced = false;
             int pageCount;
             int replacedPage = -1;
+            string replacedId = string.Empty;
+            PdfRect originalBounds = default;
+            byte[] beforePng = [];
+            byte[] afterPng = [];
             PdfTextEditReceipt? receipt = null;
 
             await using (MuPdfEngine engine = MuPdfEngine.Create())
@@ -70,12 +74,23 @@ public sealed class ObjectReplaceFidelityTests
 
                     PdfPageObject target = objects[0];
                     replacedPage = page;
+                    replacedId = target.Id;
+                    originalBounds = target.Bounds;
 
-                    // A genuinely distinct, valid PNG: render the same page to a
-                    // file and use that raster as the replacement interior.
-                    RenderedPdfPage pagePng = await engine.RenderPageToPngAsync(page, 72);
-                    Assert.True(pagePng.PngBytes.Length > 100, $"{name} page {page} did not render a replacement source.");
-                    await File.WriteAllBytesAsync(replacementPng, pagePng.PngBytes);
+                    // The replacement source used to be a render of the very page
+                    // being edited, so a working replace and a replace that did
+                    // nothing produced near-identical pages. It is now a flat
+                    // magenta square: nothing on any corpus document looks like
+                    // that, so "did the painted interior actually change" has an
+                    // answer.
+                    await File.WriteAllBytesAsync(replacementPng, SolidPng(64, 64, 0xFF, 0x00, 0xFF));
+
+                    // What the page looks like before the swap, to compare against.
+                    // Comparing rendered PNG bytes rather than decoding pixels keeps
+                    // this suite free of an image-decoding dependency - which would
+                    // need an AGPL licence check and a notices entry - and byte
+                    // equality of renders is already this gate's currency.
+                    beforePng = (await engine.RenderPageToPngAsync(page, 72)).PngBytes;
 
                     receipt = await engine.ReplaceObjectAsync(
                         page, target.Id, new PdfObjectReplacement(replacementPng, "png"));
@@ -83,6 +98,25 @@ public sealed class ObjectReplaceFidelityTests
                     Assert.NotEmpty(receipt.OldOperators);
                     Assert.NotEmpty(receipt.NewOperators);
                     Assert.NotEqual(receipt.OldOperators, receipt.NewOperators);
+
+                    // The page must actually look different now. Nothing asserted
+                    // this before: the gate checked that a receipt came back, that
+                    // it differed from the original, and that the page still
+                    // rendered - every one of which is equally true of a replace
+                    // that quietly did nothing. That is the same assertion shape
+                    // that let the sibling move/resize ship broken.
+                    afterPng = (await engine.RenderPageToPngAsync(page, 72)).PngBytes;
+                    Assert.False(
+                        beforePng.AsSpan().SequenceEqual(afterPng),
+                        $"{name} page {page} renders identically after replacing its object: " +
+                        "the painted interior did not change.");
+
+                    // FR-EDIT-04's contract is that only the interior is swapped, so
+                    // the box must be exactly where it was.
+                    PdfPageObject afterReplace = Assert.Single(
+                        await engine.ListObjectsAsync(page), o => o.Id == target.Id);
+                    PdfRectAssert.Equal(originalBounds, afterReplace.Bounds, $"{name} after replace");
+
                     replaced = true;
                 }
 
@@ -94,8 +128,22 @@ public sealed class ObjectReplaceFidelityTests
                 }
 
                 // (2) prove the engine splice round-trips exactly: undo then redo.
+                // Proven by what the page LOOKS like, not just by the splice coming
+                // back. The old image lives on in the document's resources after a
+                // replace - only the name token before the Do is swapped - so an
+                // undo that failed to swap it back would leave the magenta on the
+                // page while every structural check still passed.
                 await engine.RevertTextEditAsync(replacedPage, receipt!, redo: false);
+                byte[] undonePng = (await engine.RenderPageToPngAsync(replacedPage, 72)).PngBytes;
+                Assert.True(
+                    beforePng.AsSpan().SequenceEqual(undonePng),
+                    $"{name} page {replacedPage} did not render identically to the original after undo.");
+
                 await engine.RevertTextEditAsync(replacedPage, receipt!, redo: true);
+                byte[] redonePng = (await engine.RenderPageToPngAsync(replacedPage, 72)).PngBytes;
+                Assert.True(
+                    afterPng.AsSpan().SequenceEqual(redonePng),
+                    $"{name} page {replacedPage} did not render identically to the replacement after redo.");
 
                 // (3) persist.
                 await engine.SaveAsAsync(editedOut);
@@ -112,8 +160,22 @@ public sealed class ObjectReplaceFidelityTests
                 IReadOnlyList<PdfPageObject> objects = await reader.ListObjectsAsync(replacedPage);
                 Assert.NotEmpty(objects);
 
+                // The box must have survived the save/reopen where it was.
+                PdfRectAssert.Equal(
+                    originalBounds,
+                    Assert.Single(objects, o => o.Id == replacedId).Bounds,
+                    $"{name} after save and reopen");
+
                 RenderedPdfPage png = await reader.RenderPageToPngAsync(replacedPage, 72);
                 Assert.True(png.PngBytes.Length > 100, $"{name} replaced-object page did not render.");
+
+                // And the replacement must still be the thing being painted. A
+                // reopened document renders through a fresh engine, so this is the
+                // assertion that says the swap is in the FILE and not merely in the
+                // session that performed it.
+                Assert.True(
+                    afterPng.AsSpan().SequenceEqual(png.PngBytes),
+                    $"{name} page {replacedPage} does not render as the replacement after save and reopen.");
                 await File.WriteAllBytesAsync(Artifact($"{name}.repl.p1.png"), png.PngBytes);
             }
 
@@ -124,6 +186,96 @@ public sealed class ObjectReplaceFidelityTests
             TryDelete(editedOut);
             TryDelete(replacementPng);
         }
+    }
+
+    /// <summary>
+    /// Writes a solid-colour 8-bit RGB PNG.
+    ///
+    /// Hand-rolled rather than taken from a library: this suite targets net8.0 and
+    /// has no imaging dependency, and adding one to draw a coloured square would
+    /// mean an AGPL compatibility check and a THIRD-PARTY-NOTICES entry for a
+    /// rectangle. The pieces needed are all in the BCL - ZLibStream for the IDAT
+    /// payload, and a CRC-32 that PNG specifies directly.
+    /// </summary>
+    private static byte[] SolidPng(int width, int height, byte r, byte g, byte b)
+    {
+        // Raw scanlines: each row is a filter byte (0 = None) then RGB triples.
+        var raw = new byte[height * ((width * 3) + 1)];
+        for (int y = 0, i = 0; y < height; y++)
+        {
+            raw[i++] = 0;
+            for (int x = 0; x < width; x++)
+            {
+                raw[i++] = r;
+                raw[i++] = g;
+                raw[i++] = b;
+            }
+        }
+
+        using var deflated = new MemoryStream();
+        using (var zlib = new System.IO.Compression.ZLibStream(
+                   deflated, System.IO.Compression.CompressionLevel.Optimal, leaveOpen: true))
+        {
+            zlib.Write(raw, 0, raw.Length);
+        }
+
+        var ihdr = new byte[13];
+        BigEndian(ihdr, 0, width);
+        BigEndian(ihdr, 4, height);
+        ihdr[8] = 8;  // bit depth
+        ihdr[9] = 2;  // colour type 2 = truecolour RGB
+        // [10] compression, [11] filter, [12] interlace all 0.
+
+        using var png = new MemoryStream();
+        png.Write([0x89, (byte)'P', (byte)'N', (byte)'G', 0x0D, 0x0A, 0x1A, 0x0A]);
+        WriteChunk(png, "IHDR", ihdr);
+        WriteChunk(png, "IDAT", deflated.ToArray());
+        WriteChunk(png, "IEND", []);
+        return png.ToArray();
+
+        static void BigEndian(byte[] target, int offset, int value)
+        {
+            target[offset] = (byte)(value >> 24);
+            target[offset + 1] = (byte)(value >> 16);
+            target[offset + 2] = (byte)(value >> 8);
+            target[offset + 3] = (byte)value;
+        }
+
+        static void WriteChunk(Stream target, string type, byte[] payload)
+        {
+            var length = new byte[4];
+            BigEndian(length, 0, payload.Length);
+            target.Write(length);
+
+            // The CRC covers the type and the payload, but not the length.
+            var typeAndData = new byte[4 + payload.Length];
+            for (int i = 0; i < 4; i++)
+            {
+                typeAndData[i] = (byte)type[i];
+            }
+
+            payload.CopyTo(typeAndData, 4);
+            target.Write(typeAndData);
+
+            var crc = new byte[4];
+            BigEndian(crc, 0, unchecked((int)Crc32(typeAndData)));
+            target.Write(crc);
+        }
+    }
+
+    private static uint Crc32(byte[] data)
+    {
+        uint crc = 0xFFFFFFFFu;
+        foreach (byte value in data)
+        {
+            crc ^= value;
+            for (int bit = 0; bit < 8; bit++)
+            {
+                crc = (crc & 1) != 0 ? 0xEDB88320u ^ (crc >> 1) : crc >> 1;
+            }
+        }
+
+        return crc ^ 0xFFFFFFFFu;
     }
 
     private static void TryDelete(string path)

@@ -97,7 +97,7 @@ public sealed class ObjectEditFidelityTests
                     // rendered.
                     PdfPageObject afterMove = Assert.Single(
                         await engine.ListObjectsAsync(page), o => o.Id == target.Id);
-                    AssertBounds(movedBounds, afterMove.Bounds, $"{name} after move");
+                    PdfRectAssert.Equal(movedBounds, afterMove.Bounds, $"{name} after move");
 
                     moved = true;
                 }
@@ -132,7 +132,7 @@ public sealed class ObjectEditFidelityTests
                 // leave an object behind. This read page 0 regardless of which page was
                 // edited, so for a document whose first object is not on page 0 it was
                 // asserting against an untouched page.
-                AssertBounds(
+                PdfRectAssert.Equal(
                     movedBounds,
                     Assert.Single(objects, o => o.Id == movedId).Bounds,
                     $"{name} after save and reopen");
@@ -148,25 +148,6 @@ public sealed class ObjectEditFidelityTests
         {
             TryDelete(editedOut);
         }
-    }
-
-    /// <summary>
-    /// Compares two PDF rectangles to a quarter of a point. The tolerance is there
-    /// because the matrix travels through the content stream as decimal text and
-    /// back through a float transform, not to absorb a placement error: a quarter
-    /// point is far below anything visible, and the failures this guards against
-    /// were off by hundreds of points or by a factor of a thousand.
-    /// </summary>
-    private static void AssertBounds(PdfRect expected, PdfRect actual, string what)
-    {
-        const double tolerance = 0.25;
-        Assert.True(
-            Math.Abs(expected.X0 - actual.X0) <= tolerance &&
-            Math.Abs(expected.Y0 - actual.Y0) <= tolerance &&
-            Math.Abs(expected.X1 - actual.X1) <= tolerance &&
-            Math.Abs(expected.Y1 - actual.Y1) <= tolerance,
-            $"{what}: expected bounds ({expected.X0},{expected.Y0})-({expected.X1},{expected.Y1}), " +
-            $"got ({actual.X0},{actual.Y0})-({actual.X1},{actual.Y1}).");
     }
 
     private static void TryDelete(string path)
