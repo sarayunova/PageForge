@@ -52,6 +52,7 @@ public sealed class ObjectEditFidelityTests
             bool moved = false;
             int pageCount;
             int movedPage = -1;
+            string movedId = string.Empty;
             PdfTextEditReceipt? receipt = null;
             PdfRect movedBounds = new(120, 140, 320, 340);
 
@@ -70,6 +71,15 @@ public sealed class ObjectEditFidelityTests
 
                     PdfPageObject target = objects[0];
                     movedPage = page;
+                    movedId = target.Id;
+
+                    // Bounds are in PDF points, so they must lie on the page. Asserted
+                    // because it was once false by three orders of magnitude: the bbox
+                    // was computed from the image's size in PIXELS, so a 1275x1650 scan
+                    // on a 612x792pt page listed as 780300x1306800pt.
+                    PdfPageRegion size = await engine.GetPageSizeAsync(page);
+                    Assert.InRange(target.Bounds.X1, 0, size.WidthPt + 1);
+                    Assert.InRange(target.Bounds.Y1, 0, size.HeightPt + 1);
 
                     // The engine must hand the listed id back verbatim.
                     receipt = await engine.MoveResizeObjectAsync(page, target.Id, movedBounds);
@@ -77,6 +87,18 @@ public sealed class ObjectEditFidelityTests
                     Assert.NotEmpty(receipt.OldOperators);
                     Assert.NotEmpty(receipt.NewOperators);
                     Assert.NotEqual(receipt.OldOperators, receipt.NewOperators);
+
+                    // WHERE it landed, which nothing asserted before. The move used to
+                    // write its six matrix numbers without the `cm` operator to consume
+                    // them, so the object kept none of the placement it had and was
+                    // painted through the identity CTM - a 1pt square in the page
+                    // corner. Every assertion around this one still passed: a receipt
+                    // was produced, it differed from the original, and the page still
+                    // rendered.
+                    PdfPageObject afterMove = Assert.Single(
+                        await engine.ListObjectsAsync(page), o => o.Id == target.Id);
+                    AssertBounds(movedBounds, afterMove.Bounds, $"{name} after move");
+
                     moved = true;
                 }
 
@@ -103,11 +125,20 @@ public sealed class ObjectEditFidelityTests
                 PdfDocumentInfo reopened = await reader.OpenAsync(editedOut);
                 Assert.Equal(pageCount, reopened.PageCount);
 
-                IReadOnlyList<PdfPageObject> objects = await reader.ListObjectsAsync(0);
+                IReadOnlyList<PdfPageObject> objects = await reader.ListObjectsAsync(movedPage);
                 Assert.NotEmpty(objects);
 
-                RenderedPdfPage png = await reader.RenderPageToPngAsync(0, 72);
-                Assert.True(png.PngBytes.Length > 100, $"{name} moved-object page 0 did not render.");
+                // The move must survive the save/reopen with its geometry, not merely
+                // leave an object behind. This read page 0 regardless of which page was
+                // edited, so for a document whose first object is not on page 0 it was
+                // asserting against an untouched page.
+                AssertBounds(
+                    movedBounds,
+                    Assert.Single(objects, o => o.Id == movedId).Bounds,
+                    $"{name} after save and reopen");
+
+                RenderedPdfPage png = await reader.RenderPageToPngAsync(movedPage, 72);
+                Assert.True(png.PngBytes.Length > 100, $"{name} moved-object page did not render.");
                 await File.WriteAllBytesAsync(Artifact($"{name}.obj.p1.png"), png.PngBytes);
             }
 
@@ -117,6 +148,25 @@ public sealed class ObjectEditFidelityTests
         {
             TryDelete(editedOut);
         }
+    }
+
+    /// <summary>
+    /// Compares two PDF rectangles to a quarter of a point. The tolerance is there
+    /// because the matrix travels through the content stream as decimal text and
+    /// back through a float transform, not to absorb a placement error: a quarter
+    /// point is far below anything visible, and the failures this guards against
+    /// were off by hundreds of points or by a factor of a thousand.
+    /// </summary>
+    private static void AssertBounds(PdfRect expected, PdfRect actual, string what)
+    {
+        const double tolerance = 0.25;
+        Assert.True(
+            Math.Abs(expected.X0 - actual.X0) <= tolerance &&
+            Math.Abs(expected.Y0 - actual.Y0) <= tolerance &&
+            Math.Abs(expected.X1 - actual.X1) <= tolerance &&
+            Math.Abs(expected.Y1 - actual.Y1) <= tolerance,
+            $"{what}: expected bounds ({expected.X0},{expected.Y0})-({expected.X1},{expected.Y1}), " +
+            $"got ({actual.X0},{actual.Y0})-({actual.X1},{actual.Y1}).");
     }
 
     private static void TryDelete(string path)

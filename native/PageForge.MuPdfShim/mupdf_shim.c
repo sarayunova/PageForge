@@ -1893,7 +1893,7 @@ typedef struct pf_text_op_s
 	unsigned char *obj_bytes;    /* raw placeholder bytes (`cm ... Do`) to splice */
 	size_t obj_nbytes;
 	int obj_has_cm;              /* 1 when a cm directly precedes the Do */
-	float obj_w, obj_h;          /* intrinsic size of the XObject (1x1 for forms) */
+	float obj_w, obj_h;          /* source rect the cm maps from: the unit square */
 } pf_text_op_s;
 
 static int pf_opspush(pf_text_op_s **ops, int *n, int *cap)
@@ -2646,14 +2646,29 @@ static int pf_textw_finalize_array(fz_context *ctx, pf_textw_s *w, size_t end)
 
 /* FR-EDIT-04: record an image/vector invocation (`cm ... Do`) as an object op.
  * Resolves the XObject from the page resources by name so list can report its
- * kind and intrinsic size, and so move/resize knows how to map a target bounds
- * back to a content-stream cm matrix. */
+ * kind, and so move/resize knows how to map a target bounds back to a
+ * content-stream cm matrix.
+ *
+ * obj_w/obj_h is the source rect the cm matrix maps onto the page, and for both
+ * kinds that is the UNIT SQUARE: PDF 32000-1 8.9.5.2 says an image XObject is
+ * always painted into (0,0)-(1,1), with the cm carrying its placement and size.
+ *
+ * This used to read the image's /Width and /Height - its size in PIXELS - which
+ * made every listed image bbox wrong by that factor: a 1275x1650 scan on a
+ * 612x792pt page reported bounds of 780300x1306800pt. It also made move/resize
+ * divide a target size in points by the pixel count, so moving that image to a
+ * 200x200pt box wrote a cm scale of 200/1275, shrinking it to a fraction of a
+ * point rather than moving it. Neither was ever seen: the object-edit surface
+ * did not draw the page under the overlay (see the U4 note), and the fidelity
+ * gate asserted only that the object list came back non-empty after a move,
+ * never where the object had landed. */
 static int pf_objpush(fz_context *ctx, pf_textw_s *w, size_t do_start, size_t do_end)
 {
 	pdf_obj *namekey = NULL;
 	pf_text_op_s *op;
 	int tag = PF_OBJ_TAG_IMAGE;
-	float ow = 1.0f, oh = 1.0f;
+	/* The unit square, for both kinds - see the note above. */
+	const float ow = 1.0f, oh = 1.0f;
 
 	if (w->have_obj_name && w->tmp_obj_name[0] != '\0' && w->resources != NULL)
 	{
@@ -2670,15 +2685,6 @@ static int pf_objpush(fz_context *ctx, pf_textw_s *w, size_t do_start, size_t do
 				               PDF_NAME(Form)))
 				{
 					tag = PF_OBJ_TAG_FORM;
-				}
-				else
-				{
-					ow = pdf_to_real(ctx, pdf_dict_get(ctx, sub, PDF_NAME(Width)));
-					oh = pdf_to_real(ctx, pdf_dict_get(ctx, sub, PDF_NAME(Height)));
-					if (ow <= 0.0f || oh <= 0.0f)
-					{
-						ow = oh = 1.0f;
-					}
 				}
 			}
 			pdf_drop_obj(ctx, namekey);
@@ -3853,8 +3859,15 @@ int pf_revert_text_rewrite(pf_context context, pf_document document, int page_in
 }
 
 
-/* FR-EDIT-04: device-space bbox of an image/vector object. The object's cm maps
- * its intrinsic rect (0,0,ow,oh) into device space; report the bounding box. */
+/* FR-EDIT-04: bbox of an image/vector object in PDF points (user space, origin
+ * bottom-left - the same convention redaction regions use, and NOT the top-down
+ * one form fields arrive in). The object's cm maps its source rect (0,0,ow,oh),
+ * the unit square, onto the page; report the bounding box of that.
+ *
+ * For a Form XObject this is the mapped unit square rather than the form's own
+ * /BBox, so a form whose BBox is not the unit square reports its placement
+ * origin and scale rather than its exact painted extent. Images - the case the
+ * object-edit surface is built around - are exact. */
 static void pf_obj_bbox(const pf_text_op_s *op, float *x0, float *y0,
                         float *x1, float *y1)
 {
@@ -4051,7 +4064,8 @@ int pf_move_resize_object(pf_context context, pf_document document,
 		}
 
 		/* Map the target bounds back to a content-stream cm matrix. The object's
-		 * intrinsic rect (0,0,ow,oh) must land on (x0,y0,x1,y1). */
+		 * source rect (0,0,ow,oh) - the unit square - must land on
+		 * (x0,y0,x1,y1). */
 		na = (x1 - x0) / (double)op->obj_w;
 		nd = (y1 - y0) / (double)op->obj_h;
 		nb = 0.0;
@@ -4063,9 +4077,31 @@ int pf_move_resize_object(pf_context context, pf_document document,
 		{
 			fz_throw(ctx, FZ_ERROR_GENERIC, "pf_move_resize_object: object has no resource name");
 		}
-		newlen = (size_t)PF_SNPRINTF(newop, sizeof(newop), _TRUNCATE,
-		                             "%g %g %g %g %g %g /%s Do",
-		                             na, nb, nc, nd, ne, nf, name);
+
+		/* The `cm` operator itself, which this used to omit: the replacement read
+		 * "a b c d e f /Name Do", six numbers that no operator ever consumed. The
+		 * matrix was therefore never applied, and since the span it replaces
+		 * covers the ORIGINAL `cm` too, the object lost the placement it already
+		 * had and was painted through whatever CTM was current - for a page-sized
+		 * scan that meant a 1pt square in the corner. Every move and resize on
+		 * this path silently did that.
+		 *
+		 * When the object had no `cm` of its own the span is the bare `Do`, so
+		 * the matrix introduced here is wrapped in q/Q: without that it would
+		 * stay in force for the rest of the content stream and displace every
+		 * object painted after the one that was moved. */
+		if (op->obj_has_cm)
+		{
+			newlen = (size_t)PF_SNPRINTF(newop, sizeof(newop), _TRUNCATE,
+			                             "%g %g %g %g %g %g cm /%s Do",
+			                             na, nb, nc, nd, ne, nf, name);
+		}
+		else
+		{
+			newlen = (size_t)PF_SNPRINTF(newop, sizeof(newop), _TRUNCATE,
+			                             "q %g %g %g %g %g %g cm /%s Do Q",
+			                             na, nb, nc, nd, ne, nf, name);
+		}
 		if (newlen == (size_t)-1)
 		{
 			fz_throw(ctx, FZ_ERROR_GENERIC, "pf_move_resize_object: replacement is too long");
