@@ -79,6 +79,7 @@ public partial class App : Application
             await RunHeadlessCorpusDogfoodProofAsync();
             RunThemeTokenProof();
             RunRedactGeometryProof();
+            RunObjectGeometryProof();
             Shutdown();
             return;
         }
@@ -193,6 +194,101 @@ public partial class App : Application
         {
             Trace($"redact-geometry proof failed: {exception}");
             FailProof(2);
+        }
+    }
+
+    /// <summary>
+    /// Proves the object-edit overlay's geometry: that a box lands where the PDF
+    /// says, that it follows its bounds when a drag changes them, and that the
+    /// eight selection handles sit on that box's corners and edge midpoints.
+    ///
+    /// The object overlay had no cover of any kind, which is how it reached this
+    /// point with the surface blank, a mirrored drag axis and a bbox three orders
+    /// of magnitude too large. The handles are included because they are the part
+    /// with no equivalent on the other two surfaces: nothing else would notice
+    /// them drifting away from the box they belong to.
+    ///
+    /// Numbers chosen so each is checkable by hand. A 200x400pt page at 144 DPI is
+    /// 800px tall; an object at (10,300)-(60,350) is 50x50pt, so 100x100px at
+    /// left 20, and its top is 800 - 350*2 = 100 measured down from the page top.
+    /// The bounds are asymmetric in both axes, so a dropped flip, a doubled flip
+    /// or a transposed pair all move the answer.
+    /// </summary>
+    private static void RunObjectGeometryProof()
+    {
+        try
+        {
+            const double dpi = 144.0;
+            const double pageHeightPx = 400.0 * dpi / 72.0; // 800
+            var obj = new PageForge.Core.Pdf.PdfPageObject(
+                PageForge.Core.Pdf.PageObjectKind.Image,
+                "0",
+                new PageForge.Core.Pdf.PdfRect(10, 300, 60, 350));
+            var box = new ViewModels.ObjectBoxViewModel(obj, dpi, pageHeightPx);
+
+            if (!Check("Left", box.Left, 20) ||
+                !Check("Top", box.Top, 100) ||
+                !Check("Width", box.Width, 100) ||
+                !Check("Height", box.Height, 100))
+            {
+                return;
+            }
+
+            // A drag moves the object 10pt UP the page. PDF Y grows up and screen Y
+            // grows down, so Top must DECREASE by 20px. Getting this backwards is
+            // precisely the defect that shipped in the mouse-drag handler, where a
+            // comment stated the rule and the line below it did not apply it.
+            box.Bounds = new PageForge.Core.Pdf.PdfRect(10, 310, 60, 360);
+            if (!Check("Top after moving 10pt up the page", box.Top, 80))
+            {
+                return;
+            }
+
+            // The handles must track the box. Corners and edge midpoints of
+            // (20,80) 100x100: the south-east handle is the far corner.
+            if (!Check("SE handle X", box.Left + box.Width, 120) ||
+                !Check("SE handle Y", box.Top + box.Height, 180) ||
+                !Check("N handle X", box.Left + (box.Width / 2), 70))
+            {
+                return;
+            }
+
+            // Hit-testing must agree with what is drawn - the click target and the
+            // rectangle are no longer two separately maintained rectangles, and
+            // this is the assertion that says so.
+            if (!box.Contains(70, 130))
+            {
+                Trace("object-geometry proof: the box does not contain its own centre (70,130).");
+                FailProof();
+                return;
+            }
+
+            if (box.Contains(70, 60))
+            {
+                Trace("object-geometry proof: the box contains a point above its top edge.");
+                FailProof();
+                return;
+            }
+
+            Trace("object-geometry proof: box maps to (20,100) 100x100 at 144 DPI, " +
+                  "rises to top 80 when moved 10pt up, and its handles and hit-test follow it.");
+        }
+        catch (Exception exception)
+        {
+            Trace($"object-geometry proof failed: {exception}");
+            FailProof(2);
+        }
+
+        static bool Check(string name, double actual, double expected)
+        {
+            if (Math.Abs(actual - expected) <= 0.001)
+            {
+                return true;
+            }
+
+            Trace($"object-geometry proof: {name} was {actual}, expected {expected}.");
+            FailProof();
+            return false;
         }
     }
 

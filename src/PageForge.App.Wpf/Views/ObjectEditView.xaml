@@ -35,6 +35,53 @@
             <Grid x:Name="PageHost" Background="White" Margin="24">
                 <Image x:Name="PageImage" Stretch="None" SnapsToDevicePixels="True"
                        AutomationProperties.Name="Object edit page" />
+
+                <!-- The object boxes, bound. Their own layer beneath Overlay, which
+                     keeps its Canvas for the selection handles: those are transient
+                     view state belonging to whichever box is selected rather than
+                     items in their own right, the same split the redaction surface
+                     makes to keep its rubber band out of its collection. Not
+                     hit-testable: Overlay owns the mouse. -->
+                <ItemsControl ItemsSource="{Binding Boxes, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                              IsHitTestVisible="False">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <Canvas ClipToBounds="True" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemContainerStyle>
+                        <Style TargetType="ContentPresenter">
+                            <Setter Property="Canvas.Left" Value="{Binding Left}" />
+                            <Setter Property="Canvas.Top" Value="{Binding Top}" />
+                        </Style>
+                    </ItemsControl.ItemContainerStyle>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <!-- WCAG 1.4.11: both strokes clear 3:1 on white -
+                                 unselected #1F74C6 ~4.8:1, selected #2B8CFF ~3.3:1. -->
+                            <Rectangle Width="{Binding Width}" Height="{Binding Height}"
+                                       AutomationProperties.Name="{Binding AccessibleName}">
+                                <Rectangle.Style>
+                                    <Style TargetType="Rectangle">
+                                        <Setter Property="Fill" Value="#102B8CFF" />
+                                        <Setter Property="Stroke" Value="#FF1F74C6" />
+                                        <Setter Property="StrokeThickness" Value="1" />
+                                        <Setter Property="StrokeDashArray" Value="3 2" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                <Setter Property="Fill" Value="#222B8CFF" />
+                                                <Setter Property="Stroke" Value="#FF2B8CFF" />
+                                                <Setter Property="StrokeThickness" Value="2" />
+                                                <Setter Property="StrokeDashArray" Value="{x:Null}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Rectangle.Style>
+                            </Rectangle>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
                 <Canvas x:Name="Overlay" IsHitTestVisible="True" ClipToBounds="True" Focusable="True" />
             </Grid>
         </ScrollViewer>

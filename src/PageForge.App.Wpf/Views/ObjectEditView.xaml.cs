@@ -28,21 +28,19 @@ public partial class ObjectEditView : UserControl
     private const double HandleSize = 12;
     private const double HandleHit = 15;
 
-    private sealed class ObjBox
-    {
-        public required PdfPageObject Obj { get; init; }
-        public required Rect Screen { get; set; }
-        public required Rectangle Visual { get; init; }
-    }
-
     private DocumentTabViewModel? _vm;
     private PageImageViewModel? _page;
     private double _scale = 1.0;
     private double _pixelW;
     private double _pixelH;
-    private readonly List<ObjBox> _boxes = new();
-    private ObjBox? _selected;
+    private ObjectBoxViewModel? _selected;
     private bool _busy;
+
+    /// <summary>The objects on the page, bound by the overlay. Replaces the
+    /// parallel list of (object, screen rect, Rectangle) triples the view used to
+    /// keep, where the rect and the Rectangle were updated by hand at four call
+    /// sites and could disagree with each other.</summary>
+    public System.Collections.ObjectModel.ObservableCollection<ObjectBoxViewModel> Boxes { get; } = new();
 
     /// <summary>Which part of the selection is being dragged this gesture.</summary>
     private enum DragMode { None, Move, Nw, N, Ne, E, Se, S, Sw, W }
@@ -121,7 +119,7 @@ public partial class ObjectEditView : UserControl
     private void Rebuild(IReadOnlyList<PdfPageObject> objects)
     {
         Overlay.Children.Clear();
-        _boxes.Clear();
+        Boxes.Clear();
         _selected = null;
         ReplaceButton.IsEnabled = false;
         Hint(objects.Count == 0
@@ -130,95 +128,77 @@ public partial class ObjectEditView : UserControl
 
         foreach (PdfPageObject obj in objects)
         {
-            var rect = PdfBoxToScreen(obj.Bounds);
-            var border = new Rectangle
-            {
-                Fill = new SolidColorBrush(Color.FromArgb(16, 0x2b, 0x8c, 0xff)),
-                Stroke = new SolidColorBrush(Color.FromArgb(0xff, 0x1f, 0x74, 0xc6)),
-                StrokeThickness = 1,
-                StrokeDashArray = new DoubleCollection { 3, 2 },
-            };
-            Canvas.SetLeft(border, rect.X);
-            Canvas.SetTop(border, rect.Y);
-            border.Width = rect.Width;
-            border.Height = rect.Height;
-
-            var box = new ObjBox { Obj = obj, Screen = rect, Visual = border };
-            _boxes.Add(box);
-            Overlay.Children.Add(border);
+            Boxes.Add(new ObjectBoxViewModel(obj, _vm!.RenderDpi, _pixelH));
         }
     }
 
-    private Rect PdfBoxToScreen(PdfRect b)
-    {
-        double x = b.X0 * _scale;
-        double y = _pixelH - b.Y1 * _scale;
-        double w = (b.X1 - b.X0) * _scale;
-        double h = (b.Y1 - b.Y0) * _scale;
-        return new Rect(x, y, w, h);
-    }
+    /// <summary>Screen rectangle (overlay coordinates) of a box, for hit-testing
+    /// and handle placement.</summary>
+    private static Rect ScreenRect(ObjectBoxViewModel box) =>
+        new(box.Left, box.Top, box.Width, box.Height);
 
-    private PdfRect ScreenBoxToPdf(Rect r)
-    {
-        double x0 = r.X / _scale;
-        double x1 = (r.X + r.Width) / _scale;
-        double y0 = (_pixelH - (r.Y + r.Height)) / _scale;
-        double y1 = (_pixelH - r.Y) / _scale;
-        return new PdfRect(x0, y0, x1, y1);
-    }
+    // The PDF<->screen conversions this file used to carry are gone: the forward
+    // one is PageBoxGeometry, reached through ObjectBoxViewModel and shared with
+    // the redaction overlay, and the reverse one had no callers left once drags
+    // began working in PDF points throughout. A local copy of the Y flip is
+    // exactly what let the form overlay be mirrored for as long as it was.
 
-    private void Select(ObjBox? box)
+    private void Select(ObjectBoxViewModel? box)
     {
-        if (ReferenceEquals(box, _selected))
+        if (!ReferenceEquals(box, _selected))
         {
-            RedrawSelectionVisuals();
+            _pendingBounds = null;
+            if (_selected is not null)
+            {
+                _selected.IsSelected = false;
+            }
+
+            _selected = box;
+            ReplaceButton.IsEnabled = box is not null;
+            if (box is not null)
+            {
+                box.IsSelected = true;
+                Overlay.Focus();
+            }
+        }
+
+        RedrawHandles();
+    }
+
+    /// <summary>
+    /// Rebuilds the eight selection handles over the current selection.
+    ///
+    /// It clears the Canvas first, which the old version did not: it appended
+    /// eight fresh Rectangles on every call and removed none, and it is called on
+    /// every mouse-move of a drag. A single drag across the page therefore left
+    /// hundreds of stale handles behind at the positions the pointer had passed
+    /// through, and deselecting left the last eight on screen for good.
+    ///
+    /// Only the handles live in this Canvas now - the boxes themselves are bound -
+    /// so clearing it is exactly the right scope.
+    /// </summary>
+    private void RedrawHandles()
+    {
+        Overlay.Children.Clear();
+
+        if (_selected is null)
+        {
             return;
         }
 
-        _pendingBounds = null;
-        _selected = box;
-        ReplaceButton.IsEnabled = box is not null;
-        if (box is not null)
+        foreach (System.Windows.Point p in HandlePoints(ScreenRect(_selected)))
         {
-            Overlay.Focus();
-        }
-
-        RedrawSelectionVisuals();
-    }
-
-    private void RedrawSelectionVisuals()
-    {
-        if (_selected is not null)
-        {
-            _selected.Visual.Fill = new SolidColorBrush(Color.FromArgb(0x22, 0x2b, 0x8c, 0xff));
-            _selected.Visual.Stroke = new SolidColorBrush(Color.FromArgb(0xff, 0x2b, 0x8c, 0xff));
-            _selected.Visual.StrokeThickness = 2;
-            _selected.Visual.StrokeDashArray = null;
-
-            foreach (System.Windows.Point p in HandlePoints(_selected.Screen))
+            var handle = new Rectangle
             {
-                var h = new Rectangle
-                {
-                    Width = HandleSize,
-                    Height = HandleSize,
-                    Fill = Brushes.White,
-                    Stroke = new SolidColorBrush(Color.FromArgb(0xff, 0x2b, 0x8c, 0xff)),
-                    StrokeThickness = 1,
-                };
-                Canvas.SetLeft(h, p.X - HandleSize / 2);
-                Canvas.SetTop(h, p.Y - HandleSize / 2);
-                Overlay.Children.Add(h);
-            }
-        }
-        else
-        {
-            foreach (ObjBox box in _boxes)
-            {
-                box.Visual.Fill = new SolidColorBrush(Color.FromArgb(16, 0x2b, 0x8c, 0xff));
-                box.Visual.Stroke = new SolidColorBrush(Color.FromArgb(0xff, 0x1f, 0x74, 0xc6));
-                box.Visual.StrokeThickness = 1;
-                box.Visual.StrokeDashArray = new DoubleCollection { 3, 2 };
-            }
+                Width = HandleSize,
+                Height = HandleSize,
+                Fill = Brushes.White,
+                Stroke = new SolidColorBrush(Color.FromArgb(0xff, 0x2b, 0x8c, 0xff)),
+                StrokeThickness = 1,
+            };
+            Canvas.SetLeft(handle, p.X - (HandleSize / 2));
+            Canvas.SetTop(handle, p.Y - (HandleSize / 2));
+            Overlay.Children.Add(handle);
         }
     }
 
@@ -247,7 +227,7 @@ public partial class ObjectEditView : UserControl
 
         if (_selected is { } sel)
         {
-            DragMode mode = HitTestHandles(sel.Screen, pos);
+            DragMode mode = HitTestHandles(ScreenRect(sel), pos);
             if (mode != DragMode.None)
             {
                 BeginDrag(mode, sel);
@@ -255,7 +235,7 @@ public partial class ObjectEditView : UserControl
                 return;
             }
 
-            if (sel.Screen.Contains(pos))
+            if (sel.Contains(pos.X, pos.Y))
             {
                 BeginDrag(DragMode.Move, sel);
                 e.Handled = true;
@@ -264,12 +244,12 @@ public partial class ObjectEditView : UserControl
         }
 
         // Not on the current selection: pick the topmost object under the cursor.
-        ObjBox? hit = null;
-        for (int i = _boxes.Count - 1; i >= 0; i--)
+        ObjectBoxViewModel? hit = null;
+        for (int i = Boxes.Count - 1; i >= 0; i--)
         {
-            if (_boxes[i].Screen.Contains(pos))
+            if (Boxes[i].Contains(pos.X, pos.Y))
             {
-                hit = _boxes[i];
+                hit = Boxes[i];
                 break;
             }
         }
@@ -297,11 +277,16 @@ public partial class ObjectEditView : UserControl
         return DragMode.None;
     }
 
-    private void BeginDrag(DragMode mode, ObjBox box)
+    private void BeginDrag(DragMode mode, ObjectBoxViewModel box)
     {
         _dragMode = mode;
         _dragStartScreen = Mouse.GetPosition(Overlay);
-        _dragStartBounds = box.Obj.Bounds;
+
+        // The bounds the gesture starts from are the ones on screen now, not the
+        // object's last committed ones: after an uncommitted keyboard nudge those
+        // differ, and starting from the committed pair would snap the box back
+        // before the drag began.
+        _dragStartBounds = box.Bounds;
         _dragging = true;
         _ = Overlay.CaptureMouse();
     }
@@ -315,7 +300,14 @@ public partial class ObjectEditView : UserControl
 
         System.Windows.Point cur = e.GetPosition(Overlay);
         double dxPdf = (cur.X - _dragStartScreen.X) / _scale;
-        double dyPdf = (cur.Y - _dragStartScreen.Y) / _scale; // screen Y grows down; PDF Y grows up
+
+        // Negated, because screen Y grows down and PDF Y grows up. The old line
+        // carried exactly that sentence as a comment and then did not negate, so
+        // every drag moved the object the opposite way vertically, and the north
+        // and south resize handles each grew the box where they should shrink it.
+        // The keyboard path next door has always had the sign right (Up is +step),
+        // which is what makes the disagreement findable by reading.
+        double dyPdf = -(cur.Y - _dragStartScreen.Y) / _scale;
 
         PdfRect nb = _dragMode == DragMode.Move
             ? new PdfRect(
@@ -330,13 +322,11 @@ public partial class ObjectEditView : UserControl
             return;
         }
 
-        Rect screen = PdfBoxToScreen(nb);
-        _selected.Screen = screen;
-        Canvas.SetLeft(_selected.Visual, screen.X);
-        Canvas.SetTop(_selected.Visual, screen.Y);
-        _selected.Visual.Width = screen.Width;
-        _selected.Visual.Height = screen.Height;
-        RedrawSelectionVisuals();
+        // One assignment: the view model converts and the binding redraws. This
+        // used to be five statements repeated at two call sites, which is how the
+        // screen rect and the Rectangle could end up describing different boxes.
+        _selected.Bounds = nb;
+        RedrawHandles();
     }
 
     private static PdfRect ResizeBounds(DragMode mode, PdfRect orig, double dxPdf, double dyPdf)
@@ -381,22 +371,23 @@ public partial class ObjectEditView : UserControl
             return;
         }
 
-        PdfRect target = ScreenBoxToPdf(_selected.Screen);
-        string id = _selected.Obj.Id;
-        Select(_selected);
-        await CommitMoveResizeAsync(id, _selected.Screen);
+        await CommitMoveResizeAsync(_selected.Id, _selected.Bounds);
     }
 
-    /// <summary>Commits the on-screen selection bounds to the engine through the
-    /// FR-EDIT-05 command stack (shared by the mouse-drag and keyboard paths).</summary>
-    private async Task CommitMoveResizeAsync(string id, Rect screenBounds)
+    /// <summary>Commits the selection's current bounds to the engine through the
+    /// FR-EDIT-05 command stack (shared by the mouse-drag and keyboard paths).
+    ///
+    /// Takes PDF points rather than a screen rectangle: the caller already holds
+    /// the bounds in the units the engine wants, and converting them to screen
+    /// coordinates only to convert them straight back added a rounding trip and a
+    /// second copy of the Y flip for nothing.</summary>
+    private async Task CommitMoveResizeAsync(string id, PdfRect target)
     {
         if (_vm is null || _selected is null)
         {
             return;
         }
 
-        PdfRect target = ScreenBoxToPdf(screenBounds);
         try
         {
             await _vm.MoveResizeObjectAsync(id, target).ConfigureAwait(true);
@@ -430,16 +421,16 @@ public partial class ObjectEditView : UserControl
 
         if (e.Key == Key.Tab)
         {
-            if (_boxes.Count == 0)
+            if (Boxes.Count == 0)
             {
                 return;
             }
 
             bool forward = (Keyboard.Modifiers & ModifierKeys.Shift) == 0;
             int index = _selected is null
-                ? (forward ? _boxes.Count - 1 : 0)
-                : (_boxes.IndexOf(_selected) + (forward ? 1 : -1) + _boxes.Count) % _boxes.Count;
-            Select(_boxes[index]);
+                ? (forward ? Boxes.Count - 1 : 0)
+                : (Boxes.IndexOf(_selected) + (forward ? 1 : -1) + Boxes.Count) % Boxes.Count;
+            Select(Boxes[index]);
             e.Handled = true;
             return;
         }
@@ -478,7 +469,7 @@ public partial class ObjectEditView : UserControl
 
     private void ApplyKeyboardNudge(bool resize, double dxPdf, double dyPdf)
     {
-        PdfRect source = _pendingBounds ?? _selected!.Obj.Bounds;
+        PdfRect source = _pendingBounds ?? _selected!.Bounds;
         PdfRect next = resize
             ? new PdfRect(source.X0, source.Y0, source.X1 + dxPdf, source.Y1 + dyPdf)
             : new PdfRect(source.X0 + dxPdf, source.Y0 + dyPdf, source.X1 + dxPdf, source.Y1 + dyPdf);
@@ -494,13 +485,8 @@ public partial class ObjectEditView : UserControl
 
     private void ApplyBoundsToScreen(PdfRect pdf)
     {
-        Rect screen = PdfBoxToScreen(pdf);
-        _selected!.Screen = screen;
-        Canvas.SetLeft(_selected.Visual, screen.X);
-        Canvas.SetTop(_selected.Visual, screen.Y);
-        _selected.Visual.Width = screen.Width;
-        _selected.Visual.Height = screen.Height;
-        RedrawSelectionVisuals();
+        _selected!.Bounds = pdf;
+        RedrawHandles();
     }
 
     private async void CommitKeyboardEdit()
@@ -511,7 +497,7 @@ public partial class ObjectEditView : UserControl
         }
 
         _pendingBounds = null;
-        await CommitMoveResizeAsync(_selected.Obj.Id, _selected.Screen);
+        await CommitMoveResizeAsync(_selected.Id, _selected.Bounds);
     }
 
     private void CancelKeyboardEdit()
@@ -519,7 +505,7 @@ public partial class ObjectEditView : UserControl
         _pendingBounds = null;
         if (_selected is not null)
         {
-            ApplyBoundsToScreen(_selected.Obj.Bounds);
+            ApplyBoundsToScreen(_selected.Object.Bounds);
         }
 
         Select(null);
@@ -555,7 +541,7 @@ public partial class ObjectEditView : UserControl
             return;
         }
 
-        string id = _selected.Obj.Id;
+        string id = _selected.Id;
         var replacement = new PdfObjectReplacement(open.FileName, format);
         try
         {
