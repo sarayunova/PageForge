@@ -1,11 +1,15 @@
 # Session note: PDF render failure + UI modernization
 
-Status: **Phase R (render) and Phases U0–U2 (tokens, Fluent chrome, toolbar) are
-done and committed** on branch `fix/viewer-render-phase-r`, which is pushed to
-`origin`. **Phase U4 (MVVM cleanup) is part-done** — the command bar, status line
-and list controls are converted; the per-mode child views are not. Phase U3
-(document surface) is still open, though three of its layout bugs were fixed
-along the way. Read `AGENTS.md` and the TRD/TSD first.
+Status (2026-09-16): **Phase R and Phases U0–U3 are merged to `main`** via PR #1.
+**Phase U4 (MVVM cleanup) is complete** — the command bar, status line, list
+controls and all three per-mode child views are converted — and sits on
+`refactor/u4-child-views` as **PR #4**, which also carries two engine fixes the
+conversion uncovered. Read `AGENTS.md` and the TRD/TSD first, then §8–§10 here
+for what the child-view work actually found.
+
+The rest of this note is kept in the order it was written, so earlier sections
+describe the state at the time and are corrected in place where they have since
+gone stale.
 
 ## 1. What this project actually is
 
@@ -297,14 +301,28 @@ resurfaces, giving each factory its own database name is the real fix.
 2. **Brand direction?** Yes — LiVi Software Company. The palette is ported from
    the sibling product FrameForge, and the app icon is the LiVi tile.
 3. **Are NuGet dependencies acceptable?** Yes, with the licence discipline in §4.
-4. **WinUI 3 port timing?** Still unanswered, and still the question that
-   decides how much deeper WPF work is worth doing. It does not block U3; it
-   does bear on how much of U4 to attempt.
+4. **WinUI 3 port timing?** **Answered (2026-09-16): not now.** The near-term
+   goal is to keep hardening with no release date — find and fix the real
+   defects and make the gates strong enough to hold them, rather than
+   re-platform or rush the beta tag. WPF is therefore the shell for the
+   foreseeable future and deeper WPF work is worth doing; the port stays
+   post-beta, and the missing Visual Studio "Windows application development"
+   workload (§7) is not something to install urgently. Revisit if the goal
+   changes.
+
+   This does not make the §7 sequencing argument moot — it strengthens it. The
+   port is deferred rather than cancelled, so every `Click` handler left in
+   code-behind is still one that gets rewritten twice when it does happen, and
+   finishing the MVVM conversion remains the right order of work.
 
 ## 7. Next session starts here
 
-Branch `fix/viewer-render-phase-r` is pushed and open as **PR #1** against
-`origin/main`; nothing is merged. The working tree is clean.
+~~Branch `fix/viewer-render-phase-r` is pushed and open as **PR #1** against
+`origin/main`; nothing is merged.~~ **Stale — PR #1 was squash-merged on
+2026-09-13**, so phase R and U0–U3 are in `main` and that branch is gone from
+`origin`. Its commit hashes quoted throughout this note are the pre-squash ones
+and will not resolve against `main`; they still resolve on the
+`refactor/u4-child-views` history. The work described in §8–§10 is PR #4.
 
 **All four CI jobs are green** — native shim, managed build + fidelity, hosted
 API, and the WinUI shell build. Locally: Core 154, Fidelity 48, API hermetic 47,
