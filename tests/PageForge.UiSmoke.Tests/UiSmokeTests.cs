@@ -108,7 +108,14 @@ public class UiSmokeTests
         // Exact match: a suffix wait would resolve immediately against the previous
         // tab's "2 / 3" before the new tab is selected.
         AutomationElement reopened = await WaitForIndicatorValue(app, "1 / 3");
-        Assert.True(File.Exists(outFile), $"reordered file was not written: {outFile}");
+
+        // Say what the app said and what is actually on disk. "reordered file was
+        // not written: <path>" was true but useless: it could not tell a save that
+        // never ran from one that ran and failed, or from one that wrote under a
+        // different name because the file dialog's filename field was not where
+        // the Win32 helper looked for it. Those have different fixes, and on a CI
+        // machine nobody can see, the failure message is the whole investigation.
+        Assert.True(File.Exists(outFile), BuildSaveFailureReport(app, outFile));
     }
 
     private static void AssertHeading(PageForgeApp app, string captionName)
@@ -201,6 +208,58 @@ public class UiSmokeTests
         }
 
         throw new TimeoutException($"Timed out waiting for page indicator ending '{suffix}'.");
+    }
+
+    /// <summary>
+    /// Everything needed to diagnose a failed save without access to the machine:
+    /// what the app's own status line says, and what is actually in the directory
+    /// the file was meant to land in.
+    /// </summary>
+    private static string BuildSaveFailureReport(PageForgeApp app, string outFile)
+    {
+        var report = new System.Text.StringBuilder();
+        report.AppendLine($"reordered file was not written: {outFile}");
+
+        // The status line is where the app reports the outcome of a save,
+        // including a failure. Read without waiting - this is already the
+        // failure path, and a timeout here would replace the real message.
+        string status;
+        try
+        {
+            AutomationElement? el = app.FindInSelectedTabById("StatusText") ?? app.FindById("StatusText");
+            status = el is null ? "<StatusText not found>" : PageForgeApp.GetText(el).Trim();
+        }
+        catch (Exception ex)
+        {
+            status = $"<could not read StatusText: {ex.GetType().Name}: {ex.Message}>";
+        }
+
+        report.AppendLine($"app status line: {status}");
+
+        // A PDF here under a different name means the save ran and the filename
+        // did not take; an empty directory means it never ran at all.
+        string dir = Path.GetDirectoryName(outFile) ?? string.Empty;
+        report.AppendLine($"contents of {dir}:");
+        try
+        {
+            string[] pdfs = Directory.GetFiles(dir, "*.pdf");
+            if (pdfs.Length == 0)
+            {
+                report.AppendLine("  (no .pdf files at all)");
+            }
+
+            foreach (string file in pdfs.OrderByDescending(File.GetLastWriteTimeUtc).Take(15))
+            {
+                var info = new FileInfo(file);
+                report.AppendLine($"  {info.LastWriteTimeUtc:HH:mm:ss} {info.Length,10} {info.Name}");
+            }
+        }
+        catch (Exception ex)
+        {
+            report.AppendLine($"  <could not list: {ex.GetType().Name}: {ex.Message}>");
+        }
+
+        return report.ToString();
     }
 
     private static async Task<AutomationElement> WaitForIndicatorValue(PageForgeApp app, string expected)

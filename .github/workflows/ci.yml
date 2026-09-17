@@ -425,6 +425,12 @@ jobs:
           # and OK saves under some default name - which looks identical to "the
           # save never happened" from a File.Exists check alone. Listing the
           # directory tells those two apart in one run instead of by guesswork.
+          # Print the directory being searched. A step's TEMP is not always the
+          # one the test process resolves, and searching a different directory
+          # than the test wrote to would make "nothing here" look like proof that
+          # nothing was written. The test's own failure report now lists the
+          # directory it actually targeted; this is the cross-check.
+          Write-Host "step TEMP = $env:TEMP"
           Write-Host "--- PDFs written under TEMP in the last hour ---"
           Get-ChildItem $env:TEMP -Filter *.pdf -File -ErrorAction SilentlyContinue |
             Where-Object { $_.LastWriteTime -gt (Get-Date).AddHours(-1) } |
