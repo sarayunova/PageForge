@@ -43,17 +43,50 @@ internal sealed class PageForgeApp : IAsyncDisposable
         return dir ?? Directory.GetCurrentDirectory();
     }
 
+    /// <summary>
+    /// Locates the built WPF app, preferring the build configuration this test
+    /// assembly was itself built as and falling back to the other.
+    ///
+    /// This used to look only in <c>bin/Debug</c>. Nobody noticed, because the
+    /// suite had never run anywhere but a developer's machine in Debug: it is
+    /// absent from <c>PageForge.sln</c> and from every CI lane, despite this
+    /// project's own header claiming it "runs fully offline in CI". Wiring it
+    /// into CI, which builds Release, is what surfaced the assumption.
+    /// </summary>
     public static string FindAppExe()
     {
-        string exe = Path.Combine(
-            FindRepoRoot(),
-            "src", "PageForge.App.Wpf", "bin", "Debug", "net8.0-windows", "PageForge.App.Wpf.exe");
-        if (!File.Exists(exe))
+        string root = FindRepoRoot();
+
+        // The test binary lives in tests/<project>/bin/<Config>/<tfm>/. Trimming
+        // the trailing separator makes GetDirectoryName step up from <tfm> to
+        // <Config>, which is the name wanted - one step, not two.
+        string? configurationDir = Path.GetDirectoryName(AppContext.BaseDirectory.TrimEnd(
+            Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        string ownConfiguration = Path.GetFileName(configurationDir ?? string.Empty);
+        string[] configurations = ownConfiguration is "Debug" or "Release"
+            ? [ownConfiguration, ownConfiguration == "Debug" ? "Release" : "Debug"]
+            : ["Debug", "Release"];
+
+        var probed = new List<string>();
+        foreach (string configuration in configurations)
         {
-            throw new FileNotFoundException("WPF app not built. Build src/PageForge.App.Wpf first.", exe);
+            string exe = Path.Combine(
+                root, "src", "PageForge.App.Wpf", "bin", configuration,
+                "net8.0-windows", "PageForge.App.Wpf.exe");
+            if (File.Exists(exe))
+            {
+                return exe;
+            }
+
+            probed.Add(exe);
         }
 
-        return exe;
+        // Name every path tried. A bare "not built" naming one configuration is
+        // what would make a wrong guess look like a build problem.
+        throw new FileNotFoundException(
+            "WPF app not built. Build src/PageForge.App.Wpf first. Looked in:" +
+            Environment.NewLine + string.Join(Environment.NewLine, probed),
+            probed[0]);
     }
 
     public static async Task<PageForgeApp> LaunchAsync(TimeSpan timeout = default)

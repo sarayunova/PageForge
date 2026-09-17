@@ -9,9 +9,15 @@
     it drives the real window through the built-in System.Windows.Automation
     (UI Automation) client, which is exactly what WinAppDriver wraps, so the
     coverage (open window, open PDF, page navigation, organize/reorder/save
-    flows) is equivalent and runs fully offline in CI on an interactive session.
+    flows) is equivalent and runs fully offline on an interactive session.
     The app is launched in place from its own build output directory (a WinExe
     must run from its output folder), resolved at runtime via the repo root.
+
+    This comment used to say the suite "runs fully offline IN CI". It did not:
+    the project was in no CI lane and not even in PageForge.sln, so these four
+    tests - the only ones that open the real window and check that controls are
+    visible, sized and reachable - ran only when someone remembered to run them
+    by hand. They are now built and executed by the `ui-smoke` lane.
   -->
 
   <PropertyGroup>
