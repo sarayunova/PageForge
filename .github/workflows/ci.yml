@@ -355,6 +355,35 @@ jobs:
             dotnet build $p -c Release -warnaserror
             if ($LASTEXITCODE -ne 0) { throw "build failed for $p (exit $LASTEXITCODE)" }
           }
+      - name: Give the runner a desktop big enough to test against
+        shell: pwsh
+        run: |
+          # The hosted image comes up at 1024x768. The suite resizes the window
+          # to 1200x820 (the app's default) and then to 900x600 (its declared
+          # MinWidth) and asserts every command stays reachable at both, so on a
+          # 1024-wide desktop the first resize cannot take: "Resize to 1200 did
+          # not take effect; the window is 1044 wide."
+          #
+          # Raise the desktop rather than lower the assertion. 1200x820 is the
+          # size the app actually ships with, and a suite that quietly tested
+          # something narrower would still report green while the case users see
+          # went unchecked - the failure mode this lane exists to end.
+          $before = Get-CimInstance Win32_VideoController |
+            Select-Object -First 1 CurrentHorizontalResolution, CurrentVerticalResolution
+          Write-Host "before: $($before.CurrentHorizontalResolution)x$($before.CurrentVerticalResolution)"
+
+          # Not fatal on its own: if the resolution cannot be changed, the smoke
+          # step below fails with the real assertion rather than a setup error
+          # that hides which of the two is actually wrong.
+          try {
+            Set-DisplayResolution -Width 1920 -Height 1080 -Force -ErrorAction Stop
+          } catch {
+            Write-Host "::warning::could not set display resolution: $($_.Exception.Message)"
+          }
+
+          $after = Get-CimInstance Win32_VideoController |
+            Select-Object -First 1 CurrentHorizontalResolution, CurrentVerticalResolution
+          Write-Host "after:  $($after.CurrentHorizontalResolution)x$($after.CurrentVerticalResolution)"
       - name: UI smoke
         shell: pwsh
         run: |
