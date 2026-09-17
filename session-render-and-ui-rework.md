@@ -571,3 +571,85 @@ gate, not a paint-over. `TextEditFidelityTests` proves the new string is present
 the old one absent, the neighbouring run untouched and the run box recalculated.
 Both are strong. The weakness was confined to the object family, and both of its
 members are now covered.
+
+## 11. The tests that look at the window (CI lanes 5, and pixels)
+
+Two gaps closed, both structural rather than about any one bug.
+
+### The UI suite was not running anywhere
+
+`PageForge.UiSmoke.Tests` — the four tests that open the real window and assert
+controls are visible, non-zero-sized and inside it at 1200x820 and at the
+declared 900x600 minimum — **was in no CI lane, and not in `PageForge.sln`
+either**. Its own csproj comment claimed it "runs fully offline in CI". It ran
+only when someone remembered to run it by hand, which is to say its assertions
+protected nothing. Every one of them had been verified against the bug it exists
+for, and none of them were guarding `main`.
+
+There is now a `ui-smoke` lane. Wiring it up surfaced that the launcher
+hardcoded `bin/Debug`, invisible locally because developers run Debug and only
+CI builds Release; it now prefers the configuration the test assembly was itself
+built as and names every path it tried when it finds nothing.
+
+Two findings from getting it green, in case either recurs:
+
+- **UI Automation works on hosted runners.** This was the open question and it is
+  settled — the app launches and UIA attaches on `windows-latest`.
+- **The image boots at 1024x768**, so a resize to the app's own default 1200x820
+  cannot take. The lane raises the desktop to 1920x1080 rather than lowering the
+  assertion: a suite quietly testing a narrower window than users get would
+  report green while leaving the real case unchecked.
+
+**One test is quarantined and it is meant to be visible.**
+`Wpf_app_opens_organizes_and_saves_a_reordered_document` is filtered out of the
+lane only — it still runs locally, where it passes. It is the one test that
+drives a native common file dialog, which UIA does not expose, so the suite
+enumerates the window by title and drives control `0x047C` with `SendMessage`.
+On the hosted image that finds something, throws nothing, and writes no file
+while the app reports no error. **Reorder-and-save is therefore not covered by
+CI.** Tracked in issue #6, which also records the one thing worth ruling out
+before blaming the harness: the app surfaced no error for a save that wrote
+nothing, and silent failure is this project's signature defect.
+
+### Nothing had ever looked at a pixel
+
+UI Automation reports that an element exists, where it is, and how big it is.
+Every UI defect in this note satisfied all three while being visibly wrong — the
+blank viewer (§2), the three blank mode surfaces (§8), the mirrored form
+outlines (§8), the mirrored drag axis (§9), the invisible side panels and
+overflowing toolbars (§3), the nine dark-theme colours on a light background
+(§3). Six classes of bug, none of them visible to any test here.
+
+`WindowCapture` takes the window's pixels with `PrintWindow(PW_RENDERFULLCONTENT)`
+and counts how many differ from the most common colour in a region.
+`Every_page_surface_actually_draws_the_page` asserts the document surface and all
+three mode surfaces are not a single flat colour.
+
+The design choices are the point, because §3 already names screenshot diffing as
+an infrastructure decision this project had declined:
+
+- **`PrintWindow`, not a screen grab.** The window draws itself, so the result
+  does not depend on being frontmost or unobscured. Occlusion stays invisible —
+  acceptable, since the question is "did this draw", not "is something on top".
+- **No imaging dependency.** Pixels come out of a DIB section directly; a library
+  would need an AGPL check and a notices entry to count colours.
+- **No baseline images.** Only "is this one flat colour". Baselines are what make
+  screenshot tests brittle and get them deleted.
+
+**The threshold was measured, not chosen.** The document surface renders 16.18%
+ink across 491 distinct colours; a blank surface is 0%. The gate is 0.1%.
+
+**Verified against the bug it exists for**, per §3's rule: reinstating the
+`Source`-before-`RenderAsync` mistake in `RedactView` makes it fail. That also
+corrected an assumption — a null `Source` collapses the `Image` to *zero size*
+rather than painting white, so "nothing drawn" and "one flat colour" are
+genuinely different findings and now report differently.
+
+### Still open
+
+- The form overlay has no `--smoke` geometry proof (§9 closed the object one).
+- The form-field cards in the side panel are still built in code (§8).
+- Issue #6: reorder-and-save uncovered in CI.
+- The pixel check proves a page *drew*, not that it drew the *right thing*. A
+  mirrored overlay would still pass it. Geometry stays the job of the `--smoke`
+  proofs.
