@@ -416,6 +416,28 @@ jobs:
           } else {
             Write-Host "no app log at $log (the app may not have started)"
           }
+
+          # Which PDFs the run actually produced, and where. The save test drives
+          # the common file dialog through Win32 SendMessage rather than UI
+          # Automation (the dialog is not exposed to UIA), writing the path into
+          # control 0x047C. If the hosted image presents a dialog whose filename
+          # field is not that control, the fallback path sets text somewhere else
+          # and OK saves under some default name - which looks identical to "the
+          # save never happened" from a File.Exists check alone. Listing the
+          # directory tells those two apart in one run instead of by guesswork.
+          Write-Host "--- PDFs written under TEMP in the last hour ---"
+          Get-ChildItem $env:TEMP -Filter *.pdf -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.LastWriteTime -gt (Get-Date).AddHours(-1) } |
+            Sort-Object LastWriteTime |
+            Format-Table LastWriteTime, Length, FullName -AutoSize |
+            Out-String -Width 400 |
+            Write-Host
+          Write-Host "--- and anything recent in the profile's Documents/Desktop ---"
+          @("$env:USERPROFILE\Documents", "$env:USERPROFILE\Desktop") | ForEach-Object {
+            Get-ChildItem $_ -Filter *.pdf -File -ErrorAction SilentlyContinue |
+              Where-Object { $_.LastWriteTime -gt (Get-Date).AddHours(-1) } |
+              ForEach-Object { Write-Host "  $($_.FullName)" }
+          }
       - uses: actions/upload-artifact@v7
         if: failure()
         with:
