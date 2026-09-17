@@ -372,6 +372,105 @@ public class UiSmokeTests
 
     /// <param name="toggleName">The mode toggle to switch on, or null for a group
     /// whose commands sit directly in the contextual row with no mode to enter.</param>
+    /// <summary>
+    /// Every page surface must actually draw something.
+    ///
+    /// This is the assertion the project has never had. UI Automation reports that
+    /// an element exists, where it is and how big it is, and the redact, form-fill
+    /// and object-edit surfaces satisfied all three while rendering nothing at all
+    /// - through a whole phase of UI work, with no exception and no log line. The
+    /// main viewer had shipped the same way earlier. Four occurrences of one bug,
+    /// none of which any test could see.
+    ///
+    /// What is asserted is only that the page area is not a single flat colour.
+    /// Not which pixels, not against a baseline image: those are the things that
+    /// make screenshot tests brittle and get them deleted. A blank sheet is one
+    /// colour and a rendered page is not, and that is the whole difference between
+    /// the bug and working software.
+    /// </summary>
+    [Fact]
+    public async Task Every_page_surface_actually_draws_the_page()
+    {
+        await using PageForgeApp app = await PageForgeApp.LaunchAsync();
+        await app.WaitForVisibleAsync("PageIndicatorText");
+
+        // The document surface, then each mode that renders a page of its own.
+        // Mode surfaces are named by the accessible name of their page image,
+        // which is how the layout test already finds them.
+        await AssertPageDrawsAsync(app, "Document page 1", modeTab: null, toggleName: null);
+        await AssertPageDrawsAsync(app, "Form fill page 1", "FormsModeTab", "Form fill mode");
+        await AssertPageDrawsAsync(app, "Redact page 1", "RedactModeTab", "Redact mode");
+        await AssertPageDrawsAsync(app, "Object edit page 1", "EditModeTab", "Object editing mode");
+    }
+
+    private static async Task AssertPageDrawsAsync(
+        PageForgeApp app, string pageName, string? modeTab, string? toggleName)
+    {
+        if (modeTab is not null)
+        {
+            SelectToolGroup(app, modeTab);
+            if (toggleName is not null)
+            {
+                AutomationElement toggle = app.FindByName(toggleName)
+                    ?? throw new InvalidOperationException($"Mode toggle '{toggleName}' not found.");
+                ((TogglePattern)toggle.GetCurrentPattern(TogglePattern.Pattern)).Toggle();
+            }
+        }
+
+        AutomationElement page = app.FindByName(pageName)
+            ?? throw new InvalidOperationException($"Page surface '{pageName}' not found.");
+
+        // Rendering is asynchronous - these surfaces await a render before assigning
+        // the bitmap - so poll rather than capture once. A fixed sleep would either
+        // be too short and flake, or long enough that someone deletes it for being
+        // slow.
+        DateTime deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        WindowCapture.RegionContent content = default;
+        bool everHadArea = false;
+        while (DateTime.UtcNow < deadline)
+        {
+            System.Windows.Rect bounds = page.Current.BoundingRectangle;
+            if (bounds.Width >= 1 && bounds.Height >= 1)
+            {
+                everHadArea = true;
+                content = WindowCapture
+                    .Of(new IntPtr(app.Window.Current.NativeWindowHandle))
+                    .Measure(bounds);
+                if (content.DifferingFraction >= MinimumInkFraction)
+                {
+                    return;
+                }
+            }
+
+            await Task.Delay(250);
+        }
+
+        // The two ways this fails are different findings and get different
+        // messages. An Image with no source collapses to nothing, so the element
+        // never gains area and there is no region to measure - reporting
+        // "0/0 pixels differ from the modal colour <empty>" would describe a
+        // measurement that never happened. A surface that has area and paints one
+        // flat colour is the other case, and there the numbers are the evidence.
+        Assert.Fail(everHadArea
+            ? $"'{pageName}' is a single flat colour: {content}. Expected at least " +
+              $"{MinimumInkFraction:P2} of the page area to differ from its background."
+            : $"'{pageName}' never took up any space on screen, so nothing was drawn " +
+              "there at all. A WPF Image whose Source is null collapses to zero size - " +
+              "which is exactly what assigning Source before awaiting the render does, " +
+              "the bug that shipped on four separate page surfaces.");
+    }
+
+    /// <summary>
+    /// How much of the page area must differ from its background colour.
+    ///
+    /// Low on purpose. A sparse page of text covers only a few percent of the sheet
+    /// in ink, so the threshold has to pass for the emptiest real document while
+    /// still failing for a blank one - and a blank one scores exactly zero, so
+    /// there is a wide gap to sit in. Raise it into "how much ink" territory and it
+    /// becomes a test of the fixture rather than of whether rendering happened.
+    /// </summary>
+    private const double MinimumInkFraction = 0.001;
+
     private static async Task AssertModeAsync(
         PageForgeApp app,
         string tabAutomationId,
