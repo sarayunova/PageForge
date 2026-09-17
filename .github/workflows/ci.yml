@@ -2,13 +2,19 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # This file is part of PageForge. See LICENSE for the full license text.
 #
-# Phase 0 CI skeleton. Three lanes:
+# CI lanes:
 #   1. native-build  : builds AGPL MuPDF + the PageForge shim via build-mupdf.ps1
 #   2. managed-build : downloads the shim, builds + tests the managed solution, runs the fidelity
 #                      render proof, byte-compares engine output against mutool.
 #   3. winui-build   : builds the WinUI 3 shell (src/PageForge.App). Needs the UWP/MSIX MSBuild
-#                      tasks that the windows-latest image provides; non-fatal in Phase 0 until
-#                      the local/CI environment story is finalized (see AGENTS.md).
+#                      tasks that the windows-latest image provides; enforcing, so the spike
+#                      cannot rot while the port is deferred (see AGENTS.md).
+#   4. api-hosted    : the hosted API suite against real Postgres + MinIO containers.
+#   5. ui-smoke      : launches the real WPF window and drives it through UI Automation.
+#
+# The header used to say "Three lanes" while four existed. Lane 5 is new: the UiSmoke
+# suite had never run in CI at all - absent from every lane AND from PageForge.sln -
+# so the only tests that look at the real window were protecting nothing.
 
 name: ci
 
@@ -320,3 +326,70 @@ jobs:
             exit 1
           }
           Write-Host "all hosted API suites passed"
+
+  ui-smoke:
+    name: UI smoke (real window, UIA)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    needs: [native-build]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 8.0.x
+      - uses: actions/download-artifact@v8
+        with:
+          name: native-shim
+          # Rooted at native/out, as in the managed lane.
+          path: native/out
+      - name: Build the WPF shell and the UI smoke suite
+        shell: pwsh
+        run: |
+          # The suite launches the app from its own build output, so both must
+          # exist in the SAME configuration. Release here; the launcher prefers
+          # the configuration it was itself built as.
+          $projects = @(
+            'src/PageForge.App.Wpf/PageForge.App.Wpf.csproj',
+            'tests/PageForge.UiSmoke.Tests/PageForge.UiSmoke.Tests.csproj')
+          foreach ($p in $projects) {
+            dotnet build $p -c Release -warnaserror
+            if ($LASTEXITCODE -ne 0) { throw "build failed for $p (exit $LASTEXITCODE)" }
+          }
+      - name: UI smoke
+        shell: pwsh
+        run: |
+          # These four tests are the only ones that open the real window and
+          # assert that controls are visible, non-zero-sized and inside it, at
+          # both 1200x820 and the declared 900x600 minimum. Every one of their
+          # assertions was verified against the bug it exists for. Until this
+          # lane existed they ran only when a developer remembered to run them,
+          # so none of that protected main.
+          #
+          # They need a desktop session for UI Automation to attach to. If this
+          # lane proves unreliable on the hosted runner, the fix is a different
+          # runner - NOT continue-on-error, which would turn a real gate back
+          # into a green check that cannot fail.
+          dotnet test tests/PageForge.UiSmoke.Tests -c Release --no-build
+          if ($LASTEXITCODE -ne 0) { throw "UI smoke failed (exit $LASTEXITCODE)" }
+      - name: Collect the app log
+        if: failure()
+        shell: pwsh
+        run: |
+          # A UI failure on a machine nobody can see needs the app's own trail.
+          # This is the log that did not exist when the blank-viewer bug reached
+          # a user (see the session note, section 3).
+          $log = Join-Path $env:LOCALAPPDATA 'PageForge/logs/pageforge.log'
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          if (Test-Path $log) {
+            Copy-Item $log artifacts/pageforge-uismoke.log
+            Write-Host "--- tail of pageforge.log ---"
+            Get-Content $log -Tail 60
+          } else {
+            Write-Host "no app log at $log (the app may not have started)"
+          }
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: ui-smoke-log
+          path: artifacts/pageforge-uismoke.log
+          if-no-files-found: ignore
