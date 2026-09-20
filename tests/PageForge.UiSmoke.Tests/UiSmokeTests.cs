@@ -236,27 +236,49 @@ public class UiSmokeTests
 
         report.AppendLine($"app status line: {status}");
 
-        // A PDF here under a different name means the save ran and the filename
-        // did not take; an empty directory means it never ran at all.
-        string dir = Path.GetDirectoryName(outFile) ?? string.Empty;
-        report.AppendLine($"contents of {dir}:");
-        try
+        // WHERE the file went, not just whether it is at the expected path.
+        //
+        // Looking only in the target directory was too narrow and made a save
+        // that succeeded look like one that never happened. The evidence says it
+        // did happen: the dialog accepted the name and closed, and a reordered
+        // three-page document opened in a new tab - which it could only do from a
+        // file that existed. So the question is not "was anything written" but
+        // "under what name, and where", and the answer is worth finding in one
+        // run rather than by guessing at one directory at a time.
+        foreach (string root in CandidateSaveRoots())
         {
-            string[] pdfs = Directory.GetFiles(dir, "*.pdf");
-            if (pdfs.Length == 0)
+            report.AppendLine($"recent .pdf under {root}:");
+            try
             {
-                report.AppendLine("  (no .pdf files at all)");
-            }
+                var options = new EnumerationOptions
+                {
+                    RecurseSubdirectories = true,
+                    MaxRecursionDepth = 3,
+                    IgnoreInaccessible = true,
+                };
 
-            foreach (string file in pdfs.OrderByDescending(File.GetLastWriteTimeUtc).Take(15))
-            {
-                var info = new FileInfo(file);
-                report.AppendLine($"  {info.LastWriteTimeUtc:HH:mm:ss} {info.Length,10} {info.Name}");
+                DateTime since = DateTime.UtcNow.AddMinutes(-10);
+                string[] recent = Directory.EnumerateFiles(root, "*.pdf", options)
+                    .Where(f => File.GetLastWriteTimeUtc(f) > since)
+                    .OrderByDescending(File.GetLastWriteTimeUtc)
+                    .Take(10)
+                    .ToArray();
+
+                if (recent.Length == 0)
+                {
+                    report.AppendLine("  (nothing written in the last 10 minutes)");
+                }
+
+                foreach (string file in recent)
+                {
+                    var info = new FileInfo(file);
+                    report.AppendLine($"  {info.LastWriteTimeUtc:HH:mm:ss} {info.Length,10} {info.FullName}");
+                }
             }
-        }
-        catch (Exception ex)
-        {
-            report.AppendLine($"  <could not list: {ex.GetType().Name}: {ex.Message}>");
+            catch (Exception ex)
+            {
+                report.AppendLine($"  <could not list: {ex.GetType().Name}: {ex.Message}>");
+            }
         }
 
         return report.ToString();
@@ -502,6 +524,38 @@ public class UiSmokeTests
             "engine did not keep the value.");
     }
 
+
+    /// <summary>
+    /// The places a file dialog could plausibly have put the document.
+    ///
+    /// The app's own directory is in the list because the process is launched
+    /// with its working directory set to its output folder, which is where a
+    /// dialog given a name it could not resolve would write.
+    /// </summary>
+    private static IEnumerable<string> CandidateSaveRoots()
+    {
+        var roots = new List<string>
+        {
+            Path.GetTempPath(),
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            AppContext.BaseDirectory,
+        };
+
+        try
+        {
+            roots.Add(Path.GetDirectoryName(PageForgeApp.FindAppExe()) ?? string.Empty);
+        }
+        catch (FileNotFoundException)
+        {
+            // The app was located once to launch it; if it cannot be found now
+            // that is not what this report is about.
+        }
+
+        return roots
+            .Where(r => !string.IsNullOrEmpty(r) && Directory.Exists(r))
+            .Select(Path.GetFullPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+    }
 
     private static async Task<AutomationElement> WaitForElementAsync(PageForgeApp app, string name)
     {
