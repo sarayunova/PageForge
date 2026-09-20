@@ -81,6 +81,7 @@ public partial class App : Application
             RunRedactGeometryProof();
             RunObjectGeometryProof();
             await RunFormGeometryProofAsync();
+            await RunRecoveryBufferProofAsync();
             Shutdown();
             return;
         }
@@ -410,11 +411,183 @@ public partial class App : Application
         }
     }
 
+    /// <summary>
+    /// Proves the recovery buffer (TRD §6) does the three things it is trusted
+    /// for, and does not do the one thing that would make it harmful.
+    ///
+    /// An edited document must be copied aside; a folder left by a dead instance
+    /// must be found; and clearing must remove it. The fourth, and the reason the
+    /// lock file exists at all: a folder belonging to a LIVE instance must not be
+    /// offered as crash leftovers. Getting that wrong would let one window hand
+    /// another window's in-progress work back as though the session had died -
+    /// and it is invisible in any single-instance test, which is exactly the kind
+    /// of gap this project keeps finding after the fact.
+    /// </summary>
+    private static async Task RunRecoveryBufferProofAsync()
+    {
+        string? fixture = FindCorpusDir() is { } dir
+            ? Path.Combine(dir, "contract-multipage.pdf")
+            : null;
+        if (fixture is null || !File.Exists(fixture))
+        {
+            Trace("recovery-buffer proof: corpus fixture not found.");
+            FailProof(2);
+            return;
+        }
+
+        string abandoned = Path.Combine(
+            Diagnostics.RecoverySession.Root, "smoke-abandoned-" + Guid.NewGuid().ToString("N"));
+
+        using var live = Diagnostics.RecoverySession.Start();
+        try
+        {
+            if (!live.IsActive)
+            {
+                Trace("recovery-buffer proof: the session did not start.");
+                FailProof();
+                return;
+            }
+
+            Trace("recovery-buffer proof: step 1, session active");
+            await using MuPdfEngine engine = MuPdfEngine.Create();
+            await engine.OpenAsync(fixture);
+            Trace("recovery-buffer proof: step 2, fixture open");
+
+            // Unedited: nothing should be written, or an idle session would churn.
+            await live.AutosaveAsync("probe", engine, fixture, "probe.pdf");
+            Trace("recovery-buffer proof: step 3, idle autosave returned");
+            // File.Exists rather than a ".lock" search pattern: Windows wildcard
+            // matching on a leading-dot name is not dependable, and a lookup that
+            // silently matches nothing here would fail far from its cause.
+            string[] candidates = Directory.GetDirectories(Diagnostics.RecoverySession.Root)
+                .Where(IsThisSession)
+                .ToArray();
+            if (candidates.Length != 1)
+            {
+                Trace($"recovery-buffer proof: expected exactly one folder locked by this " +
+                      $"process, found {candidates.Length} under {Diagnostics.RecoverySession.Root}.");
+                FailProof();
+                return;
+            }
+
+            string liveFolder = candidates[0];
+            if (Directory.GetFiles(liveFolder, "*.pdf").Length != 0)
+            {
+                Trace("recovery-buffer proof: an unedited document was autosaved.");
+                FailProof();
+                return;
+            }
+
+            await engine.AddAnnotationAsync(
+                0,
+                new AnnotBuildSpec { Type = AnnotationType.Text, X0 = 72, Y0 = 700, X1 = 200, Y1 = 720 });
+            await live.AutosaveAsync("probe", engine, fixture, "probe.pdf");
+
+            if (!File.Exists(Path.Combine(liveFolder, "probe.pdf")) ||
+                !File.Exists(Path.Combine(liveFolder, "probe.json")))
+            {
+                Trace("recovery-buffer proof: an edited document was not copied aside.");
+                FailProof();
+                return;
+            }
+
+            // The live folder must not look like crash leftovers to anyone else.
+            if (Diagnostics.RecoverySession.FindRecoverable()
+                .Any(d => d.RecoveredFile.StartsWith(liveFolder, StringComparison.OrdinalIgnoreCase)))
+            {
+                Trace("recovery-buffer proof: a LIVE session's documents were offered as " +
+                      "recoverable. The lock is not doing its job, and a second window " +
+                      "would hand back work that is still being edited.");
+                FailProof();
+                return;
+            }
+
+            // A folder with no held lock is what a crashed instance leaves.
+            Directory.CreateDirectory(abandoned);
+            File.Copy(Path.Combine(liveFolder, "probe.pdf"), Path.Combine(abandoned, "gone.pdf"));
+            File.Copy(Path.Combine(liveFolder, "probe.json"), Path.Combine(abandoned, "gone.json"));
+
+            if (!Diagnostics.RecoverySession.FindRecoverable()
+                .Any(d => d.RecoveredFile.StartsWith(abandoned, StringComparison.OrdinalIgnoreCase)))
+            {
+                Trace("recovery-buffer proof: a crashed instance's document was NOT offered " +
+                      "back, so the buffer would silently lose the work it exists to keep.");
+                FailProof();
+                return;
+            }
+
+            Diagnostics.RecoverySession.ClearAbandoned();
+            if (Directory.Exists(abandoned))
+            {
+                Trace("recovery-buffer proof: clearing left the abandoned folder behind, so the " +
+                      "same documents would be offered again after every future crash.");
+                FailProof();
+                return;
+            }
+
+            Trace("recovery-buffer proof: idle writes nothing, an edit is copied aside, a live " +
+                  "session is not offered as leftovers, a dead one is, and clearing removes it.");
+        }
+        catch (Exception exception)
+        {
+            Trace($"recovery-buffer proof failed: {exception}");
+            FailProof(2);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(abandoned))
+                {
+                    Directory.Delete(abandoned, recursive: true);
+                }
+            }
+            catch (IOException)
+            {
+                // Best effort; the proof's verdict is already recorded.
+            }
+        }
+
+        // The folder this process holds open, told apart from any other live
+        // instance's by trying to lock it - ours is the one we cannot take.
+        static bool IsThisSession(string folder)
+        {
+            // The lock must EXIST before failing to open it means anything. A
+            // missing file throws FileNotFoundException, which is an IOException,
+            // so catching IOException alone reported every lock-less folder as
+            // this process's own - including the abandoned one this proof creates.
+            string lockPath = Path.Combine(folder, ".lock");
+            if (!File.Exists(lockPath))
+            {
+                return false;
+            }
+
+            try
+            {
+                using var _ = new FileStream(lockPath, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+                return false;
+            }
+            catch (IOException)
+            {
+                return true;
+            }
+        }
+    }
+
     private static void Trace(string message) =>
         Diagnostics.AppLog.For(typeof(App)).LogInformation("{Message}", message);
 
     protected override void OnExit(ExitEventArgs e)
     {
+        // Release the recovery buffer first. Reaching this line is precisely what
+        // distinguishes a clean exit from a crash: the folder is removed here, so
+        // anything still on disk at the next start is work the user did not get
+        // to keep (TRD §6).
+        if (MainWindow is MainWindow shell)
+        {
+            shell.DisposeRecovery();
+        }
+
         // Flush and release the log file before the process goes away.
         Diagnostics.AppLog.Shutdown();
         base.OnExit(e);
