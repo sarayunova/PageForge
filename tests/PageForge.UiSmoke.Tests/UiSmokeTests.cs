@@ -236,6 +236,13 @@ public class UiSmokeTests
 
         report.AppendLine($"app status line: {status}");
 
+        // Anything the app is showing that the test never looked at. A failed
+        // reorder reports itself through MessageBox.Show, so the explanation can
+        // be sitting on screen in a window nobody enumerated while the run
+        // reports only the downstream symptom.
+        report.AppendLine("windows the app has open:");
+        report.AppendLine(PageForgeApp.DescribeProcessWindows());
+
         // WHERE the file went, not just whether it is at the expected path.
         //
         // Looking only in the target directory was too narrow and made a save
