@@ -80,6 +80,7 @@ public partial class App : Application
             RunThemeTokenProof();
             RunRedactGeometryProof();
             RunObjectGeometryProof();
+            await RunFormGeometryProofAsync();
             Shutdown();
             return;
         }
@@ -289,6 +290,123 @@ public partial class App : Application
             Trace($"object-geometry proof: {name} was {actual}, expected {expected}.");
             FailProof();
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Proves the form-field overlay's geometry, and specifically that it does
+    /// NOT flip Y.
+    ///
+    /// The form overlay is the one surface whose coordinates do not match the
+    /// others. Redaction regions and object boxes arrive in PDF user space,
+    /// bottom-left origin, and genuinely need flipping; form-field bounds arrive
+    /// top-down and must not be. Getting that wrong drew every outline on the
+    /// opposite half of the page, and it went unnoticed because the surface
+    /// underneath was blank at the time.
+    ///
+    /// The obvious regression is someone tidying <see cref="ViewModels.FormFieldBoxViewModel"/>
+    /// into <see cref="ViewModels.PageBoxGeometry"/> because the other two
+    /// overlays use it. That would look like removing duplication and would
+    /// reintroduce the bug, so this proof is written to fail loudly if it
+    /// happens - it asserts the un-flipped value AND names what the flipped one
+    /// would have been.
+    ///
+    /// Unlike the redaction and object proofs, this one runs against the real
+    /// engine and the real fixture rather than a synthetic rectangle. The
+    /// convention is the ENGINE's to define: a synthetic test would only encode
+    /// what this code believes, and would still pass if the engine started
+    /// reporting bounds bottom-up while the UI broke.
+    /// </summary>
+    private static async Task RunFormGeometryProofAsync()
+    {
+        try
+        {
+            string? corpusDir = FindCorpusDir();
+            string fixture = Path.Combine(corpusDir ?? string.Empty, "form-application.pdf");
+            if (!File.Exists(fixture))
+            {
+                Trace($"form-geometry proof: fixture not found at {fixture}.");
+                FailProof(2);
+                return;
+            }
+
+            const double dpi = 96.0;
+            const double scale = dpi / 72.0;
+
+            await using MuPdfEngine engine = MuPdfEngine.Create();
+            await engine.OpenAsync(fixture);
+            PdfPageRegion size = await engine.GetPageSizeAsync(0);
+            IReadOnlyList<PageForge.Core.Pdf.PdfFormField> fields = await engine.ListFormFieldsAsync(0);
+
+            if (fields.Count == 0)
+            {
+                // The fixture is the whole point of this proof; an empty list
+                // means the form path is broken, not that there is nothing to
+                // check. Silently passing here is how the old mode-panel test
+                // passed against an unrendered page.
+                Trace("form-geometry proof: the fixture reported no form fields at all.");
+                FailProof();
+                return;
+            }
+
+            double pageHeightPx = size.HeightPt * scale;
+
+            foreach (PageForge.Core.Pdf.PdfFormField field in fields)
+            {
+                var box = new ViewModels.FormFieldBoxViewModel(field, dpi);
+
+                double expectedTop = field.Bounds.Y0 * scale;
+                double flippedTop = pageHeightPx - (field.Bounds.Y1 * scale);
+
+                if (Math.Abs(box.Top - expectedTop) > 0.001)
+                {
+                    Trace($"form-geometry proof: '{field.Label}' Top was {box.Top:F2}, " +
+                          $"expected {expectedTop:F2} (bounds are top-down, so Top is Y0 scaled). " +
+                          $"The flipped value would be {flippedTop:F2} - if that is what it is, " +
+                          "the overlay has been switched to PageBoxGeometry, which is for the " +
+                          "bottom-up surfaces only.");
+                    FailProof();
+                    return;
+                }
+
+                if (Math.Abs(box.Left - (field.Bounds.X0 * scale)) > 0.001)
+                {
+                    Trace($"form-geometry proof: '{field.Label}' Left was {box.Left:F2}, " +
+                          $"expected {field.Bounds.X0 * scale:F2}.");
+                    FailProof();
+                    return;
+                }
+
+                if (box.Width <= 0 || box.Height <= 0)
+                {
+                    Trace($"form-geometry proof: '{field.Label}' has no area " +
+                          $"({box.Width:F2}x{box.Height:F2}); an outline with no size draws nothing.");
+                    FailProof();
+                    return;
+                }
+
+                // Every outline must land on the page. A flip applied to top-down
+                // bounds does not always leave the page, so this is a weaker check
+                // than the one above - but it catches a wrong scale, which that
+                // one does not.
+                if (box.Top < 0 || box.Top + box.Height > pageHeightPx + 1)
+                {
+                    Trace($"form-geometry proof: '{field.Label}' sits outside the page " +
+                          $"(top {box.Top:F2}, height {box.Height:F2}, page {pageHeightPx:F2}px).");
+                    FailProof();
+                    return;
+                }
+            }
+
+            string measured = string.Join(", ", fields.Select(f =>
+                $"{f.Label}@{new ViewModels.FormFieldBoxViewModel(f, dpi).Top:F0}px"));
+            Trace($"form-geometry proof: {fields.Count} field outline(s) read top-down, " +
+                  $"un-flipped, on the page at {dpi} DPI - {measured}.");
+        }
+        catch (Exception exception)
+        {
+            Trace($"form-geometry proof failed: {exception}");
+            FailProof(2);
         }
     }
 
