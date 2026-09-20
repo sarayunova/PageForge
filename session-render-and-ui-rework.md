@@ -819,3 +819,61 @@ nothing. "A receipt came back", "the file saved", "it reopened", "it rendered
 more than 100 bytes", "there are still two pages" - each is true of a no-op.
 The question to ask of any gate here is: *what did this change, and does anything
 check that?*
+
+## 15. The accessibility gate had not been applied for five phases
+
+§3 says accessibility is a gate on every UI phase, not a phase of its own, and
+that `docs/phase6-evidence` must be verified after each one. It was not verified
+after U3, U4 part one, part two, part three, or the form-card binding. The
+assessment was dated 2026-09-12 against a commit predating all of them.
+
+This is the same shape as §11 and §14, and it is worth naming as a class: **a
+safeguard that is not exercised is indistinguishable from one that is absent.**
+UiSmoke existed and did not run. The fidelity gates existed and asserted the
+mechanism. The accessibility gate existed and was not re-read. Three instances in
+one week, each found only by going to look.
+
+### What the re-verification found
+
+Read out of the live UIA tree rather than off the XAML, because an `ItemsControl`
+container is a `ContentPresenter` and what role it reports is not obvious:
+
+```
+[0] ControlType.Edit      TextBox          'FullName value'
+[1] ControlType.DataItem  ItemsControlItem 'PageForge.App.Wpf.ViewModels.FormFieldCardViewModel'
+[2] ControlType.List      ItemsControl
+```
+
+Both halves of the answer are in that one dump.
+
+**The MVVM conversion fixed something the assessment was waiting for.** The
+stated reason for the 1.3.1 and 4.1.2 PARTIAL ratings - cards and redaction rows
+being code-built `StackPanel` children rather than real list items - is resolved:
+they are `DataItem`s inside a `List` now. 4.1.2 is PASS; 1.3.1 stays PARTIAL for
+the heading-level platform limit alone.
+
+**And it broke something nobody was watching.** A bound item with no name of its
+own falls back to `ToString()` on the view model, so every form-field card
+announced itself to a screen reader as the class name. The code-built card it
+replaced carried `{field} ({kind})`. Every bound `ItemsControl` in the shell had
+it - form cards, form-field outlines, redaction rows and outlines, object boxes -
+and each now names its container from the `AccessibleName` the view models
+already exposed.
+
+That regression shipped in the U4 conversions, including §12's. It is precisely
+what the gate exists to catch, and the gate was not being run.
+
+### The rule this produces
+
+Where a claim in that document can be an assertion, make it one. The card check
+is now in UiSmoke: a `DataItem` inside a `List`, named `FullName (Text)`. Five
+phases skipped a paragraph; a CI lane is not skippable.
+
+1.4.11's ratios were recomputed rather than inherited while there - `#2b8cff` on
+white is 3.33:1, `#1f74c6` is 4.80:1, both as claimed.
+
+### Still open
+
+**No screen-reader verification with a live AT session has ever been performed.**
+Reading the UIA tree says what the tree contains, not what a user hears. That gap
+predates this work and is not closed by it.
