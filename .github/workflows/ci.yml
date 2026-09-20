@@ -398,30 +398,15 @@ jobs:
           # lane proves unreliable on the hosted runner, the fix is a different
           # runner - NOT continue-on-error, which would turn a real gate back
           # into a green check that cannot fail.
-          # Wpf_app_opens_organizes_and_saves_a_reordered_document is excluded
-          # here, and ONLY here - it still runs locally, where it passes.
-          #
-          # It is the one test that drives a native common file dialog. Those are
-          # not exposed through UI Automation, so the suite enumerates the dialog
-          # window by title and drives it with Win32 SendMessage against control
-          # 0x047C. On the hosted image that does not take: the helper finds a
-          # window and a field and throws nothing, the app reports no error - its
-          # status line reads "3 pages" - and no file is written. The target
-          # directory was confirmed empty, and confirmed to be the same directory
-          # the test targeted (the step's TEMP is the 8.3 alias of the test's).
-          #
-          # So the gap is in image-dependent dialog automation, not in the product
-          # and not in the assertions. The other three tests are the ones this lane
-          # was built for - the layout assertions that catch blank surfaces,
-          # clipped toolbars and invisible panels - and they are robust here.
-          #
-          # This is reduced coverage and it is meant to be visible: reorder-and-
-          # save is NOT verified by CI, so run the suite locally before trusting
-          # that path. Tracked in issue #6, which also records the one thing
-          # worth ruling out: the app surfaced no error for a save that wrote
-          # nothing, and this project has a history of exactly that.
-          dotnet test tests/PageForge.UiSmoke.Tests -c Release --no-build `
-            --filter "FullyQualifiedName!~Wpf_app_opens_organizes_and_saves_a_reordered_document"
+          # The whole suite runs here, including the dialog-driven save test that
+          # was quarantined under issue #6. It wrote no file on this image while
+          # reporting nothing, because the helper assumed its SendMessage calls
+          # had worked. It now checks each one: the file name is read back after
+          # being set, and the dialog must actually close. A dialog that does not
+          # accept the name fails loudly and prints every child control it found,
+          # rather than passing the problem downstream as "the file was not
+          # written" - which was true, and described a save never requested.
+          dotnet test tests/PageForge.UiSmoke.Tests -c Release --no-build
           if ($LASTEXITCODE -ne 0) { throw "UI smoke failed (exit $LASTEXITCODE)" }
       - name: Collect the app log
         if: failure()
