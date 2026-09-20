@@ -25,7 +25,19 @@ public class UiSmokeTests
     [Fact]
     public async Task Wpf_app_opens_organizes_and_saves_a_reordered_document()
     {
-        await using PageForgeApp app = await PageForgeApp.LaunchAsync();
+        // The save destination is handed to the app up front instead of typed
+        // into a native save dialog. That dialog cannot be driven reliably across
+        // Windows images - the Win32 messages that confirm it here cancel it on
+        // the hosted CI runner, so the app saw a cancelled save, wrote nothing,
+        // and correctly reported nothing (issue #6). What matters is reorder,
+        // write and reopen; the dialog is Windows' code, and automating it was
+        // only ever the means of reaching the part that is ours.
+        string outFile = ReorderedPath();
+        await using PageForgeApp app = await PageForgeApp.LaunchAsync(
+            environment: new Dictionary<string, string>
+            {
+                ["PAGEFORGE_UITEST_SAVE_PATH"] = outFile,
+            });
 
         // Launch loads the 1-page sample into the first tab (FR-VIEW-04).
         AutomationElement initial = await app.WaitForVisibleAsync("PageIndicatorText");
@@ -97,12 +109,11 @@ public class UiSmokeTests
         PageForgeApp.Activate(app.FindInSelectedTabById("ReorderToggle")!);
         Assert.Contains("Reorder mode", await WaitForText(app, "StatusText"));
 
-        // Save order… -> common Save dialog -> new tab for the reordered file.
-        string outFile = ReorderedPath();
+        // Save order… -> writes straight to the scripted destination -> new tab
+        // for the reordered file.
         AutomationElement saveAs = app.FindInSelectedTabById("SaveOrderButton")
             ?? throw new InvalidOperationException("Save order… button not found.");
         PageForgeApp.Activate(saveAs);
-        await SaveViaDialog(app, outFile);
 
         // The saved copy reopens in a new selected tab (FR-PAGE reorder/merge apply).
         // Exact match: a suffix wait would resolve immediately against the previous
