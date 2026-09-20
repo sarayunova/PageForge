@@ -404,7 +404,7 @@ pf_cms_signer_cert(const unsigned char *sig, size_t sig_len)
 	CRYPT_DATA_BLOB sig_blob;
 	HCERTSTORE hMsgStore = NULL;
 	HCRYPTMSG hMsg = NULL;
-	CERT_INFO signer_info;
+	PCERT_INFO signer_info = NULL;
 	DWORD cb_info = 0;
 	PCCERT_CONTEXT signer = NULL;
 
@@ -429,28 +429,40 @@ pf_cms_signer_cert(const unsigned char *sig, size_t sig_len)
 	    !CryptMsgUpdate(hMsg, (const BYTE *)sig, (DWORD)sig_len, TRUE))
 		goto cleanup;
 
-	memset(&signer_info, 0, sizeof(signer_info));
-	if (CryptMsgGetParam(hMsg, CMSG_SIGNER_CERT_INFO_PARAM, 0, NULL, &cb_info) &&
-	    cb_info == sizeof(signer_info) &&
-	    CryptMsgGetParam(hMsg, CMSG_SIGNER_CERT_INFO_PARAM, 0,
-	                     &signer_info, &cb_info))
+	/* CMSG_SIGNER_CERT_INFO_PARAM returns a CERT_INFO whose Issuer and
+	 * SerialNumber blobs point at bytes appended after the struct, so the size
+	 * is larger than sizeof(CERT_INFO) and the result cannot go into a fixed
+	 * one on the stack. This used a stack CERT_INFO and guarded the call with
+	 * "cb_info == sizeof(signer_info)", which is never true - so the signer was
+	 * never found and this returned NULL to every caller.
+	 *
+	 * The crash was the line below it: CERT_FIND_SUBJECT_CERT takes a
+	 * CERT_INFO*, and it was handed &signer_info.Issuer, a CERT_NAME_BLOB.
+	 * Reading a blob as a CERT_INFO is how verification took the process down.
+	 * Matching on issuer+serial is what CERT_FIND_SUBJECT_CERT already does,
+	 * so the hand-rolled serial comparison goes with it. */
+	if (!CryptMsgGetParam(hMsg, CMSG_SIGNER_CERT_INFO_PARAM, 0, NULL, &cb_info) ||
+	    cb_info == 0)
+		goto cleanup;
+
+	signer_info = (PCERT_INFO)malloc(cb_info);
+	if (signer_info == NULL)
+		goto cleanup;
+
+	if (CryptMsgGetParam(hMsg, CMSG_SIGNER_CERT_INFO_PARAM, 0, signer_info, &cb_info))
 	{
 		PCCERT_CONTEXT match = CertFindCertificateInStore(
 			hMsgStore, X509_ASN_ENCODING | PKCS_7_ASN_ENCODING,
-			0, CERT_FIND_SUBJECT_CERT, (const void *)&signer_info.Issuer, NULL);
+			0, CERT_FIND_SUBJECT_CERT, (const void *)signer_info, NULL);
 		if (match != NULL)
 		{
-			if (match->pCertInfo != NULL &&
-			    match->pCertInfo->SerialNumber.cbData == signer_info.SerialNumber.cbData &&
-			    memcmp(match->pCertInfo->SerialNumber.pbData,
-			           signer_info.SerialNumber.pbData,
-			           match->pCertInfo->SerialNumber.cbData) == 0)
-				signer = CertDuplicateCertificateContext(match);
+			signer = CertDuplicateCertificateContext(match);
 			CertFreeCertificateContext(match);
 		}
 	}
 
 cleanup:
+	free(signer_info);
 	if (hMsg != NULL)
 		CryptMsgClose(hMsg);
 	CertCloseStore(hMsgStore, 0);
