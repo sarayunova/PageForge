@@ -718,3 +718,63 @@ supposed to be checking.
   worth ruling out before blaming the harness.
 - The pixel check (§11) proves a page drew, not that it drew the right thing. A
   mirrored overlay would still pass it; geometry stays the proofs' job.
+
+## 13. Issue #6: the save dialog, and reasoning from absence
+
+Reorder-and-save is covered by CI again. The `ui-smoke` lane runs the whole
+suite with no filter.
+
+### What was actually wrong
+
+**The hosted image cancels the save dialog rather than confirming it.** Not "the
+dialog rejects the file name", which is what §11 assumed: the name is set and
+read back correctly, and the dialog accepts it. It simply closes as a cancel.
+
+Four facts pinned it, and all four were needed:
+
+- the dialog **closes** — established locally, not in CI, by adding a switch that
+  skipped the confirm step and watching the new close-check fail. That proved the
+  check works, so a passing check on CI means the dialog really does go away.
+- **no message box** — the app's visible top-level windows were enumerated and
+  only the main window is there, so `ReorderAsync` never threw.
+- **no file anywhere** — temp, user profile, test output, the app's own folder;
+  ten minutes of history, three levels deep.
+- the app is **silent**.
+
+The only path through `SaveOrder_Click` producing all four is `AskSavePath`
+returning null. **There is no product bug.** The handler wraps the reorder in a
+try/catch that shows a message box on failure and returns silently only on a
+cancelled dialog, which is correct. Nothing was reported because nothing was
+asked for.
+
+### The fix, and what it costs
+
+The suite hands the app a destination through `PAGEFORGE_UITEST_SAVE_PATH`, read
+by `Diagnostics/UiTestHooks`, and the dialog stays out of it. Reorder, write and
+reopen are covered; **the file dialog is now tested by nothing, on any machine**.
+That is a deliberate trade rather than a free win: the dialog is Windows' code,
+and automating it was only ever the means of reaching ours.
+
+A test hook in shipping code has to earn its place, so it is inert unless the
+variable is set, read once at startup so a running app cannot be changed
+underneath itself, consumed on first use so it redirects exactly one save,
+supplies a destination only, and logs whenever it fires. A normal run leaves no
+hook line in the log - checked, not assumed.
+
+### The method lesson, which cost three CI rounds
+
+Two interim conclusions were wrong, and both were **reasoning from absence**:
+
+- "no file, therefore no save" — the first scan looked in one directory.
+- "the indicator reached 1 / 3, therefore a document opened, therefore the save
+  happened" — it had not; the indicator does not prove what it looks like it
+  proves.
+
+Each time the instrument was too narrow and the conclusion was drawn as though
+it were not. This is the same failure the note keeps recording in tests - an
+assertion that passes for the wrong reason - appearing in diagnosis instead.
+
+What broke the loop was **a local experiment**: skipping the confirm step took
+forty seconds and settled more than two CI rounds had. When a CI-only failure
+resists, the question to ask early is what can be reproduced or ruled out on the
+machine in front of you.
