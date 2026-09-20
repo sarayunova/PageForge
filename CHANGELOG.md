@@ -25,9 +25,33 @@ version heading when the tag is pushed.
   filled forms into static page content.
 - True redaction that removes the underlying content rather than drawing over
   it, plus offline OCR for scanned documents.
-- Password protection and permissions, and digital signature signing and
-  verification through the native `pf_sig_crypt32` signer.
+- Password protection and permissions: open and permissions passwords, with an
+  encrypted document refusing a wrong password and yielding no extractable text
+  until it is authenticated.
 - Accessibility pass against WCAG 2.1 AA on the WPF proof shell.
+
+### Not in this release, despite work existing for it
+
+- **Local PDF digital signing and verification (FR-SEC-03).** The native signer
+  (`pf_sign_pdf`, backed by `pf_sig_crypt32.c`) is written and compiled into the
+  shipped shim, but nothing reaches it: there is no P/Invoke for it in
+  `MuPdfShimBindings.cs` and no command in the desktop shell. A user of the beta
+  cannot sign or verify a document. An earlier entry here claimed the feature as
+  shipped; it was describing the C code rather than anything reachable.
+  (The *hosted* send-for-signature workflow below is a different requirement,
+  FR-ESIGN, and does work.)
+- **Crash recovery of unsaved edits.** TRD §6 calls an autosave/recovery buffer
+  required; there is none. Unsaved edits are lost if the application stops
+  unexpectedly.
+- **Localized UI strings (TRD §6).** Strings are literals in XAML and code
+  rather than resource files. English only, which matches the v1 plan, but the
+  externalization the requirement asks for has not been done.
+- **Spreadsheet export (FR-OCR-02).** OCR output converts to searchable PDF,
+  DOCX and per-page PNG. Excel is not implemented.
+- **Documents of the scale FR-VIEW-01 names.** Lazy page loading is implemented,
+  but the largest fixture in the regression corpus is four pages; nothing
+  exercises the 2,000-page figure, so the requirement is unproven rather than
+  known-met.
 
 ### Hosted service
 
