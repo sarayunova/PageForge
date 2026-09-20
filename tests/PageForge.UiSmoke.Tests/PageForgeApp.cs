@@ -483,6 +483,46 @@ internal sealed class PageForgeApp : IAsyncDisposable
     }
 
     /// <summary>
+    /// Every top-level window the app owns, with the text of its children.
+    ///
+    /// For finding a message box that is sitting there unread. SaveOrder_Click
+    /// reports a failed reorder through MessageBox.Show, so if the save was
+    /// requested and threw, the reason is on screen in a window the test never
+    /// looks at - and the run reports only the downstream symptom, "the file was
+    /// not written", with the actual explanation two feet away.
+    /// </summary>
+    public static string DescribeProcessWindows()
+    {
+        int processId = _current?._process?.Id ?? -1;
+        var description = new StringBuilder();
+        Native.EnumWindows(
+            (hWnd, lParam) =>
+            {
+                if (!Native.IsWindowVisible(hWnd))
+                {
+                    return true;
+                }
+
+                _ = Native.GetWindowThreadProcessId(hWnd, out uint owner);
+                if (processId >= 0 && owner != (uint)processId)
+                {
+                    return true;
+                }
+
+                var className = new StringBuilder(128);
+                _ = Native.GetClassName(hWnd, className, className.Capacity);
+                var title = new StringBuilder(256);
+                _ = Native.GetWindowText(hWnd, title, title.Capacity);
+                description.AppendLine($"  window class={className} title='{title}'");
+                description.Append(Native.DescribeChildren(hWnd));
+                return true;
+            },
+            IntPtr.Zero);
+
+        return description.Length == 0 ? "  (no visible windows)" : description.ToString();
+    }
+
+    /// <summary>
     /// Waits for a dialog to close, which is the only evidence that confirming it
     /// did anything.
     ///
