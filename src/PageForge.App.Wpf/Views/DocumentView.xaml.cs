@@ -1339,6 +1339,18 @@ public partial class DocumentView : UserControl
 
     private string? AskSavePath(string suggestedName)
     {
+        // The UI suite supplies a destination here rather than driving the native
+        // dialog, which cannot be automated reliably across Windows images: the
+        // same Win32 messages that confirm it on a developer machine cancel it on
+        // the hosted CI runner, leaving this method returning null and the whole
+        // reorder-and-save path uncovered (issue #6). Inert in every normal run -
+        // see Diagnostics/UiTestHooks for why that is safe.
+        string? scripted = Diagnostics.UiTestHooks.TakeSaveTarget();
+        if (scripted is not null)
+        {
+            return scripted;
+        }
+
         var dialog = new Microsoft.Win32.SaveFileDialog
         {
             Filter = "PDF files (*.pdf)|*.pdf|All files (*.*)|*.*",

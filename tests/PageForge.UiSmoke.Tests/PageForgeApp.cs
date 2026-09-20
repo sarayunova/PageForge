@@ -89,7 +89,12 @@ internal sealed class PageForgeApp : IAsyncDisposable
             probed[0]);
     }
 
-    public static async Task<PageForgeApp> LaunchAsync(TimeSpan timeout = default)
+    /// <param name="environment">Extra environment variables for the app process.
+    /// Used to hand it a save destination so a native file dialog does not have to
+    /// be driven; see PageForge.App.Wpf.Diagnostics.UiTestHooks.</param>
+    public static async Task<PageForgeApp> LaunchAsync(
+        TimeSpan timeout = default,
+        IReadOnlyDictionary<string, string>? environment = null)
     {
         timeout = timeout == default ? TimeSpan.FromSeconds(30) : timeout;
         string exe = FindAppExe();
@@ -98,6 +103,14 @@ internal sealed class PageForgeApp : IAsyncDisposable
             UseShellExecute = false,
             WorkingDirectory = Path.GetDirectoryName(exe),
         };
+
+        if (environment is not null)
+        {
+            foreach ((string key, string value) in environment)
+            {
+                psi.Environment[key] = value;
+            }
+        }
 
         Process? process = Process.Start(psi);
         AutomationElement? window = null;
