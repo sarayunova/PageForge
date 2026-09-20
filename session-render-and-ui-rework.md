@@ -778,3 +778,44 @@ What broke the loop was **a local experiment**: skipping the confirm step took
 forty seconds and settled more than two CI rounds had. When a CI-only failure
 resists, the question to ask early is what can be reproduced or ruled out on the
 machine in front of you.
+
+## 14. The fidelity suite, audited
+
+Finishing the sweep that §9 started. Object move/resize shipped broken behind a
+gate that asserted the mechanism - a receipt came back - instead of the effect -
+where the object landed. That raised a fair question about the rest of the
+suite, and the answer is worth writing down so nobody re-derives it.
+
+**The object family was the outlier, not the norm.**
+
+| Gate | Verdict |
+|---|---|
+| Encryption | Strong - a wrong password fails, text is unextractable while locked, the right password authenticates and the text returns |
+| Annotation | Strong - the flattened highlight is gone from the reopened document, ink and text survive |
+| Form | Strong - values round-trip, a created field is found, widgets disappear on flatten |
+| Text edit | Strong - the new string is present, the old absent, the neighbouring run untouched, the run box recalculated |
+| Redaction | Strong - the covered text is gone from extraction, untouched text on the same page survives (checked in §10) |
+| Page organizer | **Was weak - fixed** |
+
+### What the organizer was missing
+
+Page order is the entire point of FR-PAGE and nothing asserted it.
+`BuildPdf_rotate_then_merge` asked for six pages in a specific order and checked
+that six came out, that one was rotated, and that rendering was deterministic -
+none of which constrains order. `Delete_and_reorder` was worse: named for a
+reorder, asserting only that two pages remained, so deleting the *wrong* page
+passed it as well.
+
+Both now compare each output page to the source page the job asked for, as
+rendered bytes, and both assert first that the fixture's pages differ from each
+other - comparing indistinguishable pages would prove nothing. The organizer
+itself is correct; this is cover, not a fix. Confirmed to fail by swapping two
+job entries and by deleting the wrong page.
+
+### The shape to look for, stated once
+
+A gate is weak when everything it asserts would still hold if the feature did
+nothing. "A receipt came back", "the file saved", "it reopened", "it rendered
+more than 100 bytes", "there are still two pages" - each is true of a no-op.
+The question to ask of any gate here is: *what did this change, and does anything
+check that?*
