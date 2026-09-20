@@ -35,3 +35,5 @@ tests/PageForge.Fidelity.Tests/golden/**/*.png
 Thumbs.db
 Desktop.ini
 .DS_Store
+# Playwright MCP session data
+.playwright-mcp/

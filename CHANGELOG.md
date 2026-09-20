@@ -29,20 +29,45 @@ version heading when the tag is pushed.
   encrypted document refusing a wrong password and yielding no extractable text
   until it is authenticated.
 - Accessibility pass against WCAG 2.1 AA on the WPF proof shell.
+- Local digital signing and verification reachable from the engine (FR-SEC-03):
+  `SignAsync`, `SaveIncrementalAsync` and `ListSignaturesAsync` on `IPdfEngine`,
+  over the existing native signer. Signing uses a PKCS#12 credential through the
+  Windows crypto provider and verification checks the digest and the certificate
+  chain against the OS trust stores — both entirely offline. An incremental save
+  keeps earlier signatures valid.
+
+  Wiring it up proved the native signer had never worked. It had been compiled
+  into the shipped DLL and described as finished, but no managed code had ever
+  called it, and five defects were sitting in that unreached path: the signer
+  read `fz_buffer_storage`'s length and pointer the wrong way round (and so
+  faulted inside crypt32); the verifier used `CryptVerifyMessageSignature`,
+  which cannot verify the detached signature a PDF uses; it opened the CMS
+  certificate store with `CERT_STORE_PROV_MSG`, which expects an open message
+  handle rather than a blob; it read `CertVerifyCertificateChainPolicy`'s return
+  value as the verdict, so **every certificate verified as trusted**; and it
+  asked for each distinguished-name field with `CERT_NAME_RDN_TYPE`, so every
+  field came back holding the whole name. A signature field whose contents no
+  longer parse is now reported as an unverifiable signature instead of failing
+  the entire listing.
+- Crash recovery of unsaved edits (TRD §6). Edited documents are copied aside
+  every thirty seconds, discarded when a tab is closed deliberately, and the
+  whole buffer is deleted on a clean exit; whatever a crashed run left behind is
+  offered back at startup. Each instance holds a lock file, so a live session's
+  documents are never offered to another window as recoverable, and autosaves
+  are staged under a temporary name and moved into place so a half-written file
+  is never handed back as the user's work. Known limitation: MuPDF's dirty flag
+  does not clear on save, so it means "edited at some point" rather than
+  "changed since the last autosave" — every edited document is rewritten each
+  tick, and the flag is not sufficient for a close-time "unsaved changes"
+  prompt.
 
 ### Not in this release, despite work existing for it
 
-- **Local PDF digital signing and verification (FR-SEC-03).** The native signer
-  (`pf_sign_pdf`, backed by `pf_sig_crypt32.c`) is written and compiled into the
-  shipped shim, but nothing reaches it: there is no P/Invoke for it in
-  `MuPdfShimBindings.cs` and no command in the desktop shell. A user of the beta
-  cannot sign or verify a document. An earlier entry here claimed the feature as
-  shipped; it was describing the C code rather than anything reachable.
-  (The *hosted* send-for-signature workflow below is a different requirement,
-  FR-ESIGN, and does work.)
-- **Crash recovery of unsaved edits.** TRD §6 calls an autosave/recovery buffer
-  required; there is none. Unsaved edits are lost if the application stops
-  unexpectedly.
+- **Local PDF digital signing and verification (FR-SEC-03), from the user
+  interface.** The engine now signs and verifies for real — see below — but the
+  desktop shell still has no sign or verify command, so a user of the beta
+  cannot reach it. (The *hosted* send-for-signature workflow below is a
+  different requirement, FR-ESIGN, and does work.)
 - **Localized UI strings (TRD §6).** Strings are literals in XAML and code
   rather than resource files. English only, which matches the v1 plan, but the
   externalization the requirement asks for has not been done.

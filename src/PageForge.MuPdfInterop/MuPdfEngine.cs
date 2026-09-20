@@ -1330,6 +1330,184 @@ public sealed class MuPdfEngine : IPdfEngine
         }
     }
 
+    public ValueTask SignAsync(
+        int pageIndex, PdfSignatureRequest request, CancellationToken cancellationToken = default)
+        => SignCoreAsync(pageIndex, request, cancellationToken);
+
+    private async ValueTask SignCoreAsync(int pageIndex, PdfSignatureRequest request, CancellationToken ct)
+    {
+        if (pageIndex < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(pageIndex));
+        }
+
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (string.IsNullOrWhiteSpace(request.FieldName))
+        {
+            throw new ArgumentException("A signature field name is required.", nameof(request));
+        }
+
+        if (string.IsNullOrWhiteSpace(request.CertificatePath))
+        {
+            throw new ArgumentException("A signing certificate path is required.", nameof(request));
+        }
+
+        string certificatePath = Path.GetFullPath(request.CertificatePath);
+        if (!File.Exists(certificatePath))
+        {
+            throw new FileNotFoundException("The signing certificate was not found.", certificatePath);
+        }
+
+        if (request.Bounds.X1 <= request.Bounds.X0 || request.Bounds.Y1 <= request.Bounds.Y0)
+        {
+            throw new ArgumentException(
+                "The signature bounds must have a positive width and height.", nameof(request));
+        }
+
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            RequireDocument();
+
+            string specPath = Path.Combine(Path.GetTempPath(), $"pageforge-sign-spec-{Guid.NewGuid():N}.txt");
+            try
+            {
+                await File.WriteAllTextAsync(
+                    specPath, BuildSignSpec(request, certificatePath), JobUtf8, ct).ConfigureAwait(false);
+
+                if (MuPdfShimBindings.pf_sign_pdf(_context, _document, pageIndex, Utf8Z(specPath))
+                    != MuPdfShimBindings.PfOk)
+                {
+                    throw new InvalidOperationException(
+                        $"Failed to sign page {pageIndex} as '{request.FieldName}': {LastError()}");
+                }
+            }
+            finally
+            {
+                // The spec carries the PKCS#12 password in clear text, so it is
+                // deleted whether the sign succeeded or threw.
+                TryDeleteFile(specPath);
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public ValueTask SaveIncrementalAsync(string outputPath, CancellationToken cancellationToken = default)
+        => SaveIncrementalCoreAsync(outputPath, cancellationToken);
+
+    private async ValueTask SaveIncrementalCoreAsync(string outputPath, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(outputPath))
+        {
+            throw new ArgumentException("An output path is required.", nameof(outputPath));
+        }
+
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            RequireDocument();
+
+            string fullPath = Path.GetFullPath(outputPath);
+
+            if (MuPdfShimBindings.pf_save_document_incremental(_context, _document, Utf8Z(fullPath))
+                != MuPdfShimBindings.PfOk)
+            {
+                TryDeleteFile(fullPath);
+                throw new InvalidOperationException(
+                    $"Failed to save the document incrementally: {LastError()}");
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public ValueTask<IReadOnlyList<PdfSignature>> ListSignaturesAsync(
+        CancellationToken cancellationToken = default)
+        => ListSignaturesCoreAsync(cancellationToken);
+
+    private async ValueTask<IReadOnlyList<PdfSignature>> ListSignaturesCoreAsync(CancellationToken ct)
+    {
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            RequireDocument();
+
+            string outputPath = Path.Combine(Path.GetTempPath(), $"pageforge-signatures-{Guid.NewGuid():N}.txt");
+            try
+            {
+                if (MuPdfShimBindings.pf_list_signatures(_context, _document, Utf8Z(outputPath))
+                    != MuPdfShimBindings.PfOk)
+                {
+                    throw new InvalidOperationException(
+                        $"Failed to list the document's signatures: {LastError()}");
+                }
+
+                // A document with no signature fields leaves the file empty
+                // rather than absent, but treat both as "none" so a listing
+                // never fails on a perfectly ordinary unsigned document.
+                if (!File.Exists(outputPath))
+                {
+                    return Array.Empty<PdfSignature>();
+                }
+
+                string[] lines = await File.ReadAllLinesAsync(outputPath, ct).ConfigureAwait(false);
+                return SignatureListParser.Parse(lines);
+            }
+            finally
+            {
+                TryDeleteFile(outputPath);
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    private static string BuildSignSpec(PdfSignatureRequest request, string certificatePath)
+    {
+        var spec = new StringBuilder();
+        spec.Append("N\t").Append(Single(request.FieldName)).Append('\n');
+        spec.Append("R\t")
+            .Append(request.Bounds.X0.ToString(CultureInfo.InvariantCulture)).Append('\t')
+            .Append(request.Bounds.Y0.ToString(CultureInfo.InvariantCulture)).Append('\t')
+            .Append(request.Bounds.X1.ToString(CultureInfo.InvariantCulture)).Append('\t')
+            .Append(request.Bounds.Y1.ToString(CultureInfo.InvariantCulture)).Append('\n');
+        spec.Append("P12\t").Append(Single(certificatePath)).Append('\n');
+
+        if (!string.IsNullOrEmpty(request.CertificatePassword))
+        {
+            spec.Append("PW\t").Append(Single(request.CertificatePassword)).Append('\n');
+        }
+
+        if (!string.IsNullOrEmpty(request.Reason))
+        {
+            spec.Append("E\t").Append(Single(request.Reason)).Append('\n');
+        }
+
+        if (!string.IsNullOrEmpty(request.Location))
+        {
+            spec.Append("L\t").Append(Single(request.Location)).Append('\n');
+        }
+
+        return spec.ToString();
+
+        // The spec is one record per line with tab-separated fields, so a tab
+        // or newline inside a value would silently truncate it — or, in the
+        // password, produce a confusing "cannot load certificate" instead of
+        // naming the real problem. Collapse them at the boundary.
+        static string Single(string value) => value
+            .Replace('\t', ' ')
+            .Replace('\r', ' ')
+            .Replace('\n', ' ');
+    }
+
     private static string BuildSpec(AnnotBuildSpec a)
     {
         var spec = new StringBuilder();

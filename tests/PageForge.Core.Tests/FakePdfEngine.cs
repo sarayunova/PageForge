@@ -647,6 +647,46 @@ internal sealed class FakePdfEngine : IPdfEngine
         return OnAuthenticate?.Invoke() ?? true;
     }
 
+    /// <summary>The signing requests received, in order (FR-SEC-03).</summary>
+    public List<(int PageIndex, PdfSignatureRequest Request)> Signings { get; } = new();
+
+    /// <summary>What <see cref="ListSignaturesAsync"/> hands back; empty by default.</summary>
+    public List<PdfSignature> Signatures { get; } = new();
+
+    /// <summary>The output path of the last <see cref="SaveIncrementalAsync"/>, or null.</summary>
+    public string? LastIncrementalSave { get; private set; }
+
+    /// <summary>Records a signing request (FR-SEC-03) without producing a signature.</summary>
+    public async ValueTask SignAsync(
+        int pageIndex, PdfSignatureRequest request, CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(request);
+        await Task.Yield();
+        Signings.Add((pageIndex, request));
+    }
+
+    /// <summary>Writes a placeholder file and records the path, standing in for an
+    /// incremental save. Kept distinct from the full-rewrite save so a test can tell
+    /// which one the code under test chose — the difference decides whether an
+    /// existing signature survives.</summary>
+    public async ValueTask SaveIncrementalAsync(
+        string outputPath, CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        await File.WriteAllTextAsync(outputPath, "incremental", cancellationToken);
+        LastIncrementalSave = outputPath;
+    }
+
+    /// <summary>Returns whatever was put in <see cref="Signatures"/>.</summary>
+    public async ValueTask<IReadOnlyList<PdfSignature>> ListSignaturesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        await Task.Yield();
+        return Signatures.ToArray();
+    }
+
     public ValueTask DisposeAsync()
     {
         _disposed = true;

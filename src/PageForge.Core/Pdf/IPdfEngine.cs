@@ -417,4 +417,51 @@ public interface IPdfEngine : IAsyncDisposable
     ValueTask<bool> AuthenticateAsync(
         string password,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Signs the open document on <paramref name="pageIndex"/> (FR-SEC-03),
+    /// adding a signature widget described by <paramref name="request"/> and
+    /// signing it with that request's PKCS#12 credential. Runs entirely
+    /// offline through the operating system's crypto provider.
+    ///
+    /// The document is mutated in memory only. The digest is computed over the
+    /// saved byte range, so <b>a sign that is never saved produces nothing</b>:
+    /// follow this with <see cref="SaveIncrementalAsync"/>, which appends
+    /// rather than rewriting and so leaves any earlier signature valid.
+    ///
+    /// Throws when the engine has no open document, the certificate cannot be
+    /// loaded or carries no private key, or the field name is already taken.
+    /// </summary>
+    ValueTask SignAsync(
+        int pageIndex,
+        PdfSignatureRequest request,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Writes the open document to <paramref name="outputPath"/> as an
+    /// incremental update: the original bytes are preserved verbatim and
+    /// changes are appended. This is the canonical save for a signed document —
+    /// a full rewrite renumbers objects and invalidates the byte range every
+    /// existing signature was computed over.
+    ///
+    /// Throws when the engine has no open document, the document cannot be
+    /// saved incrementally, or the write fails.
+    /// </summary>
+    ValueTask SaveIncrementalAsync(
+        string outputPath,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Lists every AcroForm signature field in the open document, in page
+    /// order, each verified against the operating system trust stores
+    /// (FR-SEC-03). Non-mutating, and offline: no certificate bundle ships
+    /// with the application.
+    ///
+    /// Unsigned signature widgets are included, so an empty result means the
+    /// document has no signature fields at all rather than none that verified.
+    /// A field whose verification failed is returned with its failure
+    /// described, not omitted. Throws when the engine has no open document.
+    /// </summary>
+    ValueTask<IReadOnlyList<PdfSignature>> ListSignaturesAsync(
+        CancellationToken cancellationToken = default);
 }

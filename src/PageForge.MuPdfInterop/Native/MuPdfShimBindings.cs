@@ -148,6 +148,26 @@ internal static class MuPdfShimBindings
     internal static extern int pf_auth_password(
         nint context, nint document, [In] byte[]? passwordUtf8, out int outResult);
 
+    /// <summary>FR-SEC-03. Creates a signature widget on the page and signs it with the
+    /// PKCS#12 named in the spec file. Mutates the document in memory only; the digest is
+    /// completed by a subsequent save, so a sign call without a save leaves nothing behind.</summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int pf_sign_pdf(
+        nint context, nint document, int pageIndex, [In] byte[] specPathUtf8);
+
+    /// <summary>Appends changes to a copy of the original file rather than rewriting it, which
+    /// is what keeps any signature already in the document valid — a full rewrite renumbers
+    /// objects and invalidates every earlier byte range.</summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int pf_save_document_incremental(
+        nint context, nint document, [In] byte[] outPathUtf8);
+
+    /// <summary>Writes one TSV row per AcroForm signature field, each already verified against
+    /// the OS trust stores. Writes an empty file when the document has no signature fields.</summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int pf_list_signatures(
+        nint context, nint document, [In] byte[] outPathUtf8);
+
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     internal static extern IntPtr pf_last_error();
 }

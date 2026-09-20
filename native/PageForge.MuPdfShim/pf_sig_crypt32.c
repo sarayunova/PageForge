@@ -12,7 +12,7 @@
 //   - signer:   loads a PKCS#12 (.pfx/.p12) file via PFXImportCertStore, and
 //               produces a detached PKCS#7/CMS SignedData with CryptSignMessage.
 //   - verifier: checks the detached signature digest with
-//               CryptVerifyMessageSignature, validates the signer certificate
+//               CryptVerifyDetachedMessageSignature, validates the signer certificate
 //               chain with CertGetCertificateChain, and extracts the signatory
 //               distinguished name from the CMS SignedData.
 //
@@ -151,7 +151,11 @@ pf_capi_dn_from_cert(fz_context *ctx, PCCERT_CONTEXT cert)
 		for (which = 0; which < 5; ++which)
 		{
 			wname[0] = L'\0';
-			CertGetNameStringW(cert, CERT_NAME_RDN_TYPE, 0, (LPCSTR)oids[which],
+			/* CERT_NAME_RDN_TYPE formats the WHOLE subject name and reads its
+			 * fourth argument as formatting flags, not as an OID — so every
+			 * field came back with the same text. CERT_NAME_ATTR_TYPE is the
+			 * type that selects the single attribute named by the OID. */
+			CertGetNameStringW(cert, CERT_NAME_ATTR_TYPE, 0, (void *)oids[which],
 			                   wname, (DWORD)(sizeof(wname) / sizeof(wname[0])));
 			utf8 = pf_capi_utf8_from_wchar(wname);
 			if (utf8 == NULL)
@@ -214,8 +218,12 @@ pf_capi_make_signature(fz_context *ctx, pf_capi_signer *os, fz_buffer *buf,
 
 	memset(&para, 0, sizeof(para));
 
+	/* fz_buffer_storage RETURNS the length and writes the pointer through its
+	 * out-parameter. Assigning these the other way round hands CryptSignMessage
+	 * a bogus address and a length taken from the low half of a pointer, which
+	 * faults inside crypt32 rather than failing cleanly. */
 	if (buf != NULL)
-		data = fz_buffer_storage(ctx, buf, &data_len);
+		data_len = fz_buffer_storage(ctx, buf, (unsigned char **)&data);
 
 	para.cbSize = sizeof(para);
 	para.dwMsgEncodingType = X509_ASN_ENCODING | PKCS_7_ASN_ENCODING;
@@ -399,46 +407,63 @@ pf_cms_signer_cert(const unsigned char *sig, size_t sig_len)
 	CRYPT_DATA_BLOB sig_blob;
 	HCERTSTORE hMsgStore = NULL;
 	HCRYPTMSG hMsg = NULL;
-	CERT_INFO signer_info;
+	PCERT_INFO signer_info = NULL;
 	DWORD cb_info = 0;
 	PCCERT_CONTEXT signer = NULL;
 
 	sig_blob.pbData = (BYTE *)sig;
 	sig_blob.cbData = (DWORD)sig_len;
 
-	hMsgStore = CertOpenStore(CERT_STORE_PROV_MSG,
+	/* CERT_STORE_PROV_MSG takes an already-open HCRYPTMSG as its pvPara; the
+	 * provider that takes an encoded PKCS#7 blob is CERT_STORE_PROV_PKCS7.
+	 * Handing the blob pointer to the MSG provider makes crypt32 dereference
+	 * it as a message handle, which faults. */
+	hMsgStore = CertOpenStore(CERT_STORE_PROV_PKCS7,
 	                          X509_ASN_ENCODING | PKCS_7_ASN_ENCODING,
 	                          0, 0, &sig_blob);
 	if (hMsgStore == NULL)
 		return NULL;
 
-	if (!CryptMsgOpenToDecode(X509_ASN_ENCODING | PKCS_7_ASN_ENCODING, 0, 0,
-	                          NULL, NULL, &hMsg) ||
+	/* CryptMsgOpenToDecode RETURNS the handle; its last two parameters are a
+	 * recipient-info and a stream-info pointer, not an out-parameter for the
+	 * message. Passing &hMsg there left hMsg null and handed crypt32 a bogus
+	 * PCMSG_STREAM_INFO. */
+	hMsg = CryptMsgOpenToDecode(X509_ASN_ENCODING | PKCS_7_ASN_ENCODING, 0, 0,
+	                            0, NULL, NULL);
+	if (hMsg == NULL ||
 	    !CryptMsgUpdate(hMsg, (const BYTE *)sig, (DWORD)sig_len, TRUE))
 		goto cleanup;
 
-	memset(&signer_info, 0, sizeof(signer_info));
-	if (CryptMsgGetParam(hMsg, CMSG_SIGNER_CERT_INFO_PARAM, 0, NULL, &cb_info) &&
-	    cb_info == sizeof(signer_info) &&
-	    CryptMsgGetParam(hMsg, CMSG_SIGNER_CERT_INFO_PARAM, 0,
-	                     &signer_info, &cb_info))
+	/* CMSG_SIGNER_CERT_INFO_PARAM returns a CERT_INFO followed by the issuer
+	 * and serial bytes it points at, so the buffer is larger than the struct
+	 * and has to be sized by the API rather than assumed to be one. */
+	if (!CryptMsgGetParam(hMsg, CMSG_SIGNER_CERT_INFO_PARAM, 0, NULL, &cb_info) ||
+	    cb_info < sizeof(CERT_INFO))
+		goto cleanup;
+
+	signer_info = (PCERT_INFO)malloc(cb_info);
+	if (signer_info == NULL)
+		goto cleanup;
+
+	if (CryptMsgGetParam(hMsg, CMSG_SIGNER_CERT_INFO_PARAM, 0, signer_info, &cb_info))
 	{
+		/* CERT_FIND_SUBJECT_CERT takes a whole CERT_INFO and matches issuer
+		 * AND serial number, so no separate serial comparison is needed.
+		 * Handing it just the issuer blob made crypt32 read a serial number
+		 * from whatever followed that blob in memory. */
 		PCCERT_CONTEXT match = CertFindCertificateInStore(
 			hMsgStore, X509_ASN_ENCODING | PKCS_7_ASN_ENCODING,
-			0, CERT_FIND_SUBJECT_CERT, (const void *)&signer_info.Issuer, NULL);
+			0, CERT_FIND_SUBJECT_CERT, (const void *)signer_info, NULL);
 		if (match != NULL)
 		{
-			if (match->pCertInfo != NULL &&
-			    match->pCertInfo->SerialNumber.cbData == signer_info.SerialNumber.cbData &&
-			    memcmp(match->pCertInfo->SerialNumber.pbData,
-			           signer_info.SerialNumber.pbData,
-			           match->pCertInfo->SerialNumber.cbData) == 0)
-				signer = CertDuplicateCertificateContext(match);
+			signer = CertDuplicateCertificateContext(match);
 			CertFreeCertificateContext(match);
 		}
 	}
 
 cleanup:
+	if (signer_info != NULL)
+		free(signer_info);
 	if (hMsg != NULL)
 		CryptMsgClose(hMsg);
 	CertCloseStore(hMsgStore, 0);
@@ -461,10 +486,11 @@ pf_capi_get_signer_callback(PVOID pvGetArg, DWORD dwCertEncodingType,
 	if (pSignerId == NULL || hMsgCertStore == NULL)
 		return NULL;
 
+	/* As above: the find criterion is the whole CERT_INFO, not its issuer. */
 	match = CertFindCertificateInStore(hMsgCertStore,
 	                                   X509_ASN_ENCODING | PKCS_7_ASN_ENCODING,
 	                                   0, CERT_FIND_SUBJECT_CERT,
-	                                   (const void *)&pSignerId->Issuer, NULL);
+	                                   (const void *)pSignerId, NULL);
 	if (match == NULL)
 		return NULL;
 
@@ -490,7 +516,6 @@ pf_capi_verifier_check_digest(fz_context *ctx, pdf_pkcs7_verifier *verifier,
 	fz_buffer *content = NULL;
 	const unsigned char *data = NULL;
 	size_t data_len = 0;
-	DWORD decoded_len = 0;
 	CRYPT_VERIFY_MESSAGE_PARA para;
 	pf_capi_verifier *ov = (pf_capi_verifier *)verifier;
 
@@ -501,7 +526,9 @@ pf_capi_verifier_check_digest(fz_context *ctx, pdf_pkcs7_verifier *verifier,
 		fz_try(ctx)
 		{
 			content = fz_read_all(ctx, in, 0);
-			data = fz_buffer_storage(ctx, content, &data_len);
+			/* Same contract as in the signer: the length is the return value,
+			 * the pointer comes back through the out-parameter. */
+			data_len = fz_buffer_storage(ctx, content, (unsigned char **)&data);
 		}
 		fz_catch(ctx)
 		{
@@ -516,11 +543,25 @@ pf_capi_verifier_check_digest(fz_context *ctx, pdf_pkcs7_verifier *verifier,
 	para.pfnGetSignerCertificate = pf_capi_get_signer_callback;
 	para.pvGetArg = ov;
 
-	if (CryptVerifyMessageSignature(&para, 0, (const BYTE *)signature,
-	                                (DWORD)signature_len,
-	                                data != NULL ? (BYTE *)data : NULL,
-	                                &decoded_len, NULL))
-		result = PDF_SIGNATURE_ERROR_OKAY;
+	/* A PDF signature is DETACHED: the CMS carries no content and the signed
+	 * bytes are the document's own byte range. CryptVerifyMessageSignature
+	 * expects an embedded-content message and treats the buffer it is given as
+	 * an output for the decoded content, so it can never verify a PDF
+	 * signature — and pointing it at the document's read-only bytes with a
+	 * declared capacity of zero is how this faulted. The detached entry point
+	 * takes the signed content as input, which is what is actually meant. */
+	{
+		const BYTE *rgpb[1];
+		DWORD rgcb[1];
+
+		rgpb[0] = data != NULL ? (const BYTE *)data : (const BYTE *)"";
+		rgcb[0] = (DWORD)data_len;
+
+		if (CryptVerifyDetachedMessageSignature(
+			    &para, 0, (const BYTE *)signature, (DWORD)signature_len,
+			    1, rgpb, rgcb, NULL))
+			result = PDF_SIGNATURE_ERROR_OKAY;
+	}
 
 	fz_drop_buffer(ctx, content);
 	return result;
@@ -559,8 +600,13 @@ pf_capi_verifier_check_certificate(fz_context *ctx, pdf_pkcs7_verifier *verifier
 	memset(&policy_status, 0, sizeof(policy_status));
 	policy_status.cbSize = sizeof(policy_status);
 
+	/* CertVerifyCertificateChainPolicy returns TRUE when the CHECK RAN, not
+	 * when the chain passed; the verdict is in policy_status.dwError. Reading
+	 * the return value as the verdict made every certificate trusted,
+	 * including a self-signed one that no store has ever heard of. */
 	if (CertVerifyCertificateChainPolicy(CERT_CHAIN_POLICY_BASE, chain,
-	                                     &policy_para, &policy_status))
+	                                     &policy_para, &policy_status) &&
+	    policy_status.dwError == 0)
 	{
 		result = PDF_SIGNATURE_ERROR_OKAY;
 	}

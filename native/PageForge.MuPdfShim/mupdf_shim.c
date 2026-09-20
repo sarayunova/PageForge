@@ -6400,9 +6400,27 @@ PF_EXPORT int pf_list_signatures(pf_context context, pf_document document,
 							pdf_pkcs7_distinguished_name *dn = NULL;
 							char *signer_desc = NULL;
 
-							derr = pdf_check_widget_digest(ctx, verifier, widget);
-							cerr = pdf_check_widget_certificate(ctx, verifier, widget);
-							dn = pdf_signature_get_widget_signatory(ctx, verifier, widget);
+							/* A signature whose /Contents no longer parses -
+							 * which is exactly what a tampered or fully
+							 * rewritten document looks like - makes MuPDF
+							 * throw. That must stay a verdict about THIS
+							 * signature, not an error that abandons the whole
+							 * listing: a caller told "the operation failed"
+							 * learns nothing, while a caller told "this
+							 * signature cannot be verified" has its answer. */
+							fz_try(ctx)
+							{
+								derr = pdf_check_widget_digest(ctx, verifier, widget);
+								cerr = pdf_check_widget_certificate(ctx, verifier, widget);
+								dn = pdf_signature_get_widget_signatory(ctx, verifier, widget);
+							}
+							fz_catch(ctx)
+							{
+								fz_ignore_error(ctx);
+								derr = PDF_SIGNATURE_ERROR_UNKNOWN;
+								cerr = PDF_SIGNATURE_ERROR_UNKNOWN;
+								dn = NULL;
+							}
 							if (dn != NULL)
 							{
 								signer_desc = pdf_signature_format_distinguished_name(ctx, dn);
