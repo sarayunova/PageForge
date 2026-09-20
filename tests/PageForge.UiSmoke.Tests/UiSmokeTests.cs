@@ -824,12 +824,19 @@ public class UiSmokeTests
     {
         IntPtr dialog = await PageForgeApp.WaitForDialogAsync("open");
         PageForgeApp.TypeFilenameAndConfirm(dialog, path);
+        await PageForgeApp.WaitForDialogToCloseAsync(dialog);
     }
 
     private static async Task SaveViaDialog(PageForgeApp app, string path)
     {
         IntPtr dialog = await PageForgeApp.WaitForDialogAsync("save");
         PageForgeApp.TypeFilenameAndConfirm(dialog, path);
+
+        // The dialog closing is the only evidence that confirming it did
+        // anything. Without this the test walked on while the dialog was still
+        // open, and reported "the file was not written" - true, but describing a
+        // save that had never been asked for.
+        await PageForgeApp.WaitForDialogToCloseAsync(dialog);
     }
 
     private static string ReorderedPath()

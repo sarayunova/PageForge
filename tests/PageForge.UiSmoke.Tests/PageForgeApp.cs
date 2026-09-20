@@ -430,10 +430,27 @@ internal sealed class PageForgeApp : IAsyncDisposable
 
         if (target == IntPtr.Zero)
         {
-            throw new InvalidOperationException("File-name field not found in the dialog.");
+            throw new InvalidOperationException(
+                "File-name field not found in the dialog. Children were:" +
+                Environment.NewLine + Native.DescribeChildren(dialog));
         }
 
         Native.SendMessage(target, Native.WmSetText, IntPtr.Zero, path);
+
+        // Check the text actually took, rather than assuming SendMessage did what
+        // was asked. It did not on the CI image: the helper found a control, set
+        // nothing anyone could see, clicked OK, and the dialog quietly stayed put
+        // with no file written and no error anywhere - the failure that made
+        // reorder-and-save untestable in CI (issue #6). Judging the postcondition
+        // instead of the call is the same correction the MinIO bucket race needed.
+        string readBack = Native.GetControlText(target);
+        if (readBack != path)
+        {
+            throw new InvalidOperationException(
+                $"Setting the file name did not take. Wanted '{path}', the field reads " +
+                $"'{readBack}'. The dialog's children were:" +
+                Environment.NewLine + Native.DescribeChildren(dialog));
+        }
 
         IntPtr okButton = Native.GetDlgItem(dialog, idOk);
         if (okButton == IntPtr.Zero)
@@ -443,16 +460,106 @@ internal sealed class PageForgeApp : IAsyncDisposable
 
         if (okButton == IntPtr.Zero)
         {
-            throw new InvalidOperationException("OK button not found in the dialog.");
+            throw new InvalidOperationException(
+                "OK button not found in the dialog. Children were:" +
+                Environment.NewLine + Native.DescribeChildren(dialog));
         }
 
-        Native.SendMessage(okButton, Native.BmClick, IntPtr.Zero, IntPtr.Zero);
+        // Two ways of pressing it, because they fail on different dialogs. A
+        // WM_COMMAND to the DIALOG is how a real button press reaches it, and the
+        // modern IFileDialog acts on that; BM_CLICK to the button is what the
+        // classic dialog responds to. Sending both is harmless - the first to
+        // work closes the dialog and the second lands on a dead handle.
+        Native.SendMessage(
+            dialog,
+            Native.WmCommand,
+            new IntPtr((Native.BnClicked << 16) | (idOk & 0xFFFF)),
+            okButton);
+
+        if (Native.IsWindow(dialog))
+        {
+            Native.SendMessage(okButton, Native.BmClick, IntPtr.Zero, IntPtr.Zero);
+        }
+    }
+
+    /// <summary>
+    /// Waits for a dialog to close, which is the only evidence that confirming it
+    /// did anything.
+    ///
+    /// Without this the caller carries on against a dialog still sitting on
+    /// screen, and every later assertion describes a state the app never left.
+    /// </summary>
+    public static async Task WaitForDialogToCloseAsync(IntPtr dialog, TimeSpan timeout = default)
+    {
+        timeout = timeout == default ? TimeSpan.FromSeconds(10) : timeout;
+        DateTime deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            if (!Native.IsWindow(dialog) || !Native.IsWindowVisible(dialog))
+            {
+                return;
+            }
+
+            await Task.Delay(100);
+        }
+
+        throw new TimeoutException(
+            "The file dialog did not close after confirming it, so the file name was " +
+            "never accepted. The dialog's children were:" +
+            Environment.NewLine + Native.DescribeChildren(dialog));
     }
 
     private static class Native
     {
         public const int WmSetText = 0x000C;
+        public const int WmGetText = 0x000D;
+        public const int WmGetTextLength = 0x000E;
+        public const int WmCommand = 0x0111;
         public const int BmClick = 0x00F5;
+        public const int BnClicked = 0;
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool IsWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        public static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, StringBuilder lParam);
+
+        /// <summary>Reads a control's text, for checking that setting it worked.</summary>
+        public static string GetControlText(IntPtr control)
+        {
+            int length = (int)SendMessage(control, WmGetTextLength, IntPtr.Zero, IntPtr.Zero);
+            if (length <= 0)
+            {
+                return string.Empty;
+            }
+
+            var buffer = new StringBuilder(length + 1);
+            _ = SendMessage(control, WmGetText, new IntPtr(buffer.Capacity), buffer);
+            return buffer.ToString();
+        }
+
+        /// <summary>Every child of the dialog with its class, control id and text.
+        /// This is what a failure needs to be diagnosable on a machine nobody can
+        /// open: the classic control ids are an assumption about the dialog's
+        /// shape, and an image presenting a different one should say so rather
+        /// than silently do nothing.</summary>
+        public static string DescribeChildren(IntPtr parent)
+        {
+            var description = new StringBuilder();
+            EnumChildWindows(parent, (hWnd, lParam) =>
+            {
+                var className = new StringBuilder(128);
+                _ = GetClassName(hWnd, className, className.Capacity);
+                var text = new StringBuilder(128);
+                _ = GetWindowText(hWnd, text, text.Capacity);
+                description.AppendLine(
+                    $"  id={GetDlgCtrlID(hWnd)} class={className} " +
+                    $"visible={IsWindowVisible(hWnd)} text='{text}'");
+                return true;
+            }, IntPtr.Zero);
+            return description.ToString();
+        }
 
         public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
