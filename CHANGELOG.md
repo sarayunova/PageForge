@@ -29,6 +29,16 @@ version heading when the tag is pushed.
   encrypted document refusing a wrong password and yielding no extractable text
   until it is authenticated.
 - Accessibility pass against WCAG 2.1 AA on the WPF proof shell.
+- **Sign…** and **Signatures** commands in the desktop shell (FR-SEC-03). Sign
+  asks for a PKCS#12 certificate, its password, a field name and a page, then
+  writes a signed *copy* — the open document is never modified, so a failed
+  signing run cannot damage it. Signatures reports each field's verdict,
+  keeping "the document changed after signing" separate from "the certificate
+  is not trusted": the second is the normal outcome for a self-signed
+  certificate and must not read as tampering. The shell does not reopen the
+  signed copy, because the next ordinary save would rewrite it in full and void
+  the signature. Placing the signature by dragging it on the page is not built
+  yet; it goes in a fixed box near the bottom-left of the chosen page.
 - Local digital signing and verification reachable from the engine (FR-SEC-03):
   `SignAsync`, `SaveIncrementalAsync` and `ListSignaturesAsync` on `IPdfEngine`,
   over the existing native signer. Signing uses a PKCS#12 credential through the
@@ -63,11 +73,6 @@ version heading when the tag is pushed.
 
 ### Not in this release, despite work existing for it
 
-- **Local PDF digital signing and verification (FR-SEC-03), from the user
-  interface.** The engine now signs and verifies for real — see below — but the
-  desktop shell still has no sign or verify command, so a user of the beta
-  cannot reach it. (The *hosted* send-for-signature workflow below is a
-  different requirement, FR-ESIGN, and does work.)
 - **Localized UI strings (TRD §6).** Strings are literals in XAML and code
   rather than resource files. English only, which matches the v1 plan, but the
   externalization the requirement asks for has not been done.

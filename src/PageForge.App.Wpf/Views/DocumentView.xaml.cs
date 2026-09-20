@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // This file is part of PageForge. See LICENSE for the full license text.
 
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -1334,6 +1335,90 @@ public partial class DocumentView : UserControl
         catch (Exception ex)
         {
             MessageBox.Show($"Protect failed:\n{ex.Message}", "PageForge", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private async void Sign_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm is null)
+        {
+            return;
+        }
+
+        var dialog = new SignDialog(_vm.PageCount, _vm.CurrentPageIndex)
+        {
+            Owner = Window.GetWindow(this),
+        };
+
+        // The certificate is asked for BEFORE the destination: a user who does
+        // not have a certificate to hand should not first be made to name a file
+        // that then never gets written.
+        if (dialog.ShowDialog() != true || dialog.Request is null)
+        {
+            return;
+        }
+
+        string? path = AskSavePath("Signed.pdf");
+        if (path is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _vm.RunSignAsync(dialog.PageIndex, dialog.Request, path);
+
+            // Deliberately NOT opening the signed copy: reopening it here would
+            // make the signed file the edited document, and the next ordinary
+            // save would rewrite it in full and silently void the signature.
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"Signing failed:\n{ex.Message}", "PageForge",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private async void Signatures_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm is null)
+        {
+            return;
+        }
+
+        try
+        {
+            IReadOnlyList<PdfSignature> signatures = await _vm.RunListSignaturesAsync();
+
+            if (signatures.Count == 0)
+            {
+                MessageBox.Show(
+                    "This document carries no signature fields.", "PageForge — signatures",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var report = new StringBuilder();
+            foreach (PdfSignature signature in signatures)
+            {
+                report.Append('\'').Append(signature.FieldName).Append("' on page ")
+                      .Append(signature.PageIndex + 1).Append(": ")
+                      .AppendLine(PdfSigningService.Describe(signature));
+            }
+
+            // A tampered document is the case worth flagging, so the icon
+            // follows the worst verdict rather than always saying "information".
+            bool anyBroken = signatures.Any(s => s.IsSigned && !s.IsDigestIntact);
+            MessageBox.Show(
+                report.ToString(), "PageForge — signatures", MessageBoxButton.OK,
+                anyBroken ? MessageBoxImage.Warning : MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"Checking signatures failed:\n{ex.Message}", "PageForge",
+                MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 

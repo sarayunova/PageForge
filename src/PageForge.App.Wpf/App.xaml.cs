@@ -94,6 +94,7 @@ public partial class App : Application
             RunObjectGeometryProof();
             await RunFormGeometryProofAsync();
             await RunRecoveryBufferProofAsync();
+            await RunSigningProofAsync();
             Shutdown();
             return;
         }
@@ -435,6 +436,133 @@ public partial class App : Application
     /// and it is invisible in any single-instance test, which is exactly the kind
     /// of gap this project keeps finding after the fact.
     /// </summary>
+    /// <summary>
+    /// FR-SEC-03 through the shell's own path: the view model signs a copy and
+    /// then reads the verdict back. The fidelity suite proves the cryptography
+    /// against the engine; what this proves is that the command a user presses
+    /// reaches it — the gap that let the CHANGELOG claim signing for a release
+    /// in which no one could sign anything.
+    ///
+    /// The certificate is generated here and thrown away. A self-signed one is
+    /// the right instrument as well as the convenient one: it must verify as
+    /// intact and as NOT trusted, and a verifier that cannot tell those apart
+    /// fails this proof.
+    /// </summary>
+    private static async Task RunSigningProofAsync()
+    {
+        string? fixture = FindCorpusDir() is { } dir
+            ? Path.Combine(dir, "contract-multipage.pdf")
+            : null;
+        if (fixture is null || !File.Exists(fixture))
+        {
+            Trace("signing proof: corpus fixture not found.");
+            FailProof(2);
+            return;
+        }
+
+        string certificate = Path.Combine(Path.GetTempPath(), $"pageforge-smoke-{Guid.NewGuid():N}.pfx");
+        string signed = Path.Combine(Path.GetTempPath(), $"pageforge-smoke-signed-{Guid.NewGuid():N}.pdf");
+        const string password = "smoke";
+
+        try
+        {
+            using (var key = System.Security.Cryptography.RSA.Create(2048))
+            {
+                var request = new System.Security.Cryptography.X509Certificates.CertificateRequest(
+                    "CN=PageForge Smoke Signer, O=LiVi Software Company",
+                    key,
+                    System.Security.Cryptography.HashAlgorithmName.SHA256,
+                    System.Security.Cryptography.RSASignaturePadding.Pkcs1);
+                DateTimeOffset now = DateTimeOffset.UtcNow;
+                using System.Security.Cryptography.X509Certificates.X509Certificate2 cert =
+                    request.CreateSelfSigned(now.AddDays(-1), now.AddDays(30));
+                await File.WriteAllBytesAsync(
+                    certificate,
+                    cert.Export(System.Security.Cryptography.X509Certificates.X509ContentType.Pfx, password));
+            }
+
+            await using MuPdfEngine engine = MuPdfEngine.Create();
+            await engine.OpenAsync(fixture);
+
+            await PdfSigningService.SignAsync(
+                engine,
+                0,
+                new PdfSignatureRequest(
+                    "SmokeSignature1",
+                    Views.SignDialog.DefaultBounds,
+                    certificate,
+                    password,
+                    Reason: "Smoke proof"),
+                signed);
+
+            if (!File.Exists(signed))
+            {
+                Trace("signing proof: the signed copy was not written.");
+                FailProof();
+                return;
+            }
+
+            await using MuPdfEngine verifier = MuPdfEngine.Create();
+            await verifier.OpenAsync(signed);
+            IReadOnlyList<PdfSignature> signatures = await PdfSigningService.ListAsync(verifier);
+
+            if (signatures.Count != 1)
+            {
+                Trace($"signing proof: expected one signature in the signed copy, found {signatures.Count}.");
+                FailProof();
+                return;
+            }
+
+            PdfSignature signature = signatures[0];
+            if (!signature.IsSigned || !signature.IsDigestIntact)
+            {
+                Trace($"signing proof: the just-signed document does not verify " +
+                      $"(signed={signature.IsSigned}, digest='{signature.DigestStatus}'). " +
+                      "Nothing changed after signing, so the digest covers the wrong bytes.");
+                FailProof();
+                return;
+            }
+
+            if (signature.IsTrusted)
+            {
+                Trace("signing proof: an untrusted self-signed certificate reported as trusted, " +
+                      "so the chain is not being validated and no certificate would be rejected.");
+                FailProof();
+                return;
+            }
+
+            Trace("signing proof: the shell's signing path writes a signed copy, the signature " +
+                  "verifies as intact, and its untrusted certificate is reported as untrusted.");
+        }
+        catch (Exception ex)
+        {
+            Trace($"signing proof: threw {ex.GetType().Name}: {ex.Message}");
+            FailProof();
+        }
+        finally
+        {
+            TryDeleteProofFile(certificate);
+            TryDeleteProofFile(signed);
+        }
+    }
+
+    private static void TryDeleteProofFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+    }
+
     private static async Task RunRecoveryBufferProofAsync()
     {
         string? fixture = FindCorpusDir() is { } dir

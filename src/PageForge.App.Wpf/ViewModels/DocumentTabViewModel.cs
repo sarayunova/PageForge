@@ -254,6 +254,10 @@ public sealed class DocumentTabViewModel : ObservableObject
 
     public int PageCount => _doc.PageCount;
 
+    /// <summary>Zero-based page the viewer is currently on; the sensible default for
+    /// any command that acts on "this page".</summary>
+    public int CurrentPageIndex => _doc.CurrentPage;
+
     public string PageIndicator => $"{_doc.CurrentPage + 1} / {Math.Max(1, _doc.PageCount)}";
 
     public double Zoom => _doc.Zoom;
@@ -1084,6 +1088,48 @@ public sealed class DocumentTabViewModel : ObservableObject
                 : options.Method == PdfEncryptionMethod.Aes128 ? "AES-128"
                 : options.Method == PdfEncryptionMethod.Rc4_128 ? "RC4-128" : "RC4-40";
             DocumentStatus = $"protected: saved {Path.GetFileName(outputPath)} ({methodName}) — the open password unlocks it";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    /// <summary>Signs the open document on <paramref name="pageIndex"/> and writes the
+    /// signed copy to <paramref name="outputPath"/> (FR-SEC-03). The open document is
+    /// left untouched on disk, and the copy is written incrementally so that any
+    /// signature already in the document stays valid.</summary>
+    public async Task RunSignAsync(
+        int pageIndex, PdfSignatureRequest request, string outputPath, CancellationToken ct = default)
+    {
+        GuardPageCount();
+        IsBusy = true;
+        try
+        {
+            await PdfSigningService.SignAsync(_doc.Engine, pageIndex, request, outputPath, ct)
+                .ConfigureAwait(false);
+            DocumentStatus =
+                $"signed: saved {Path.GetFileName(outputPath)} — '{request.FieldName}' on page {pageIndex + 1}";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    /// <summary>Lists the signature fields of the open document with their verification
+    /// verdicts (FR-SEC-03). Non-mutating.</summary>
+    public async Task<IReadOnlyList<PdfSignature>> RunListSignaturesAsync(CancellationToken ct = default)
+    {
+        IsBusy = true;
+        try
+        {
+            IReadOnlyList<PdfSignature> signatures =
+                await PdfSigningService.ListAsync(_doc.Engine, ct).ConfigureAwait(false);
+            DocumentStatus = signatures.Count == 0
+                ? "signatures: this document has none"
+                : $"signatures: {signatures.Count} field(s) checked";
+            return signatures;
         }
         finally
         {

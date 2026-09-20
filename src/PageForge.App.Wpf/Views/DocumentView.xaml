@@ -355,6 +355,22 @@
                                 <TextBlock Text="Protect…" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
+                        <Button AutomationProperties.Name="Sign document" Click="Sign_Click"
+                                Padding="10,3"
+                                ToolTip="Sign a copy with a certificate you hold, on this machine (FR-SEC-03)">
+                            <StackPanel Orientation="Horizontal">
+                                <ui:SymbolIcon Symbol="Signature24" FontSize="14" Margin="0,0,6,0" />
+                                <TextBlock Text="Sign…" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button AutomationProperties.Name="Check signatures" Click="Signatures_Click"
+                                Padding="10,3"
+                                ToolTip="Check the signatures this document already carries (FR-SEC-03)">
+                            <StackPanel Orientation="Horizontal">
+                                <ui:SymbolIcon Symbol="CheckmarkCircle24" FontSize="14" Margin="0,0,6,0" />
+                                <TextBlock Text="Signatures" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
                     </StackPanel>
                 </Grid>
             </Border>
