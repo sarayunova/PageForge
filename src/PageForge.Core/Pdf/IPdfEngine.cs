@@ -35,6 +35,19 @@ public interface IPdfEngine : IAsyncDisposable
     ValueTask<PdfPageRegion> GetPageSizeAsync(int pageIndex, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Whether the open document has edits that have not been written to disk.
+    ///
+    /// Required by TRD §6 ("the local application must not lose unsaved edits on
+    /// crash"), which first needs something able to answer "is there anything to
+    /// lose". Deliberately a question asked of the engine rather than a flag the
+    /// callers maintain: a dozen operations on this interface mutate the
+    /// document, and a thirteenth added later would silently go uncounted. The
+    /// MuPDF implementation forwards to the library's own dirty flag, so it
+    /// cannot disagree with what was actually done.
+    /// </summary>
+    ValueTask<bool> HasUnsavedChangesAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Renders a single page to an in-memory PNG bitmap at the given DPI
     /// (72 = 1:1 PDF points, 300 = print-quality). Futures phases will tile
     /// this for FR-VIEW-01's 2,000-page lazy rendering.

@@ -58,6 +58,11 @@ PF_EXPORT void pf_close_document(pf_context context, pf_document document);
 // Writes the page count into *out_count. Returns PF_OK/PF_ERR.
 PF_EXPORT int pf_page_count(pf_context context, pf_document document, int *out_count);
 
+// Whether the open document has edits not yet written out. Answered by MuPDF
+// itself (pdf_has_unsaved_changes) rather than tracked per mutating call, so it
+// cannot drift from what the library actually did.
+PF_EXPORT int pf_has_unsaved_changes(pf_context context, pf_document document, int *out_dirty);
+
 // Writes the page dimensions (points, 0-based page_index) into the outs.
 PF_EXPORT int pf_page_size(pf_context context, pf_document document, int page_index,
                  float *out_width_pt, float *out_height_pt);

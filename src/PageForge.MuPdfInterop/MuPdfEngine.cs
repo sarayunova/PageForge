@@ -112,6 +112,30 @@ public sealed class MuPdfEngine : IPdfEngine
         return new PdfPageRegion(w, h);
     }
 
+    public ValueTask<bool> HasUnsavedChangesAsync(CancellationToken cancellationToken = default)
+        => HasUnsavedChangesCoreAsync(cancellationToken);
+
+    private async ValueTask<bool> HasUnsavedChangesCoreAsync(CancellationToken ct)
+    {
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            RequireDocument();
+            if (MuPdfShimBindings.pf_has_unsaved_changes(_context, _document, out int dirty)
+                != MuPdfShimBindings.PfOk)
+            {
+                throw new InvalidOperationException(
+                    $"Failed to read the document's unsaved-changes flag: {LastError()}");
+            }
+
+            return dirty != 0;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     public ValueTask<RenderedPdfPage> RenderPageToPngAsync(int pageIndex, float dpi, CancellationToken cancellationToken = default)
         => RenderCoreAsync(pageIndex, dpi, cancellationToken);
 

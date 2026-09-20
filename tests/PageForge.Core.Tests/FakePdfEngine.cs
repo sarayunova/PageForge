@@ -358,6 +358,18 @@ internal sealed class FakePdfEngine : IPdfEngine
         return ValueTask.FromResult(new PdfPageRegion(595, 842));
     }
 
+    /// <summary>Stands in for the real engine's dirty flag so Core tests can
+    /// exercise callers that ask before prompting or autosaving. Set it directly;
+    /// this fake does not try to model which operations dirty a document, because
+    /// the real answer comes from MuPDF rather than from bookkeeping.</summary>
+    public bool Dirty { get; set; }
+
+    public ValueTask<bool> HasUnsavedChangesAsync(CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        return ValueTask.FromResult(Dirty);
+    }
+
     public async ValueTask<RenderedPdfPage> RenderPageToPngAsync(int pageIndex, float dpi, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);

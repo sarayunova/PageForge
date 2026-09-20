@@ -37,6 +37,12 @@ internal static class MuPdfShimBindings
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     internal static extern int pf_page_count(nint context, nint document, out int count);
 
+    /// <summary>Whether the open document has edits not yet written out. Answered
+    /// by MuPDF itself rather than tracked per mutating call, so it cannot drift
+    /// from what the library actually did.</summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int pf_has_unsaved_changes(nint context, nint document, out int dirty);
+
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     internal static extern int pf_page_size(nint context, nint document, int pageIndex, out float widthPt, out float heightPt);
 
