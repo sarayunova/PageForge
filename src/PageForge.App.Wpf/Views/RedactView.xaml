@@ -65,6 +65,14 @@
                              the rows beside it cannot disagree about what is marked. -->
                         <ItemsControl x:Name="RegionsPanel"
                                       ItemsSource="{Binding Regions, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                            <!-- Name the list ITEM, not only the text inside it. An
+                                 unnamed item falls back to ToString() on the view
+                                 model, so a screen reader reads out the class name. -->
+                            <ItemsControl.ItemContainerStyle>
+                                <Style TargetType="ContentPresenter">
+                                    <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
+                                </Style>
+                            </ItemsControl.ItemContainerStyle>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <TextBlock Text="{Binding Label}" Margin="8,6"
@@ -107,6 +115,8 @@
                             <Style TargetType="ContentPresenter">
                                 <Setter Property="Canvas.Left" Value="{Binding Left}" />
                                 <Setter Property="Canvas.Top" Value="{Binding Top}" />
+                                <!-- Without this the item announces ToString() on the view model, i.e. the class name. -->
+                                <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
                             </Style>
                         </ItemsControl.ItemContainerStyle>
                         <ItemsControl.ItemTemplate>

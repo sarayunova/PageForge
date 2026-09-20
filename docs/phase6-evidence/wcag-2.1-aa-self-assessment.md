@@ -1,9 +1,11 @@
 # WCAG 2.1 AA — Documented self-assessment of the desktop shell
 
-**Date of assessment:** 2026-09-12
+**Date of assessment:** 2026-09-12, **re-verified 2026-09-20** — see
+"Re-verification" immediately below, which supersedes individual ratings.
 **Commit assessed:** `e08fe07ccb5c36f3ab40a203196134067cf5b824` (baseline), with the
 remediation documented in "Remediation log" below applied in the same working
 session (commit that ships this file supersedes the baseline).
+**Commit re-verified against:** `56f975f`.
 **Scope:** `src/PageForge.App.Wpf` — the shipping shell (TSD §12.1). Screens:
 `MainWindow`, `DocumentView` (main surface), `FormFillView`, `ObjectEditView`,
 `RedactView`, `ProtectDialog`, and the two code-built dialogs
@@ -13,6 +15,49 @@ calculation for every explicit brush, the existing UI-Automation inventory
 (`tests/PageForge.UiSmoke.Tests`), and a real end-to-end run of that suite against
 the remediated build. This is a documented **self-assessment**, not a third-party
 audit. Screen-reader verification with a live AT session was not performed.
+
+## Re-verification (2026-09-20, commit `56f975f`)
+
+This document was written against a commit that predates phases U0–U4, the render
+fix and the conversion of all three mode surfaces. **The rule in the session note
+is that accessibility is a gate on every UI phase, and it was not applied for five
+of them.** That is the first finding: the gate existed and was skipped.
+
+What changed on re-verification:
+
+- **1.3.1 and 4.1.2**: the stated reason for both PARTIAL ratings — "form-field
+  cards and redaction-region rows are still code-built `StackPanel` children, not
+  real list items" — **is resolved.** Both are now bound `ItemsControl`
+  collections. Confirmed by reading the live UIA tree rather than by inspecting
+  the XAML: each card is a `ControlType.DataItem` inside a `ControlType.List`.
+  **4.1.2 becomes PASS** (this was its only remaining gap). **1.3.1 stays
+  PARTIAL**, for the heading-level reason alone, which is a WPF .NET 8 platform
+  limit and unchanged.
+
+- **A regression was introduced by that same conversion and is fixed here.** A
+  bound item with no name of its own falls back to `ToString()` on the view
+  model, so every form-field card announced itself to a screen reader as
+  `PageForge.App.Wpf.ViewModels.FormFieldCardViewModel`. The code-built card it
+  replaced carried `{field} ({kind})`. Every bound `ItemsControl` in the shell had
+  the same defect — form cards, form-field outlines, redaction rows and outlines,
+  object boxes — and each now names its container from the view model's existing
+  `AccessibleName`. This is the cost of converting UI without re-reading this
+  document, and it is why the check below was added.
+
+- **Locked in as a test.** `UiSmokeTests.Form_field_cards_write_their_value_to_the_document`
+  now asserts the card is a `DataItem` inside a `List` **and** that its name is
+  `FullName (Text)`. A prose gate is what five phases skipped; an assertion in a
+  CI lane is not skippable.
+
+- **1.4.11 re-checked, not assumed.** The selection and outline strokes are the
+  same colours the baseline measured, but the ratios were recomputed rather than
+  inherited: `#2b8cff` on white = **3.33:1** (≥3:1, passes), `#1f74c6` on white =
+  **4.80:1**. The translucent fills added with the object overlay (`#102B8CFF`,
+  `#222B8CFF`) are fills behind a conforming stroke and carry no contrast
+  requirement of their own. **1.4.11 stays PASS.**
+
+Not re-verified, and still open from the baseline: screen-reader verification with
+a live AT session, which has never been performed here.
 
 ## Conformance statement (honest summary)
 
@@ -26,8 +71,7 @@ contrast FAIL measured ≥4.53:1, text resizing is supported via a
 `PerMonitorV2` manifest (up to the OS 225% text-size limit), toolbar captions
 are promoted to real "Heading" control elements via a custom automation peer, and
 status changes are announced via `LiveSetting`. Remaining gaps are structural and
-documented as PARTIAL per criterion: form-field cards and redaction-region rows
-are still code-built `StackPanel` children rather than real list items, heading
+documented as PARTIAL per criterion: heading
 semantics cannot emit the native UIA `HeadingLevel` property on WPF .NET 8 (no
 server-side heading API exists there; it arrives in .NET 10 — the WinUI 3 port in
 `src/PageForge.App` should use `AutomationProperties.HeadingLevel`), and error
@@ -72,8 +116,10 @@ a desktop application.
   (`controls:HeadingTextBlock`, `DocumentView.xaml`): a custom automation peer
   promotes each caption to a "Heading" control-element class, and its accessible
   name is the caption text.
-- Remaining: form-field cards and redaction-region rows are still code-built
-  `StackPanel` children, not real list items; and, as WPF .NET 8 ships no
+- Form-field cards and redaction-region rows ARE real list items as of
+  2026-09-20: both are bound collections, and the UIA tree reports each as a
+  DataItem inside a List carrying its own name. Asserted in UiSmoke.
+- Remaining: as WPF .NET 8 ships no
   server-side heading API (no override hook for the UIA `HeadingLevel`
   property; `AutomationProperties.HeadingLevel` is .NET 10+), the heading level
   of the toolbar captions cannot be emitted natively — assistive tech sees them
@@ -216,13 +262,15 @@ the reorder/object/redact hint lines describe the keyboard path.
 Destructive Apply in RedactView confirms via `MessageBox`; form/protect
 operations have no in-flow recovery.
 
-### 4.1.1 Parsing (A), 4.1.2 Name Role Value (A) — **PARTIAL**
+### 4.1.1 Parsing (A), 4.1.2 Name Role Value (A) — **PASS** (re-verified 2026-09-20)
 
 Every toolbar icon control, every page surface, every tab close button, and every
 dynamic input carries a proper name/role/value, and the `PageList` items are now
-`Focusable="True"` so the main page surface is arrow-navigable. Remaining:
-form-field cards and redaction-region rows are still plain `StackPanel` children
-(role = group/aggregate instead of list item), tracked alongside 1.3.1.
+`Focusable="True"` so the main page surface is arrow-navigable. The
+former gap - form-field cards and redaction-region rows being plain `StackPanel`
+children with a group role - is closed: they are bound collections now, and the
+UIA tree reports each as a DataItem inside a List with its own name. Verified by
+reading the live tree, and asserted in UiSmoke so it cannot regress silently.
 
 ### 4.1.3 Status Messages (AA) — **PASS**
 

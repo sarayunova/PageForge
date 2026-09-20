@@ -53,6 +53,8 @@
                         <Style TargetType="ContentPresenter">
                             <Setter Property="Canvas.Left" Value="{Binding Left}" />
                             <Setter Property="Canvas.Top" Value="{Binding Top}" />
+                            <!-- Without this the item announces ToString() on the view model, i.e. the class name. -->
+                            <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleName}" />
                         </Style>
                     </ItemsControl.ItemContainerStyle>
                     <ItemsControl.ItemTemplate>
