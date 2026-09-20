@@ -932,3 +932,49 @@ Every other finding this week came from looking at running behaviour - the UIA
 tree, the rendered pixels, the bytes on disk. This one came from reading two
 short documents that the project's own conventions file says to read first. Both
 kinds of looking were overdue, and the documents were the cheaper of the two.
+
+## 17. Crash recovery, stage one: knowing there is something to lose
+
+TRD §6 requires that the application not lose unsaved edits on a crash, and
+calls an autosave/recovery buffer *required*. §16 recorded it as unmet. Starting
+it turned up a smaller and more basic problem than the missing buffer: **the
+codebase had no dirty tracking of any kind, in any layer.** No `IsDirty`, no
+modified flag, nothing. There was no way to answer "is there anything to lose",
+so there was nothing a buffer could be built on.
+
+### The design decision worth keeping
+
+Twelve operations on `IPdfEngine` mutate the document. Marking dirty at each call
+site is the shape of the defects this note keeps recording - a concern spread
+across many places, where the thirteenth operation added later is forgotten and
+the failure is silent. That is the same root cause as three separate Y flips
+(§8, §9) and four blank surfaces (§8).
+
+So the flag is not tracked, it is **asked for**: `pdf_has_unsaved_changes` is
+MuPDF's own, and cannot drift from what the library actually did. The shim
+exports it, the interop binds it, `IPdfEngine.HasUnsavedChangesAsync` exposes it.
+Putting it on the interface also made the compiler enforce completeness - both
+implementers had to supply it or nothing built.
+
+The general form: when a property must hold across many call sites, prefer asking
+the component that owns the truth over maintaining a parallel record of it.
+
+### Asserted in both directions, on purpose
+
+A flag stuck at false would satisfy every structural check while making a
+recovery buffer never fire. That is indistinguishable from the feature working
+until the day it matters, and it is exactly how this project's defects present.
+So the fidelity test asserts clean-after-open *and* dirty-after-edit, and it was
+confirmed by forcing the shim to return 0 and watching the second assertion fail.
+
+### Deliberately stopped here
+
+Stage one changes no behaviour: it adds a question, and nothing asks it yet.
+Stage two is the buffer - autosave on change, discard on clean exit, detect an
+unclean shutdown and offer recovery at startup - which touches app lifecycle and
+needs UI.
+
+Split so that a half-built data-safety feature never sits in the tree. Either the
+application recovers your work or it does not; a partial version that looks
+present is worse than its absence, and looking present while not working is this
+project's signature failure.
