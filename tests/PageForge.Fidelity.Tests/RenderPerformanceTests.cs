@@ -24,6 +24,18 @@ public sealed class RenderPerformanceTests
     // common print/zoom preset. Headroom is generous (well above the observed
     // median on this dev machine) so the gate is stable across machines yet still
     // stops pathological regressions.
+    //
+    // IMPORTANT: this budget is NOT the requirement. TRD §6 asks for a visible
+    // page to render within 150ms during scroll on reference hardware; 600ms is
+    // four times that, chosen so a shared CI runner of unknown speed cannot make
+    // the gate flaky. It is a regression tripwire, and passing it is not evidence
+    // that the TRD target is met.
+    //
+    // The distinction matters because this test is cited for the Phase 6 exit
+    // criterion "performance targets met". It does not establish that. Verifying
+    // 150ms needs a measurement on named reference hardware, which has not been
+    // done; the per-document medians this test already logs are where that would
+    // start.
     private const int BudgetMs96 = 600;
     private const int BudgetMs150 = 1000;
     private const int WarmupPages = 2;
