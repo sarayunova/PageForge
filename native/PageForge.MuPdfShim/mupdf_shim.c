@@ -167,6 +167,47 @@ int pf_page_count(pf_context context, pf_document document, int *out_count)
 	return PF_OK;
 }
 
+/* Whether the in-memory document has edits that have not been written out.
+ *
+ * Asked of MuPDF rather than tracked alongside it. The alternative was for the
+ * managed layer to flag each of the twelve mutating engine operations, which is
+ * the same shape as several defects already fixed in this codebase: a concern
+ * spread across many call sites, where a thirteenth operation added later is
+ * simply forgotten and the failure is silent. pdf_has_unsaved_changes is the
+ * library's own answer and cannot drift from what the library actually did.
+ *
+ * Reports 0 for a document MuPDF does not consider a PDF, since such a document
+ * cannot have been edited through these APIs either. */
+int pf_has_unsaved_changes(pf_context context, pf_document document, int *out_dirty)
+{
+	fz_context *ctx = (fz_context *)context;
+	fz_document *doc = (fz_document *)document;
+	pdf_document *pdf = NULL;
+
+	if (ctx == NULL || doc == NULL || out_dirty == NULL)
+	{
+		return PF_ERR;
+	}
+
+	*out_dirty = 0;
+
+	fz_try(ctx)
+	{
+		pdf = pdf_specifics(ctx, doc);
+		if (pdf != NULL)
+		{
+			*out_dirty = pdf_has_unsaved_changes(ctx, pdf) ? 1 : 0;
+		}
+	}
+	fz_catch(ctx)
+	{
+		caught_message(ctx);
+		return PF_ERR;
+	}
+
+	return PF_OK;
+}
+
 int pf_page_size(pf_context context, pf_document document, int page_index,
                  float *out_width_pt, float *out_height_pt)
 {
