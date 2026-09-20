@@ -466,6 +466,20 @@ public class UiSmokeTests
         const string fieldValue = "Ada Lovelace";
         AutomationElement box = await WaitForElementAsync(app, "FullName value");
 
+        // The card must be a real list item WITH a real name (WCAG 1.3.1, 4.1.2).
+        //
+        // Binding the collection turned each card into a UIA DataItem inside a
+        // List, which is the structure the Phase 6 assessment wanted and rated
+        // PARTIAL for lacking. But an item with no name of its own falls back to
+        // ToString() on the view model, and this announced
+        // "PageForge.App.Wpf.ViewModels.FormFieldCardViewModel" to a screen reader
+        // until the container was named. Asserted here because the accessibility
+        // gate is otherwise a prose document that five UI phases did not re-read.
+        AutomationElement item = TreeWalker.RawViewWalker.GetParent(box);
+        Assert.Equal(ControlType.DataItem, item.Current.ControlType);
+        Assert.Equal(ControlType.List, TreeWalker.RawViewWalker.GetParent(item).Current.ControlType);
+        Assert.Equal("FullName (Text)", item.Current.Name);
+
 
         ((ValuePattern)box.GetCurrentPattern(ValuePattern.Pattern)).SetValue(fieldValue);
 
