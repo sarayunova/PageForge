@@ -877,3 +877,58 @@ white is 3.33:1, `#1f74c6` is 4.80:1, both as claimed.
 **No screen-reader verification with a live AT session has ever been performed.**
 Reading the UIA tree says what the tree contains, not what a user hears. That gap
 predates this work and is not closed by it.
+
+## 16. Reading the TRD and TSD, which had not been read
+
+`AGENTS.md` names the TRD, the TSD and the verification playbook as source of
+truth and says to read all three before starting any work. They had not been
+read - not in this session, and the `FR-*` codes and `TSD §12.1` citations
+throughout this note were inherited from existing code and earlier notes rather
+than from the documents. They are 137 and 237 lines; the cost of not reading
+them was never the reading.
+
+### What they are
+
+The TRD is the **what**: numbered, testable requirements, which is where every
+`FR-VIEW-01`, `FR-EDIT-04`, `FR-SEC-02` in this codebase comes from. The TSD is
+the **how**: architecture and the phase programme, including §12.1, the
+amendments recorded for the v0.1 beta.
+
+### The finding that mattered
+
+`CHANGELOG.md` claimed "digital signature signing and verification through the
+native `pf_sig_crypt32` signer". The C is real - `pf_sign_pdf` is written,
+`pf_sig_crypt32.c` is compiled into the shipped shim, the symbol is exported -
+and **nothing reaches it**: no P/Invoke in `MuPdfShimBindings.cs`, which binds 32
+other entry points, and no command in the desktop shell. A beta user cannot sign
+or verify a document. The entry described C code rather than a feature.
+
+For a public AGPL repository about to be tagged, release notes claiming a
+capability that does not reach the user is the most serious thing found all
+week - more than any of the broken features, because those were at least honest
+about being broken.
+
+### The rest of the gap, recorded as fact rather than decision
+
+No crash-recovery buffer, which TRD §6 calls *required*; UI strings not
+externalized; no spreadsheet export for OCR; and nothing exercising documents
+near the 2,000 pages FR-VIEW-01 names, the largest fixture being four pages.
+
+These went into the CHANGELOG as statements of what the beta does not contain.
+They did **not** go into TSD §12.1, because that section records *decisions* -
+"amended here rather than quietly shipped against" - and whether any of these
+blocks the beta is a product call, not one to make by writing it down.
+
+### And one more gate not checking what it is cited for
+
+`RenderPerformanceTests` is cited for the Phase 6 "performance targets met"
+criterion while budgeting 600ms per page against the TRD's 150ms. The budget is
+right for a shared runner; the citation was wrong. It is a regression tripwire,
+and the comment now says so.
+
+### The lesson, which is about reading
+
+Every other finding this week came from looking at running behaviour - the UIA
+tree, the rendered pixels, the bytes on disk. This one came from reading two
+short documents that the project's own conventions file says to read first. Both
+kinds of looking were overdue, and the documents were the cheaper of the two.
