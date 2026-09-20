@@ -504,6 +504,8 @@ pf_capi_verifier_check_digest(fz_context *ctx, pdf_pkcs7_verifier *verifier,
 	size_t data_len = 0;
 	DWORD decoded_len = 0;
 	CRYPT_VERIFY_MESSAGE_PARA para;
+	HCRYPTMSG hMsg = NULL;
+	PCCERT_CONTEXT signer = NULL;
 	pf_capi_verifier *ov = (pf_capi_verifier *)verifier;
 
 	fz_var(content);
@@ -522,18 +524,56 @@ pf_capi_verifier_check_digest(fz_context *ctx, pdf_pkcs7_verifier *verifier,
 		}
 	}
 
-	memset(&para, 0, sizeof(para));
-	para.cbSize = sizeof(para);
-	para.dwMsgAndCertEncodingType = X509_ASN_ENCODING | PKCS_7_ASN_ENCODING;
-	para.pfnGetSignerCertificate = pf_capi_get_signer_callback;
-	para.pvGetArg = ov;
+	/* A PDF signature is DETACHED (/SubFilter adbe.pkcs7.detached): the signed
+	 * bytes live in the file, not inside the PKCS#7 blob.
+	 *
+	 * CryptVerifyMessageSignature cannot verify that - it is for opaque messages
+	 * that carry their own content, and its fifth and sixth arguments are an
+	 * OUTPUT buffer for the decoded content and its size. This passed the
+	 * document's bytes as that output buffer with a size of zero, so it was
+	 * simultaneously asking the wrong question and offering a zero-length
+	 * destination that the API could have written through.
+	 *
+	 * The detached flow is: open with CMSG_DETACHED_FLAG, update once with the
+	 * blob and once with the content it is supposed to cover, then ask
+	 * CryptMsgControl to check the signature against the signer's certificate. */
+	(void)para;
+	(void)decoded_len;
 
-	if (CryptVerifyMessageSignature(&para, 0, (const BYTE *)signature,
-	                                (DWORD)signature_len,
-	                                data != NULL ? (BYTE *)data : NULL,
-	                                &decoded_len, NULL))
+	hMsg = CryptMsgOpenToDecode(X509_ASN_ENCODING | PKCS_7_ASN_ENCODING,
+	                            CMSG_DETACHED_FLAG, 0, 0, NULL, NULL);
+	if (hMsg == NULL)
+		goto cleanup;
+
+	if (!CryptMsgUpdate(hMsg, (const BYTE *)signature, (DWORD)signature_len, TRUE))
+		goto cleanup;
+
+	/* The detached content, as a single final update. */
+	if (!CryptMsgUpdate(hMsg,
+	                    data != NULL ? (const BYTE *)data : (const BYTE *)"",
+	                    (DWORD)data_len, TRUE))
+		goto cleanup;
+
+	signer = pf_cms_signer_cert(signature, signature_len);
+	if (signer == NULL)
+		goto cleanup;
+
+	if (CryptMsgControl(hMsg, 0, CMSG_CTRL_VERIFY_SIGNATURE, signer->pCertInfo))
+	{
 		result = PDF_SIGNATURE_ERROR_OKAY;
 
+		/* Kept for the certificate check that follows, which would otherwise
+		 * have to decode the blob a second time. */
+		if (ov->cached_signer != NULL)
+			CertFreeCertificateContext(ov->cached_signer);
+		ov->cached_signer = CertDuplicateCertificateContext(signer);
+	}
+
+cleanup:
+	if (signer != NULL)
+		CertFreeCertificateContext(signer);
+	if (hMsg != NULL)
+		CryptMsgClose(hMsg);
 	fz_drop_buffer(ctx, content);
 	return result;
 }
