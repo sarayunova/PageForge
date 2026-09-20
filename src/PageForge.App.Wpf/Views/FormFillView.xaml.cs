@@ -99,23 +99,42 @@ public partial class FormFillView : UserControl
     /// in the side panel.</summary>
     public ObservableCollection<FormFieldBoxViewModel> FieldBoxes { get; } = new();
 
+    /// <summary>The editable cards in the side panel, bound by the XAML. Each one
+    /// owns a value and a command; the view no longer builds controls for them.</summary>
+    public ObservableCollection<FormFieldCardViewModel> FieldCards { get; } = new();
+
+    /// <summary>What the panel says when the page has no fields. A property rather
+    /// than a label added to the panel, so its visibility can follow the card count
+    /// and no rebuild path can leave a stale one behind.</summary>
+    public string EmptyStateText
+    {
+        get => (string)GetValue(EmptyStateTextProperty);
+        set => SetValue(EmptyStateTextProperty, value);
+    }
+
+    public static readonly DependencyProperty EmptyStateTextProperty =
+        DependencyProperty.Register(
+            nameof(EmptyStateText),
+            typeof(string),
+            typeof(FormFillView),
+            new PropertyMetadata("This page has no fillable form fields."));
+
     private void Rebuild(IReadOnlyList<PdfFormField> fields)
     {
         FieldBoxes.Clear();
-        FieldsPanel.Children.Clear();
+        FieldCards.Clear();
+
+        // The empty-state text is a bound property whose visibility follows the
+        // card count, so there is no longer a label to add here and remember to
+        // remove. It used to be appended to the panel, which meant every path
+        // that rebuilt the list had to clear it first or it would stack up.
+        EmptyStateText = _justFlattened
+            ? "This page has no form fields left — the form has been flattened."
+            : "This page has no fillable form fields.";
 
         if (fields.Count == 0)
         {
             Overlay.Children.Clear();
-            var none = new TextBlock
-            {
-                Text = _justFlattened
-                    ? "This page has no form fields left — the form has been flattened."
-                    : "This page has no fillable form fields.",
-                Margin = new Thickness(8),
-                TextWrapping = TextWrapping.Wrap,
-            }.Themed(TextBlock.ForegroundProperty, "ContentMutedBrush");
-            FieldsPanel.Children.Add(none);
             Hint(_justFlattened
                 ? "No fields left on this page after flattening."
                 : $"No fillable form fields on page {(_vm?.Core.CurrentPage ?? 0) + 1}.");
@@ -126,84 +145,11 @@ public partial class FormFillView : UserControl
 
         foreach (PdfFormField field in fields)
         {
-            // The outline over the field is a bound template now; only the
-            // interactive card below is still built by hand.
             FieldBoxes.Add(new FormFieldBoxViewModel(field, _vm?.RenderDpi ?? 96.0));
-
-            FieldsPanel.Children.Add(BuildFieldRow(field));
+            FieldCards.Add(new FormFieldCardViewModel(field, SetFieldAsync));
         }
     }
 
-    private UIElement BuildFieldRow(PdfFormField field)
-    {
-        bool isCheckable = field.Kind is FormFieldKind.Checkbox or FormFieldKind.Radio;
-
-        var card = new Border
-        {
-            BorderThickness = new Thickness(1),
-            Margin = new Thickness(4),
-            Padding = new Thickness(6),
-        }
-            .Themed(Border.BackgroundProperty, "SurfaceRaisedBrush")
-            .Themed(Border.BorderBrushProperty, "EdgeBrush");
-
-        var stack = new StackPanel();
-        var label = new TextBlock
-        {
-            Text = field.Label,
-            FontWeight = FontWeights.SemiBold,
-            TextWrapping = TextWrapping.Wrap,
-        }.Themed(TextBlock.ForegroundProperty, "ContentBrush");
-        stack.Children.Add(label);
-
-        var kindTag = new TextBlock
-        {
-            Text = field.Kind.ToString(),
-            FontSize = 10,
-            Margin = new Thickness(0, 0, 0, 4),
-        }.Themed(TextBlock.ForegroundProperty, "ContentMutedBrush");
-        stack.Children.Add(kindTag);
-
-        var row = new StackPanel { Orientation = Orientation.Horizontal };
-
-        if (isCheckable)
-        {
-            bool isChecked = string.Equals(field.Value, "Yes", StringComparison.OrdinalIgnoreCase)
-                             || string.Equals(field.Value, "On", StringComparison.OrdinalIgnoreCase);
-            var check = new CheckBox
-            {
-                Content = "Checked",
-                IsChecked = isChecked,
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(0, 0, 8, 0),
-            };
-            AutomationProperties.SetName(check, field.Label);
-            check.Checked += async (_, _) => await SetFieldAsync(field.Id, "Yes");
-            check.Unchecked += async (_, _) => await SetFieldAsync(field.Id, "Off");
-            row.Children.Add(check);
-        }
-        else
-        {
-            var box = new TextBox
-            {
-                Text = field.Value,
-                Width = 150,
-                VerticalContentAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(0, 0, 6, 0),
-            };
-            AutomationProperties.SetName(box, $"{field.Label} value");
-            var set = new Button { Content = "Set", Padding = new Thickness(8, 2, 8, 2) };
-            AutomationProperties.SetName(set, $"Set {field.Label}");
-            set.Click += async (_, _) => await SetFieldAsync(field.Id, box.Text);
-            row.Children.Add(box);
-            row.Children.Add(set);
-        }
-
-        stack.Children.Add(row);
-        card.Child = stack;
-        AutomationProperties.SetName(card, $"{field.Label} ({field.Kind})");
-        return card;
-    }
 
     private async System.Threading.Tasks.Task SetFieldAsync(string fieldId, string value)
     {

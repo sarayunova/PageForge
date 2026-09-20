@@ -3,9 +3,12 @@
      This file is part of PageForge. See LICENSE for the full license text. -->
 <UserControl x:Class="PageForge.App.Wpf.Views.FormFillView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:locals="clr-namespace:PageForge.App.Wpf.Views">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
+        <locals:InverseBoolToVisibilityConverter x:Key="NotBoolToVis" />
+        <locals:ZeroCountToVisibilityConverter x:Key="ZeroToVis" />
     </UserControl.Resources>
 
     <DockPanel Background="{DynamicResource CanvasBrush}">
@@ -44,7 +47,64 @@
                     <TextBlock Text="Fields on this page" Foreground="{DynamicResource ContentBrush}" FontWeight="Bold" />
                 </Border>
                 <ScrollViewer VerticalScrollBarVisibility="Auto" Background="{DynamicResource SurfaceAppBrush}">
-                    <StackPanel x:Name="FieldsPanel" />
+                    <Grid>
+                        <!-- The interactive field cards, bound. These were the last
+                             controls in the shell still assembled in code: a Border,
+                             two TextBlocks and either a CheckBox or a TextBox plus a
+                             Button per field, with handlers attached by hand. Unlike
+                             the outlines drawn over the page, a card carries a live
+                             value and writes it back, so it needed a view model with
+                             a value and a command rather than a rectangle. -->
+                        <ItemsControl x:Name="FieldsPanel"
+                                      ItemsSource="{Binding FieldCards, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Margin="4" Padding="6" BorderThickness="1"
+                                            Background="{DynamicResource SurfaceRaisedBrush}"
+                                            BorderBrush="{DynamicResource EdgeBrush}"
+                                            AutomationProperties.Name="{Binding AccessibleName}">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Label}" FontWeight="SemiBold"
+                                                       TextWrapping="Wrap"
+                                                       Foreground="{DynamicResource ContentBrush}" />
+                                            <TextBlock Text="{Binding KindLabel}" FontSize="10"
+                                                       Margin="0,0,0,4"
+                                                       Foreground="{DynamicResource ContentMutedBrush}" />
+
+                                            <!-- A checkbox commits on toggle; a text field
+                                                 commits on Set, because rewriting the PDF
+                                                 on every keystroke is not an edit model. -->
+                                            <CheckBox Content="Checked"
+                                                      IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                                      VerticalAlignment="Center"
+                                                      AutomationProperties.Name="{Binding Label}"
+                                                      Visibility="{Binding IsCheckable, Converter={StaticResource BoolToVis}}" />
+
+                                            <StackPanel Orientation="Horizontal"
+                                                        Visibility="{Binding IsCheckable, Converter={StaticResource NotBoolToVis}}">
+                                                <TextBox Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                         Width="150" Margin="0,0,6,0"
+                                                         VerticalContentAlignment="Center"
+                                                         AutomationProperties.Name="{Binding ValueAccessibleName}" />
+                                                <Button Content="Set" Padding="8,2"
+                                                        Command="{Binding SetCommand}"
+                                                        AutomationProperties.Name="{Binding SetAccessibleName}" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <!-- Shown only when the page has no fields, bound to the count
+                             so no code path can leave it behind - the same reason the
+                             redaction panel's empty state is bound rather than added
+                             and removed by hand. -->
+                        <TextBlock x:Name="NoFieldsText" Margin="8" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource ContentMutedBrush}"
+                                   Text="{Binding EmptyStateText, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                   Visibility="{Binding FieldCards.Count, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource ZeroToVis}}" />
+                    </Grid>
                 </ScrollViewer>
             </DockPanel>
 

@@ -388,6 +388,138 @@ public class UiSmokeTests
     /// colour and a rendered page is not, and that is the whole difference between
     /// the bug and working software.
     /// </summary>
+    private static string FormFixture => Path.Combine(
+        PageForgeApp.FindRepoRoot(), "tools", "sample-pdf", "corpus", "form-application.pdf");
+
+    /// <summary>
+    /// The form-field cards are bound, and the binding actually reaches the
+    /// document.
+    ///
+    /// These were the last controls in the shell built in code, and converting
+    /// them to a template is exactly the change that can fail silently: an
+    /// unresolved Command binding leaves a button visible, enabled and completely
+    /// inert - no exception, no log - which is how an earlier phase of this same
+    /// conversion shipped dead buttons. Compiling proves nothing here.
+    ///
+    /// So this types a value, presses Set, then re-reads the field from a freshly
+    /// rebuilt card list. The value can only come back if the command resolved,
+    /// the two-way binding carried the text, the engine wrote it, and the rebuilt
+    /// card bound it again.
+    /// </summary>
+    [Fact]
+    public async Task Form_field_cards_write_their_value_to_the_document()
+    {
+        await using PageForgeApp app = await PageForgeApp.LaunchAsync();
+        await app.WaitForVisibleAsync("PageIndicatorText");
+
+        PageForgeApp.Activate(app.FindById("OpenPdfButton")
+            ?? throw new InvalidOperationException("Open PDF… button not found."));
+        await OpenFileViaDialog(app, FormFixture);
+        await WaitForIndicator(app, "/ 1");
+
+        SelectToolGroup(app, "FormsModeTab");
+        AutomationElement formToggle = app.FindByName("Form fill mode")
+            ?? throw new InvalidOperationException("Form fill mode toggle not found.");
+        ((TogglePattern)formToggle.GetCurrentPattern(TogglePattern.Pattern)).Toggle();
+
+        // The fixture's fields are FullName and Consent; FullName is the text one.
+        const string fieldValue = "Ada Lovelace";
+        AutomationElement box = await WaitForElementAsync(app, "FullName value");
+
+
+        ((ValuePattern)box.GetCurrentPattern(ValuePattern.Pattern)).SetValue(fieldValue);
+
+        PageForgeApp.Activate(app.FindByName("Set FullName")
+            ?? throw new InvalidOperationException("Set FullName button not found."));
+
+        // A successful fill re-lists the fields and rebuilds the cards, so the box
+        // that ends up on screen is a DIFFERENT element carrying what the document
+        // now reports. Both halves are needed:
+        //
+        //   - a new element proves the command fired at all, and
+        //   - the value on that new element proves the engine stored it,
+        //
+        // and neither alone is enough, which four attempts at this assertion
+        // established the hard way. All of the following passed against a Set
+        // button bound to a property that does not exist:
+        //
+        //   - Re-reading the text box. The two-way binding updates the view model
+        //     on every keystroke, so it shows the typed text whether or not
+        //     anything was committed - and after a real write it shows the same
+        //     string, so the text alone cannot tell the two apart.
+        //   - Leaving form mode and returning. The view persists across a mode
+        //     switch, so its cards persist with it and nothing is re-read.
+        //
+        // Two more were tried and rejected: comparing rendered page pixels, whose
+        // count drifts while the page settles and reported changes unrelated to
+        // the value; and the status line, which the rebuild immediately overwrites
+        // with its own message.
+        int[] originalId = box.GetRuntimeId();
+        //
+        // Finding a witness that is not downstream of the binding under test took
+        // three attempts, and the two rejected ones are worth recording because
+        // both looked convincing and both passed against a completely inert
+        // button:
+        //
+        //   - Re-reading the text box. The two-way binding updates the view model
+        //     on every keystroke, so the box shows the typed text whether or not
+        //     anything was committed.
+        //   - Leaving form mode and returning. The view persists across a mode
+        //     switch, so its cards - and their already-updated values - persist
+        //     with it. Nothing is re-read from the document.
+        //
+        // Comparing rendered page pixels was tried too and rejected for the
+        // opposite reason: the count drifts between captures while the page
+        // settles, so it reported a change that had nothing to do with the value.
+        //
+        // What this does NOT prove is that the engine stored the value - that is
+        // FormFidelityTests' job, against the real shim. The gap this closes is
+        // the binding, which is the part that fails silently.
+        DateTime deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+        string seen = "<the card was never rebuilt>";
+        while (DateTime.UtcNow < deadline)
+        {
+            AutomationElement? reread = app.FindByName("FullName value");
+            if (reread is not null && !reread.GetRuntimeId().SequenceEqual(originalId))
+            {
+                seen = reread.TryGetCurrentPattern(ValuePattern.Pattern, out object? pattern)
+                    ? ((ValuePattern)pattern).Current.Value
+                    : "<no value pattern>";
+                if (seen == fieldValue)
+                {
+                    return;
+                }
+            }
+
+            await Task.Delay(200);
+        }
+
+        Assert.Fail(
+            $"The form card did not put '{fieldValue}' into the document: the rebuilt card " +
+            $"reads '{seen}'. If it says the card was never rebuilt, the Set command never " +
+            "ran - an inert Command binding looks exactly like that, the button present and " +
+            "enabled and doing nothing. If it reads something else, the command ran and the " +
+            "engine did not keep the value.");
+    }
+
+
+    private static async Task<AutomationElement> WaitForElementAsync(PageForgeApp app, string name)
+    {
+        DateTime deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+        while (DateTime.UtcNow < deadline)
+        {
+            AutomationElement? found = app.FindByName(name);
+            if (found is not null)
+            {
+                return found;
+            }
+
+            await Task.Delay(200);
+        }
+
+        throw new TimeoutException($"Timed out waiting for the element named '{name}'.");
+    }
+
     [Fact]
     public async Task Every_page_surface_actually_draws_the_page()
     {
