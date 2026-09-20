@@ -653,3 +653,68 @@ genuinely different findings and now report differently.
 - The pixel check proves a page *drew*, not that it drew the *right thing*. A
   mirrored overlay would still pass it. Geometry stays the job of the `--smoke`
   proofs.
+
+## 12. Phase U4 is finished, and what the last test cost
+
+Two items closed: the form overlay's geometry proof, and the form-field cards.
+No control in the shell is built in code any more.
+
+### The form overlay proof runs against the engine, not a rectangle
+
+`RunFormGeometryProofAsync` is the third and last surface proof. It differs from
+its siblings on purpose: the redaction and object proofs assert synthetic,
+hand-checkable numbers, but the form convention is the **engine's** to define. A
+synthetic rectangle would encode only what the view model believes and would
+keep passing if the engine started reporting bounds bottom-up while the UI
+broke. It also fails when the fixture reports no fields at all, rather than
+passing vacuously over an empty list.
+
+It measured `FullName@160px, Consent@243px` at 96 DPI — the same numbers §8
+recorded from a manual measurement when the flip was removed, now reproduced by
+assertion rather than trusted.
+
+The regression it guards is not a typo. It is someone folding
+`FormFieldBoxViewModel` into `PageBoxGeometry` because the other two overlays use
+it, which looks like removing duplication and reintroduces the bug. So the
+failure message names what the flipped value would have been, to make that
+specific mistake recognisable rather than merely red.
+
+### The cards, and four assertions that proved nothing
+
+`FormFieldCardViewModel` carries a value and a command, which is why the cards
+outlasted every other hand-built control. A text field commits on Set, because
+rewriting the PDF once per keystroke is not an edit model; a checkbox commits on
+toggle, since the toggle is the commit. Initial state is assigned to the backing
+fields rather than through the setters - going through them looks like a user
+edit and writes every field back just for opening the page. Accessible names are
+preserved exactly, for the reason §3 gives about `x:Name`.
+
+**The test cost more than the refactor, and that is the part worth reading.** An
+unresolved `Command` binding leaves a button visible, enabled and inert, which is
+how part one of this same conversion shipped dead buttons. Compiling proves
+nothing here, so the binding was deliberately pointed at a property that does not
+exist to watch the test fail. It passed. So did the next three:
+
+| Attempt | Why it proved nothing |
+|---|---|
+| Re-read the text box | The two-way binding updates the view model on every keystroke, so it shows the typed text either way |
+| Leave form mode and return | The view persists across a mode switch, so its cards and their updated values persist with it |
+| Compare rendered page pixels | The count drifts while the page settles, reporting changes unrelated to the value |
+| Assert the status line | The rebuild overwrites it immediately with its own message |
+
+What works needs both halves: the card must be **rebuilt** (a different UIA
+element, so the command fired) **and** carry the value (so the engine kept it).
+All four rejected attempts are recorded in the test itself.
+
+The general lesson, which is now the fourth instance of it in this note: on this
+codebase a green test is not evidence until it has been watched to fail. Every
+witness above was plausible, and every one was downstream of the thing it was
+supposed to be checking.
+
+### Still open
+
+- Issue #6: reorder-and-save is not covered by CI (native file dialog
+  automation). The app surfaced no error for a save that wrote nothing, which is
+  worth ruling out before blaming the harness.
+- The pixel check (§11) proves a page drew, not that it drew the right thing. A
+  mirrored overlay would still pass it; geometry stays the proofs' job.
