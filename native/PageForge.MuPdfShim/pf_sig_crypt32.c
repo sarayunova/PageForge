@@ -151,7 +151,12 @@ pf_capi_dn_from_cert(fz_context *ctx, PCCERT_CONTEXT cert)
 		for (which = 0; which < 5; ++which)
 		{
 			wname[0] = L'\0';
-			CertGetNameStringW(cert, CERT_NAME_RDN_TYPE, 0, (LPCSTR)oids[which],
+			/* CERT_NAME_ATTR_TYPE, not CERT_NAME_RDN_TYPE. pvTypePara is an
+			 * OID string for the former and a DWORD* of flags for the latter,
+			 * so asking for RDN_TYPE while handing it an OID made the function
+			 * dereference a string pointer as a DWORD*. The const-qualifier
+			 * warning on this line was the visible edge of that mismatch. */
+			CertGetNameStringW(cert, CERT_NAME_ATTR_TYPE, 0, (void *)oids[which],
 			                   wname, (DWORD)(sizeof(wname) / sizeof(wname[0])));
 			utf8 = pf_capi_utf8_from_wchar(wname);
 			if (utf8 == NULL)
@@ -204,7 +209,7 @@ static int
 pf_capi_make_signature(fz_context *ctx, pf_capi_signer *os, fz_buffer *buf,
                        unsigned char *digest, size_t digest_len)
 {
-	const unsigned char *data = NULL;
+	unsigned char *data = NULL;
 	size_t data_len = 0;
 	CRYPT_SIGN_MESSAGE_PARA para;
 	const BYTE *rgpb[1];
@@ -215,7 +220,7 @@ pf_capi_make_signature(fz_context *ctx, pf_capi_signer *os, fz_buffer *buf,
 	memset(&para, 0, sizeof(para));
 
 	if (buf != NULL)
-		data = fz_buffer_storage(ctx, buf, &data_len);
+		data_len = fz_buffer_storage(ctx, buf, &data);
 
 	para.cbSize = sizeof(para);
 	para.dwMsgEncodingType = X509_ASN_ENCODING | PKCS_7_ASN_ENCODING;
@@ -412,8 +417,15 @@ pf_cms_signer_cert(const unsigned char *sig, size_t sig_len)
 	if (hMsgStore == NULL)
 		return NULL;
 
-	if (!CryptMsgOpenToDecode(X509_ASN_ENCODING | PKCS_7_ASN_ENCODING, 0, 0,
-	                          NULL, NULL, &hMsg) ||
+	/* CryptMsgOpenToDecode RETURNS the handle; it has no out-parameter. This
+	 * passed &hMsg as the sixth argument (pStreamInfo) and threw the return
+	 * value away, so CryptMsgUpdate was then called on an uninitialised handle
+	 * and took the process down. Same story as the signing side: the compiler
+	 * warned about both argument types on this line, and nothing had ever
+	 * called the verifier, so nobody saw it fail. */
+	hMsg = CryptMsgOpenToDecode(X509_ASN_ENCODING | PKCS_7_ASN_ENCODING, 0, 0,
+	                           0, NULL, NULL);
+	if (hMsg == NULL ||
 	    !CryptMsgUpdate(hMsg, (const BYTE *)sig, (DWORD)sig_len, TRUE))
 		goto cleanup;
 
@@ -488,7 +500,7 @@ pf_capi_verifier_check_digest(fz_context *ctx, pdf_pkcs7_verifier *verifier,
 {
 	pdf_signature_error result = PDF_SIGNATURE_ERROR_DIGEST_FAILURE;
 	fz_buffer *content = NULL;
-	const unsigned char *data = NULL;
+	unsigned char *data = NULL;
 	size_t data_len = 0;
 	DWORD decoded_len = 0;
 	CRYPT_VERIFY_MESSAGE_PARA para;
@@ -501,7 +513,7 @@ pf_capi_verifier_check_digest(fz_context *ctx, pdf_pkcs7_verifier *verifier,
 		fz_try(ctx)
 		{
 			content = fz_read_all(ctx, in, 0);
-			data = fz_buffer_storage(ctx, content, &data_len);
+			data_len = fz_buffer_storage(ctx, content, &data);
 		}
 		fz_catch(ctx)
 		{

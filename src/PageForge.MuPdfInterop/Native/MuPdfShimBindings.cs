@@ -43,6 +43,21 @@ internal static class MuPdfShimBindings
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     internal static extern int pf_has_unsaved_changes(nint context, nint document, out int dirty);
 
+    /// <summary>FR-SEC-03: signs a page from a spec file. The digest completes on
+    /// save, so a save must follow.</summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int pf_sign_pdf(nint context, nint document, int pageIndex, byte[] specPathUtf8);
+
+    /// <summary>Appends changes instead of rewriting, so signatures already in the
+    /// file keep covering the bytes they signed.</summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int pf_save_document_incremental(nint context, nint document, byte[] outPathUtf8);
+
+    /// <summary>Writes one TSV row per signature field, verified through the OS
+    /// certificate engine.</summary>
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int pf_list_signatures(nint context, nint document, byte[] outPathUtf8);
+
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     internal static extern int pf_page_size(nint context, nint document, int pageIndex, out float widthPt, out float heightPt);
 

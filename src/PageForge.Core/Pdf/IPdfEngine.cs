@@ -48,6 +48,42 @@ public interface IPdfEngine : IAsyncDisposable
     ValueTask<bool> HasUnsavedChangesAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Applies a digital signature to a 0-based page, creating a new signature
+    /// field (FR-SEC-03).
+    ///
+    /// The document is signed in memory; the signature's digest is only
+    /// completed when the file is written, so this must be followed by a save.
+    /// Prefer <see cref="SaveIncrementalAsync"/>: a full rewrite renumbers the
+    /// file and invalidates any signature that was already there.
+    /// </summary>
+    ValueTask SignAsync(
+        int pageIndex,
+        PdfSignatureSpec signature,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Writes the document as an incremental update: the original bytes are kept
+    /// verbatim and changes appended.
+    ///
+    /// This is the canonical save for a signed document. Signatures cover a byte
+    /// range of the file, so rewriting those bytes breaks every signature already
+    /// present - which is why signing has its own save rather than reusing
+    /// <see cref="SaveAsAsync"/>.
+    /// </summary>
+    ValueTask SaveIncrementalAsync(string outputPath, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Every signature field in the document, each verified offline through the
+    /// operating system's certificate engine.
+    ///
+    /// Returns an empty list for a document with no signature fields. Digest and
+    /// certificate results are reported separately; see
+    /// <see cref="PdfSignatureField"/> for why.
+    /// </summary>
+    ValueTask<IReadOnlyList<PdfSignatureField>> ListSignaturesAsync(
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Renders a single page to an in-memory PNG bitmap at the given DPI
     /// (72 = 1:1 PDF points, 300 = print-quality). Futures phases will tile
     /// this for FR-VIEW-01's 2,000-page lazy rendering.

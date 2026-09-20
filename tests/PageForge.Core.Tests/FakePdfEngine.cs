@@ -370,6 +370,42 @@ internal sealed class FakePdfEngine : IPdfEngine
         return ValueTask.FromResult(Dirty);
     }
 
+    /// <summary>Signature fields this fake reports. Signing appends to it so Core
+    /// callers can be exercised; the cryptography itself belongs to the real
+    /// engine and is covered by the fidelity suite, not modelled here.</summary>
+    public List<PdfSignatureField> Signatures { get; } = new();
+
+    public ValueTask SignAsync(int pageIndex, PdfSignatureSpec signature, CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(signature);
+        Signatures.Add(new PdfSignatureField(
+            Signatures.Count,
+            pageIndex,
+            signature.FieldName,
+            signature.Rect,
+            IsSigned: true,
+            DigestStatus: "OK",
+            CertificateStatus: "OK",
+            Signer: "cn=fake"));
+        Dirty = true;
+        return ValueTask.CompletedTask;
+    }
+
+    public ValueTask SaveIncrementalAsync(string outputPath, CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentException.ThrowIfNullOrEmpty(outputPath);
+        File.WriteAllText(outputPath, "fake-incremental");
+        return ValueTask.CompletedTask;
+    }
+
+    public ValueTask<IReadOnlyList<PdfSignatureField>> ListSignaturesAsync(CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        return ValueTask.FromResult<IReadOnlyList<PdfSignatureField>>(Signatures.ToList());
+    }
+
     public async ValueTask<RenderedPdfPage> RenderPageToPngAsync(int pageIndex, float dpi, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);

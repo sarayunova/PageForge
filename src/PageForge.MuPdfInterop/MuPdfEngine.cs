@@ -136,6 +136,151 @@ public sealed class MuPdfEngine : IPdfEngine
         }
     }
 
+    public ValueTask SignAsync(int pageIndex, PdfSignatureSpec signature, CancellationToken cancellationToken = default)
+        => SignCoreAsync(pageIndex, signature, cancellationToken);
+
+    private async ValueTask SignCoreAsync(int pageIndex, PdfSignatureSpec signature, CancellationToken ct)
+    {
+        if (pageIndex < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(pageIndex));
+        }
+
+        ArgumentNullException.ThrowIfNull(signature);
+        ArgumentException.ThrowIfNullOrEmpty(signature.FieldName);
+        ArgumentException.ThrowIfNullOrEmpty(signature.Pkcs12Path);
+
+        if (!File.Exists(signature.Pkcs12Path))
+        {
+            throw new FileNotFoundException(
+                "The signing certificate file does not exist.", signature.Pkcs12Path);
+        }
+
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            RequireDocument();
+
+            string specPath = Path.Combine(Path.GetTempPath(), $"pageforge-sign-spec-{Guid.NewGuid():N}.txt");
+            try
+            {
+                await File.WriteAllTextAsync(specPath, BuildSignatureSpec(signature), JobUtf8, ct)
+                    .ConfigureAwait(false);
+
+                if (MuPdfShimBindings.pf_sign_pdf(_context, _document, pageIndex, Utf8Z(specPath))
+                    != MuPdfShimBindings.PfOk)
+                {
+                    throw new InvalidOperationException(
+                        $"Failed to sign page {pageIndex}: {LastError()}");
+                }
+            }
+            finally
+            {
+                // The spec carries the PKCS#12 password in clear text, so it does
+                // not outlive the call that needed it.
+                TryDeleteFile(specPath);
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <summary>Builds the shim's line-per-field signing spec. Optional fields are
+    /// omitted rather than written empty, which is how the parser tells "absent"
+    /// from "deliberately blank".</summary>
+    private static string BuildSignatureSpec(PdfSignatureSpec signature)
+    {
+        var spec = new StringBuilder();
+        spec.Append("N\t").Append(signature.FieldName).Append('\n');
+        spec.Append(System.Globalization.CultureInfo.InvariantCulture,
+            $"R\t{signature.Rect.X0}\t{signature.Rect.Y0}\t{signature.Rect.X1}\t{signature.Rect.Y1}\n");
+
+        if (!string.IsNullOrEmpty(signature.Reason))
+        {
+            spec.Append("E\t").Append(signature.Reason).Append('\n');
+        }
+
+        if (!string.IsNullOrEmpty(signature.Location))
+        {
+            spec.Append("L\t").Append(signature.Location).Append('\n');
+        }
+
+        spec.Append("P12\t").Append(signature.Pkcs12Path).Append('\n');
+
+        if (!string.IsNullOrEmpty(signature.Pkcs12Password))
+        {
+            spec.Append("PW\t").Append(signature.Pkcs12Password).Append('\n');
+        }
+
+        return spec.ToString();
+    }
+
+    public ValueTask SaveIncrementalAsync(string outputPath, CancellationToken cancellationToken = default)
+        => SaveIncrementalCoreAsync(outputPath, cancellationToken);
+
+    private async ValueTask SaveIncrementalCoreAsync(string outputPath, CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(outputPath);
+
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            RequireDocument();
+            if (MuPdfShimBindings.pf_save_document_incremental(_context, _document, Utf8Z(outputPath))
+                != MuPdfShimBindings.PfOk)
+            {
+                throw new InvalidOperationException(
+                    $"Failed to save an incremental update to {outputPath}: {LastError()}");
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public ValueTask<IReadOnlyList<PdfSignatureField>> ListSignaturesAsync(CancellationToken cancellationToken = default)
+        => ListSignaturesCoreAsync(cancellationToken);
+
+    private async ValueTask<IReadOnlyList<PdfSignatureField>> ListSignaturesCoreAsync(CancellationToken ct)
+    {
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            RequireDocument();
+
+            string outputPath = Path.Combine(Path.GetTempPath(), $"pageforge-signatures-{Guid.NewGuid():N}.txt");
+            try
+            {
+                if (MuPdfShimBindings.pf_list_signatures(_context, _document, Utf8Z(outputPath))
+                    != MuPdfShimBindings.PfOk)
+                {
+                    throw new InvalidOperationException($"Failed to list signatures: {LastError()}");
+                }
+
+                // The shim writes nothing at all for a document with no signature
+                // fields, so a missing file is an empty list rather than an error.
+                if (!File.Exists(outputPath))
+                {
+                    return Array.Empty<PdfSignatureField>();
+                }
+
+                string[] lines = await File.ReadAllLinesAsync(outputPath, ct).ConfigureAwait(false);
+                return SignatureListParser.Parse(lines);
+            }
+            finally
+            {
+                TryDeleteFile(outputPath);
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     public ValueTask<RenderedPdfPage> RenderPageToPngAsync(int pageIndex, float dpi, CancellationToken cancellationToken = default)
         => RenderCoreAsync(pageIndex, dpi, cancellationToken);
 
