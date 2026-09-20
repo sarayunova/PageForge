@@ -978,3 +978,57 @@ Split so that a half-built data-safety feature never sits in the tree. Either th
 application recovers your work or it does not; a partial version that looks
 present is worse than its absence, and looking present while not working is this
 project's signature failure.
+
+## 18. Crash recovery, stage two - and a smoke harness that was ending itself
+
+TRD §6 is met. `RecoverySession` copies edited documents aside every thirty
+seconds, discards one when its tab is closed deliberately, deletes its folder on
+clean exit, and offers back whatever a previous run left behind.
+
+Three properties it is built around, each because the obvious implementation
+fails badly:
+
+- **A half-written recovery file is worse than none**, since it is handed to the
+  user as their work and then will not open. Autosaves are staged under a
+  temporary name and moved into place.
+- **Recovery must not damage the session it protects**, so every operation is
+  best-effort and swallows its errors. An autosave that threw into the UI would
+  cost the user the edits it exists to keep.
+- **"Left over" must mean "crashed", not "another window is open"**, so each
+  instance holds a lock file. The proof asserts that a LIVE session's documents
+  are NOT offered as recoverable - invisible to any single-instance test, and
+  without it one window would hand another's in-progress work back.
+
+Known limitation, recorded rather than left to be found: MuPDF's dirty flag does
+not clear on save, so it means "edited at some point" rather than "changed since
+the last autosave". Each tick therefore rewrites every edited document, and the
+flag is **not** sufficient for a close-time "unsaved changes" prompt.
+
+### The harness was truncating its own runs
+
+The proof would not pass, and the reason was not in the feature. WPF defaults to
+`ShutdownMode.OnLastWindowClose`; `RunThemeTokenProof` creates a probe `Window`
+and closes it, which begins tearing the application down. Every proof after it
+was racing a dispatcher that was going away. The short synchronous ones finished
+in time, so nothing looked wrong. The first long asynchronous one stopped
+mid-await: no exception, no log line, exit code 0.
+
+**A truncated smoke run was reporting success.** CI could have been green with
+proofs that never finished - in the harness whose whole purpose is catching
+silent failure. Smoke runs now end only at the explicit `Shutdown()`.
+
+### Two mistakes of mine worth keeping
+
+**I misread my own measurement for several rounds.** `exit=$?` after a pipe
+reports the status of the last command in the pipe - grep - not the program. I
+read "exit 0" as the app succeeding when the app's exit code had never been
+looked at.
+
+**I theorised instead of instrumenting, again.** What settled it was unbuffered
+`Console.Error` markers at each step, because the log itself was lost when the
+process died. That is the fourth time in this note the answer came from
+instrumenting and the delay came from guessing.
+
+The tell that should have redirected me early: the identical `AddAnnotationAsync`
+call passed in the fidelity suite against the same fixture. **When a call works
+in one host and not another, suspect the host.**
