@@ -1289,7 +1289,15 @@ public partial class DocumentView : UserControl
             return;
         }
 
-        string? path = AskSavePath("Searchable.pdf");
+        // The format is chosen by the extension in the save dialog rather than
+        // through a separate prompt. The engine has always been able to
+        // produce all four, and until now only the searchable PDF had a way in.
+        string? path = AskSavePath(
+            "Searchable.pdf",
+            "Searchable PDF (*.pdf)|*.pdf" +
+            "|Word document (*.docx)|*.docx" +
+            "|Spreadsheet (*.xlsx)|*.xlsx" +
+            "|Page images (*.zip)|*.zip");
         if (path is null)
         {
             return;
@@ -1297,8 +1305,26 @@ public partial class DocumentView : UserControl
 
         try
         {
-            await _vm.RunOcrAsync(path);
-            OpenDocumentRequested?.Invoke(path);
+            switch (System.IO.Path.GetExtension(path).ToLowerInvariant())
+            {
+                case ".docx":
+                    await _vm.RunOcrConversionAsync(path, OcrConversion.Docx);
+                    break;
+                case ".xlsx":
+                    await _vm.RunOcrConversionAsync(path, OcrConversion.Spreadsheet);
+                    break;
+                case ".zip":
+                    await _vm.RunOcrConversionAsync(path, OcrConversion.PageImages);
+                    break;
+                default:
+                    await _vm.RunOcrAsync(path);
+
+                    // Only the searchable PDF reopens: it is a PDF, and this is
+                    // a PDF viewer. Handing a tab a .docx would fail to open
+                    // and read as a failed conversion.
+                    OpenDocumentRequested?.Invoke(path);
+                    break;
+            }
         }
         catch (Exception ex)
         {
@@ -1468,6 +1494,9 @@ public partial class DocumentView : UserControl
     }
 
     private string? AskSavePath(string suggestedName)
+        => AskSavePath(suggestedName, "PDF files (*.pdf)|*.pdf|All files (*.*)|*.*");
+
+    private string? AskSavePath(string suggestedName, string filter)
     {
         // The UI suite supplies a destination here rather than driving the native
         // dialog, which cannot be automated reliably across Windows images: the
@@ -1483,7 +1512,7 @@ public partial class DocumentView : UserControl
 
         var dialog = new Microsoft.Win32.SaveFileDialog
         {
-            Filter = "PDF files (*.pdf)|*.pdf|All files (*.*)|*.*",
+            Filter = filter,
             FileName = suggestedName,
         };
         return dialog.ShowDialog() == true ? dialog.FileName : null;

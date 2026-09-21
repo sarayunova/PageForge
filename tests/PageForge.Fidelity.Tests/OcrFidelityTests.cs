@@ -24,6 +24,7 @@ namespace PageForge.Fidelity.Tests;
 /// It is harmless, appears only in console runs, and is NOT a product leak —
 /// do not chase it.
 /// </summary>
+[Collection(OcrSerial.Name)]
 public sealed class OcrFidelityTests
 {
     private const string TrainedDataPin = "7D4322BD2A7749724879683FC3912CB542F19906C83BCC1A52132556427170B2";

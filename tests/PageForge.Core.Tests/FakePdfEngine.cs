@@ -647,6 +647,19 @@ internal sealed class FakePdfEngine : IPdfEngine
         return OnAuthenticate?.Invoke() ?? true;
     }
 
+    /// <summary>The output path of the last spreadsheet export (FR-OCR-02), or null.</summary>
+    public string? LastSpreadsheet { get; private set; }
+
+    /// <summary>Writes a placeholder workbook and records the path.</summary>
+    public async ValueTask<OcrResult> OcrToSpreadsheetAsync(
+        string outputPath, OcrOptions? options = null, CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        await File.WriteAllTextAsync(outputPath, "spreadsheet", cancellationToken);
+        LastSpreadsheet = outputPath;
+        return new OcrResult(_pageCount, outputPath, options?.Language ?? "eng", "fake");
+    }
+
     /// <summary>The signing requests received, in order (FR-SEC-03).</summary>
     public List<(int PageIndex, PdfSignatureRequest Request)> Signings { get; } = new();
 

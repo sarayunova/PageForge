@@ -1198,6 +1198,91 @@ public sealed class MuPdfEngine : IPdfEngine
         }
     }
 
+    public ValueTask<OcrResult> OcrToSpreadsheetAsync(
+        string outputPath, OcrOptions? options, CancellationToken cancellationToken = default)
+        => OcrToSpreadsheetCoreAsync(outputPath, options, cancellationToken);
+
+    /// <summary>
+    /// FR-OCR-02, composed rather than native: MuPDF has no spreadsheet
+    /// writer, so this recognizes into a searchable PDF with the same native
+    /// call the other conversions use, reads the text back out of it, and
+    /// writes the workbook in managed code.
+    ///
+    /// Going through a searchable PDF rather than recognizing separately means
+    /// the spreadsheet and the searchable PDF of the same scan always contain
+    /// the same words. Two recognition passes could differ, and a user
+    /// comparing the two exports would have no way to tell which was right.
+    /// </summary>
+    private async ValueTask<OcrResult> OcrToSpreadsheetCoreAsync(
+        string outputPath, OcrOptions? options, CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(outputPath);
+
+        string fullPath = Path.GetFullPath(outputPath);
+        string searchable = Path.Combine(
+            Path.GetTempPath(), $"pageforge-ocr-sheet-{Guid.NewGuid():N}.pdf");
+
+        try
+        {
+            OcrResult recognized = await OcrToPdfCoreAsync(searchable, options, ct).ConfigureAwait(false);
+
+            var rows = new List<XlsxWriter.Row>
+            {
+                new(new[] { "Page", "Line", "Text" }),
+            };
+
+            // A second engine for the recognized copy: this one still has the
+            // caller's document open, and taking it away to read another file
+            // would leave them holding a different document than they opened.
+            await using MuPdfEngine reader = Create();
+            PdfDocumentInfo info = await reader.OpenAsync(searchable, ct).ConfigureAwait(false);
+
+            for (int page = 0; page < info.PageCount; page++)
+            {
+                PageText text = await reader.GetPageTextAsync(page, ct).ConfigureAwait(false);
+                string[] lines = text.Text.Split(
+                    new[] { "\r\n", "\n", "\r" }, StringSplitOptions.None);
+
+                int lineNumber = 0;
+                foreach (string line in lines)
+                {
+                    // Blank lines are dropped rather than carried through. Page
+                    // images produce plenty of them, and a workbook that is
+                    // mostly empty rows is harder to use than one that is only
+                    // the text.
+                    if (string.IsNullOrWhiteSpace(line))
+                    {
+                        continue;
+                    }
+
+                    lineNumber++;
+                    rows.Add(new XlsxWriter.Row(new[]
+                    {
+                        (page + 1).ToString(CultureInfo.InvariantCulture),
+                        lineNumber.ToString(CultureInfo.InvariantCulture),
+                        line.Trim(),
+                    }));
+                }
+            }
+
+            XlsxWriter.Write(fullPath, "Recognized text", rows);
+
+            return recognized with { OutputPath = fullPath, PageCount = info.PageCount };
+        }
+        catch
+        {
+            // A half-written workbook is worse than none: it opens, and the
+            // pages missing from it look like pages the recognizer found
+            // nothing on.
+            TryDeleteFile(fullPath);
+            throw;
+        }
+        finally
+        {
+            TryDeleteFile(searchable);
+        }
+    }
+
     public ValueTask<OcrResult> OcrToPngAsync(
         string outputPath, OcrOptions? options, CancellationToken cancellationToken = default)
         => OcrToPngCoreAsync(outputPath, cancellationToken);

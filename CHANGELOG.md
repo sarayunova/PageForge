@@ -25,6 +25,19 @@ version heading when the tag is pushed.
   filled forms into static page content.
 - True redaction that removes the underlying content rather than drawing over
   it, plus offline OCR for scanned documents.
+- OCR converts to a **spreadsheet** as well as a searchable PDF, a Word
+  document and per-page images (FR-OCR-02), one row per line of recognized
+  text carrying its page and line number. MuPDF has no spreadsheet writer, so
+  the workbook is written directly as Office Open XML rather than by taking on
+  a dependency the desktop build would have to ship; recognition still goes
+  through the same native pass as the searchable PDF, so the two exports of a
+  scan always contain the same words. The layout is rows of text, not
+  reconstructed tables: OCR cannot recover a table reliably, and guessing
+  would invent structure the document never had.
+- All four OCR conversions are now reachable from the **OCR…** command, which
+  picks the format from the extension chosen in the save dialog. Only the
+  searchable PDF had a way in before — the other three existed on the engine
+  and could not be produced by anyone using the application.
 - Password protection and permissions: open and permissions passwords, with an
   encrypted document refusing a wrong password and yielding no extractable text
   until it is authenticated.
@@ -119,8 +132,6 @@ version heading when the tag is pushed.
 - **Localized UI strings (TRD §6).** Strings are literals in XAML and code
   rather than resource files. English only, which matches the v1 plan, but the
   externalization the requirement asks for has not been done.
-- **Spreadsheet export (FR-OCR-02).** OCR output converts to searchable PDF,
-  DOCX and per-page PNG. Excel is not implemented.
 - **Page reorder by dragging a thumbnail, verified.** Reordering with
   Ctrl+Up/Ctrl+Down is covered by the UI suite and works. The drag-and-drop
   gesture could not be verified: a synthesized drag reaches the press and

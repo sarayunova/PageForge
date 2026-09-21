@@ -12,6 +12,21 @@ using PageForge.Core.View;
 
 namespace PageForge.App.Wpf.ViewModels;
 
+/// <summary>Which conversion an OCR run should produce (FR-OCR-02/03/04).
+/// A searchable PDF is <see cref="DocumentTabViewModel.RunOcrAsync"/>, which
+/// predates these and reopens its result.</summary>
+public enum OcrConversion
+{
+    /// <summary>A Word document of the recognized text.</summary>
+    Docx,
+
+    /// <summary>A zip of one PNG per page.</summary>
+    PageImages,
+
+    /// <summary>A workbook, one row per line of recognized text.</summary>
+    Spreadsheet,
+}
+
 /// <summary>
 /// One row in the viewer's page list or thumbnail strip. Carries the lazy full
 /// image and the lazy thumbnail, plus the page region for sizing, its 1-based
@@ -1064,6 +1079,48 @@ public sealed class DocumentTabViewModel : ObservableObject
         {
             OcrResult result = await OcrService.OcrAsync(_doc.Engine, outputPath, options: null, ct).ConfigureAwait(false);
             DocumentStatus = $"OCR: {result.PageCount} page(s) recognized → {Path.GetFileName(outputPath)} is now searchable";
+            return result;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    /// <summary>
+    /// Runs local OCR and writes the recognized text in a format other than a
+    /// searchable PDF (FR-OCR-02/03/04): a Word document, a zip of page
+    /// images, or a spreadsheet. All three existed on the engine and none had
+    /// a way in from the shell, so the application could only ever produce
+    /// searchable PDFs while four conversions were listed as shipped.
+    /// </summary>
+    public async Task<OcrResult> RunOcrConversionAsync(
+        string outputPath, OcrConversion conversion, CancellationToken ct = default)
+    {
+        GuardPageCount();
+        IsBusy = true;
+        try
+        {
+            OcrResult result = conversion switch
+            {
+                OcrConversion.Docx => await _doc.Engine
+                    .OcrToDocxAsync(outputPath, null, ct).ConfigureAwait(false),
+                OcrConversion.PageImages => await _doc.Engine
+                    .OcrToPngAsync(outputPath, null, ct).ConfigureAwait(false),
+                OcrConversion.Spreadsheet => await _doc.Engine
+                    .OcrToSpreadsheetAsync(outputPath, null, ct).ConfigureAwait(false),
+                _ => throw new ArgumentOutOfRangeException(nameof(conversion)),
+            };
+
+            string what = conversion switch
+            {
+                OcrConversion.Docx => "Word document",
+                OcrConversion.PageImages => "page images",
+                _ => "spreadsheet",
+            };
+
+            DocumentStatus =
+                $"OCR: {result.PageCount} page(s) → {Path.GetFileName(outputPath)} ({what})";
             return result;
         }
         finally

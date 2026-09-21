@@ -392,6 +392,31 @@ public interface IPdfEngine : IAsyncDisposable
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Recognizes every page of the open document and writes the text into a
+    /// spreadsheet (FR-OCR-02): one row per line of recognized text, carrying
+    /// the page number, the line number within that page, and the text. The
+    /// open document is left open and unmodified, and recognition happens
+    /// entirely on this machine.
+    ///
+    /// A spreadsheet of a scan is useful for one thing — getting the text out
+    /// in rows that can be sorted, filtered and pasted — so the layout is rows
+    /// of text rather than an attempt to reconstruct tables from a page image.
+    /// OCR cannot do that reliably, and a wrong guess would invent structure
+    /// the document never had.
+    ///
+    /// Pass <c>null</c> for <paramref name="options"/> to use the defaults
+    /// (see <see cref="OcrOptions"/>). The output file must not already exist.
+    ///
+    /// Throws when the engine has no open document, the output path is invalid,
+    /// or recognition fails. Returns the number of pages recognized and the
+    /// effective language/model on success.
+    /// </summary>
+    ValueTask<OcrResult> OcrToSpreadsheetAsync(
+        string outputPath,
+        OcrOptions? options = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Applies PDF standard security (FR-SEC-01): writes a fresh encrypted copy
     /// of the open document to <paramref name="outputPath"/>. The open document
     /// is left open and unmodified; the copy is what carries the security
