@@ -994,6 +994,178 @@ public class UiSmokeTests
             "drag or Ctrl+Up/Ctrl+Down to move.");
     }
 
+    /// <summary>
+    /// The page on screen follows the thumbnail selected, after a reorder has
+    /// been staged (FR-PAGE).
+    ///
+    /// Reported twice. The first fix restored navigation in reorder mode, and
+    /// the first test asserted the page INDICATOR, which is a different
+    /// binding — it can update while the surface keeps showing the old page,
+    /// which is precisely what was reported. This asserts the page image that
+    /// is actually displayed, and it stages a move first, because that is the
+    /// sequence it was reported from.
+    /// </summary>
+    [Fact]
+    public async Task The_displayed_page_follows_the_selection_after_a_staged_move()
+    {
+        await using PageForgeApp app = await PageForgeApp.LaunchAsync();
+        await app.WaitForVisibleAsync("PageIndicatorText");
+
+        PageForgeApp.Activate(app.FindById("OpenPdfButton")
+            ?? throw new InvalidOperationException("The Open PDF… command was not found."));
+        await OpenFileViaDialog(app, Sample3);
+        await WaitForIndicator(app, "/ 3");
+
+        SelectToolGroup(app, "OrganizeModeTab");
+        PageForgeApp.Activate(app.FindInSelectedTabById("ReorderToggle")
+            ?? throw new InvalidOperationException("The Reorder toggle was not found."));
+        Assert.Contains("Reorder mode", await WaitForText(app, "StatusText"));
+
+        // Page 3 on screen, as reported.
+        AutomationElement[] thumbs = ThumbnailElements(app);
+        ((SelectionItemPattern)thumbs[2].GetCurrentPattern(SelectionItemPattern.Pattern)).Select();
+        await WaitForDisplayedPage(app, 3);
+
+        // Stage a move: the second thumbnail up to the front.
+        const ushort VkUp = 0x26;
+        SyntheticMouse.EnsureForeground(new IntPtr(app.Window.Current.NativeWindowHandle));
+        ((SelectionItemPattern)ThumbnailElements(app)[1]
+            .GetCurrentPattern(SelectionItemPattern.Pattern)).Select();
+        await Task.Delay(300);
+        SyntheticMouse.PressKey(VkUp, control: true);
+        await Task.Delay(500);
+
+        // Now choose another page. This is the step that did nothing.
+        AutomationElement[] after = ThumbnailElements(app);
+        string chosen = after[2].Current.Name;
+        ((SelectionItemPattern)after[2].GetCurrentPattern(SelectionItemPattern.Pattern)).Select();
+
+        int expected = int.Parse(
+            chosen.Replace("Thumbnail page ", string.Empty, StringComparison.Ordinal),
+            CultureInfo.InvariantCulture);
+
+        string shown = await WaitForDisplayedPage(app, expected);
+        Assert.Equal($"Document page {expected}", shown);
+    }
+
+    /// <summary>
+    /// The same sequence in continuous-scroll mode (FR-VIEW-02).
+    ///
+    /// In single-page mode the surface holds one page, so "which page is
+    /// shown" is just which one is bound. In continuous mode every page is in
+    /// the list and choosing one only scrolls — so a scroll that does not
+    /// happen leaves the previous page on screen while the indicator moves,
+    /// which is indistinguishable from the reported symptom. The assertion
+    /// therefore has to be about what occupies the viewport, not about what
+    /// exists in the list.
+    /// </summary>
+    [Fact]
+    public async Task The_displayed_page_follows_the_selection_in_continuous_mode()
+    {
+        await using PageForgeApp app = await PageForgeApp.LaunchAsync();
+        await app.WaitForVisibleAsync("PageIndicatorText");
+
+        PageForgeApp.Activate(app.FindById("OpenPdfButton")
+            ?? throw new InvalidOperationException("The Open PDF… command was not found."));
+        await OpenFileViaDialog(app, Sample3);
+        await WaitForIndicator(app, "/ 3");
+
+        AutomationElement continuous = app.FindByName("Continuous scroll mode")
+            ?? throw new InvalidOperationException("The Continuous toggle was not found.");
+        ((TogglePattern)continuous.GetCurrentPattern(TogglePattern.Pattern)).Toggle();
+        await Task.Delay(800);
+
+        SelectToolGroup(app, "OrganizeModeTab");
+        PageForgeApp.Activate(app.FindInSelectedTabById("ReorderToggle")
+            ?? throw new InvalidOperationException("The Reorder toggle was not found."));
+        Assert.Contains("Reorder mode", await WaitForText(app, "StatusText"));
+
+        AutomationElement[] thumbs = ThumbnailElements(app);
+        ((SelectionItemPattern)thumbs[2].GetCurrentPattern(SelectionItemPattern.Pattern)).Select();
+        await Task.Delay(900);
+
+        string mostlyVisible = MostVisiblePage(app);
+        Assert.Equal("Document page 3", mostlyVisible);
+    }
+
+    /// <summary>
+    /// Which page occupies most of the page list's viewport — the page a
+    /// person would say is on screen.
+    /// </summary>
+    private static string MostVisiblePage(PageForgeApp app)
+    {
+        AutomationElement list = app.FindInSelectedTabById("PageList")
+            ?? throw new InvalidOperationException("The page surface was not found.");
+        System.Windows.Rect viewport = list.Current.BoundingRectangle;
+
+        string best = "(nothing)";
+        double bestArea = 0;
+
+        foreach (AutomationElement page in list
+                     .FindAll(TreeScope.Descendants, System.Windows.Automation.Condition.TrueCondition)
+                     .Cast<AutomationElement>()
+                     .Where(e => e.Current.Name.StartsWith("Document page ", StringComparison.Ordinal)))
+        {
+            System.Windows.Rect bounds = page.Current.BoundingRectangle;
+            bounds.Intersect(viewport);
+            double area = bounds.IsEmpty ? 0 : bounds.Width * bounds.Height;
+            if (area > bestArea)
+            {
+                bestArea = area;
+                best = page.Current.Name;
+            }
+        }
+
+        return best;
+    }
+
+    /// <summary>
+    /// Waits for the main surface to be showing a given page, and returns the
+    /// name of the page it is showing. Reads the page image itself rather than
+    /// the indicator: the indicator is bound separately and updates whether or
+    /// not the surface rebinds.
+    /// </summary>
+    private static async Task<string> WaitForDisplayedPage(PageForgeApp app, int pageNumber)
+    {
+        string wanted = $"Document page {pageNumber}";
+        DateTime deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        string[] shown = Array.Empty<string>();
+
+        while (DateTime.UtcNow < deadline)
+        {
+            shown = DisplayedPageNames(app);
+            if (shown.Contains(wanted, StringComparer.Ordinal))
+            {
+                return wanted;
+            }
+
+            await Task.Delay(200);
+        }
+
+        Assert.Fail(
+            $"The main surface never showed '{wanted}'. It is showing: " +
+            $"[{string.Join(", ", shown)}]. The page indicator can move without the surface " +
+            "rebinding, so a passing indicator assertion would have hidden this.");
+        return string.Empty;
+    }
+
+    /// <summary>The page images currently realized on the main surface.</summary>
+    private static string[] DisplayedPageNames(PageForgeApp app)
+    {
+        AutomationElement? list = app.FindInSelectedTabById("PageList");
+        if (list is null)
+        {
+            return Array.Empty<string>();
+        }
+
+        return list
+            .FindAll(TreeScope.Descendants, System.Windows.Automation.Condition.TrueCondition)
+            .Cast<AutomationElement>()
+            .Where(e => e.Current.Name.StartsWith("Document page ", StringComparison.Ordinal))
+            .Select(e => e.Current.Name)
+            .ToArray();
+    }
+
     /// <summary>The thumbnails' accessible names, top to bottom.</summary>
     private static string[] ThumbnailNames(PageForgeApp app)
         => ThumbnailElements(app).Select(e => e.Current.Name).ToArray();

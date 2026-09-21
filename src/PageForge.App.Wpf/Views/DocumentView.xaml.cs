@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using Microsoft.Extensions.Logging;
 using PageForge.App.Wpf.ViewModels;
 using PageForge.Core.Pdf;
 using PageForge.MuPdfInterop;
@@ -384,12 +385,27 @@ public partial class DocumentView : UserControl
     /// </summary>
     private void ThumbList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        // Logged because this path is hard to observe from outside: page
+        // navigation from the thumbnail strip has been reported as not
+        // working after a drag-reorder, and a drag cannot be reproduced by
+        // the UI suite. The line says what was selected and where the viewer
+        // ended up, which distinguishes "the click never arrived" from "the
+        // click arrived and the surface did not follow".
+        Diagnostics.AppLog.For(typeof(DocumentView)).LogInformation(
+            "Thumbnail selection: index {Index}, item {Item}, reorder mode {Reorder}",
+            ThumbList.SelectedIndex,
+            (ThumbList.SelectedItem as PageSlotViewModel)?.DisplayNumber.ToString() ?? "none",
+            _vm?.IsReorderMode);
+
         if (ThumbList.SelectedItem is not PageSlotViewModel slot)
         {
             return;
         }
 
         _vm?.GoToPage(slot.PageIndex);
+
+        Diagnostics.AppLog.For(typeof(DocumentView)).LogInformation(
+            "Thumbnail selection applied: viewer now on page {Page}", _vm?.CurrentPageIndex + 1);
 
         if (_vm?.IsReorderMode != true)
         {
@@ -460,6 +476,12 @@ public partial class DocumentView : UserControl
         }
 
         int target = GetIndexUnderPoint(e.GetPosition(ThumbList));
+
+        // Same reason as the selection log: this is the gesture no test can
+        // drive, so the only record of what a real drop did is this line.
+        Diagnostics.AppLog.For(typeof(DocumentView)).LogInformation(
+            "Thumbnail drop: from {From} to {To}", _dragStartIndex, target);
+
         if (target >= 0)
         {
             _vm.MoveReorderItem(_dragStartIndex, target);
