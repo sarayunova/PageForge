@@ -76,6 +76,19 @@ version heading when the tag is pushed.
   tick, and the flag is not sufficient for a close-time "unsaved changes"
   prompt.
 
+### Fixed before the first release
+
+- **Drag-to-mark redactions never worked (FR-SEC-02).** The redaction overlay
+  is a `Canvas` with no `Background`, and a WPF panel without one is invisible
+  to hit testing: every press went to the page image underneath, which is not
+  an ancestor of the canvas, so none of the drag handlers ever ran. The
+  surface rendered correctly and the keyboard path worked, which is how it
+  survived screenshots, a fidelity suite and an accessibility pass — nothing
+  had ever driven a pointer at it. It was found when the new signature
+  placement surface, modelled on this one, hit the same wall. Both overlays
+  now paint a transparent background, and both gestures are driven by a real
+  synthesized mouse in the UI smoke suite.
+
 ### Not in this release, despite work existing for it
 
 - **Localized UI strings (TRD §6).** Strings are literals in XAML and code

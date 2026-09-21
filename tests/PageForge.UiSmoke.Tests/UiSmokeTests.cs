@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // This file is part of PageForge. See LICENSE for the full license text.
 
+using System.Globalization;
+using System.Text.RegularExpressions;
 using System.IO;
 using System.Windows.Automation;
 using Xunit;
@@ -635,6 +637,219 @@ public class UiSmokeTests
         PageForgeApp.Activate(
             app.FindByName("Cancel signing")
             ?? throw new InvalidOperationException("The Cancel signing command was not found."));
+    }
+
+    /// <summary>
+    /// Places a signature by actually dragging on the page (FR-SEC-03).
+    ///
+    /// The drag is the one part of placement no other check can reach: the
+    /// coordinate maths is proved in the smoke harness and the surface is
+    /// proved to render through Automation, but nothing until now pressed the
+    /// mouse down on the overlay and moved it. A handler wired to the wrong
+    /// element, a rubber band that never becomes a placement, or an overlay
+    /// that does not receive input at all would pass every other test.
+    ///
+    /// What it asserts is deliberately not "a box appeared". Dragging near the
+    /// TOP of the page must report a LARGER PDF y than dragging near the
+    /// bottom, because PDF measures from the bottom-left while the screen
+    /// measures from the top-left. That is the direction of the flip, checked
+    /// through the real gesture — and a flip mistake is invisible otherwise,
+    /// since both versions produce a perfectly ordinary-looking rectangle.
+    /// </summary>
+    [Fact]
+    public async Task A_dragged_box_becomes_the_signature_position()
+    {
+        await using PageForgeApp app = await PageForgeApp.LaunchAsync();
+        await app.WaitForVisibleAsync("PageIndicatorText");
+
+        EnterSignPlacement(app);
+
+        System.Windows.Rect page = SignPlacementPageBounds(app);
+        double x0 = page.Left + (page.Width * 0.2);
+        double x1 = page.Left + (page.Width * 0.7);
+
+        // Upper part of the page, then lower. Both boxes are a good fraction of
+        // the sheet, so neither can be mistaken for the stray-click case.
+        SyntheticMouse.Drag((x0, page.Top + (page.Height * 0.10)), (x1, page.Top + (page.Height * 0.28)));
+        await Task.Delay(200);
+
+        AutomationElement continueButton = FindSignPlacementContinue(app);
+        Assert.True(
+            continueButton.Current.IsEnabled,
+            "Dragging a box on the placement surface did not register as a placement: " +
+            $"Continue stayed disabled. Hint said: '{SignPlacementHint(app)}'. " +
+            $"The drag was aimed inside {page} and the pointer finished at " +
+            $"{SyntheticMouse.CursorPosition().X},{SyntheticMouse.CursorPosition().Y}; " +
+            $"the window is at {app.Window.Current.BoundingRectangle}.");
+
+        (double _, double upperY) = ParsePlacedBox(SignPlacementHint(app));
+
+        SyntheticMouse.Drag((x0, page.Top + (page.Height * 0.62)), (x1, page.Top + (page.Height * 0.80)));
+        await Task.Delay(200);
+
+        (double _, double lowerY) = ParsePlacedBox(SignPlacementHint(app));
+
+        Assert.True(
+            upperY > lowerY,
+            $"A box dragged near the top of the page reported y={upperY:F0} pt and one near " +
+            $"the bottom reported y={lowerY:F0} pt. PDF measures upward from the bottom-left " +
+            "and the screen downward from the top-left, so the upper box must have the " +
+            "LARGER y. As it stands a signature would be placed on the opposite half of the " +
+            "page from where it was drawn.");
+
+        // A fresh surface, so the next assertion cannot pass on the strength of
+        // the placement that already succeeded.
+        PageForgeApp.Activate(
+            app.FindByName("Cancel signing")
+            ?? throw new InvalidOperationException("The Cancel signing command was not found."));
+        await Task.Delay(200);
+        EnterSignPlacement(app);
+
+        AutomationElement freshContinue = FindSignPlacementContinue(app);
+        Assert.False(
+            freshContinue.Current.IsEnabled,
+            "Re-entering placement kept the previous box, so Continue was already enabled " +
+            "and the stray-click check below would prove nothing.");
+
+        // A stray click must not place a signature. The surface has just been
+        // shown to receive drags, so this failing would be a real refusal to
+        // guard the size, not a dead overlay.
+        System.Windows.Rect fresh = SignPlacementPageBounds(app);
+        SyntheticMouse.Drag(
+            (fresh.Left + (fresh.Width * 0.4), fresh.Top + (fresh.Height * 0.4)),
+            (fresh.Left + (fresh.Width * 0.4) + 6, fresh.Top + (fresh.Height * 0.4) + 6));
+        await Task.Delay(200);
+
+        Assert.False(
+            FindSignPlacementContinue(app).Current.IsEnabled,
+            "A six-pixel drag was accepted as a signature placement. Nobody means to sign " +
+            $"in a box that small. Hint said: '{SignPlacementHint(app)}'.");
+
+        PageForgeApp.Activate(
+            app.FindByName("Cancel signing")
+            ?? throw new InvalidOperationException("The Cancel signing command was not found."));
+    }
+
+    /// <summary>
+    /// Marks a redaction by actually dragging on the page (FR-SEC-02).
+    ///
+    /// This is here because the signature placement surface could not receive
+    /// a mouse event, and the redaction surface — which it was modelled on —
+    /// turned out to have the identical defect: a Canvas overlay with no
+    /// Background is invisible to hit testing, so every press went to the page
+    /// image underneath and none of the drag handlers ever ran. Drag-to-mark
+    /// had never worked in the shipped shell. Nothing caught it because
+    /// screenshots show the surface looking correct and no test had ever
+    /// driven a pointer at it.
+    /// </summary>
+    [Fact]
+    public async Task A_dragged_redaction_box_is_marked()
+    {
+        await using PageForgeApp app = await PageForgeApp.LaunchAsync();
+        await app.WaitForVisibleAsync("PageIndicatorText");
+
+        SelectToolGroup(app, "RedactModeTab");
+        AutomationElement toggle = app.FindByName("Redact mode")
+            ?? throw new InvalidOperationException("The Redact mode toggle was not found.");
+        ((TogglePattern)toggle.GetCurrentPattern(TogglePattern.Pattern)).Toggle();
+        await Task.Delay(700);
+
+        SyntheticMouse.EnsureForeground(new IntPtr(app.Window.Current.NativeWindowHandle));
+
+        AutomationElement page = app.FindByName("Redact page 1")
+            ?? throw new InvalidOperationException("The redaction page surface was not found.");
+        System.Windows.Rect bounds = page.Current.BoundingRectangle;
+        bounds.Intersect(app.Window.Current.BoundingRectangle);
+
+        SyntheticMouse.Drag(
+            (bounds.Left + (bounds.Width * 0.2), bounds.Top + (bounds.Height * 0.2)),
+            (bounds.Left + (bounds.Width * 0.6), bounds.Top + (bounds.Height * 0.4)));
+        await Task.Delay(400);
+
+        // The marked regions are listed beside the page, each row named
+        // "Redaction region (x0, y0) → (x1, y1) pt".
+        AutomationElement? region = app.Window.FindFirst(
+            TreeScope.Descendants,
+            new PropertyCondition(AutomationElement.NameProperty, "Redaction region", PropertyConditionFlags.None));
+
+        if (region is null)
+        {
+            AutomationElement[] named = app.Window
+                .FindAll(TreeScope.Descendants, System.Windows.Automation.Condition.TrueCondition)
+                .Cast<AutomationElement>()
+                .Where(e => e.Current.Name.StartsWith("Redaction region", StringComparison.Ordinal))
+                .ToArray();
+
+            Assert.True(
+                named.Length > 0,
+                "Dragging a box on the redaction surface marked nothing. The drag handlers " +
+                "are on the overlay Canvas, and a Panel with no Background does not hit " +
+                "test, so the press lands on the page image underneath and never reaches " +
+                "them — which is how this shipped without drag-to-mark working at all.");
+        }
+    }
+
+    private static void EnterSignPlacement(PageForgeApp app)
+    {
+        SelectToolGroup(app, "DocumentModeTab");
+        PageForgeApp.Activate(
+            app.FindByName("Sign document")
+            ?? throw new InvalidOperationException("The Sign document command was not found."));
+
+        // The pointer is about to be driven at this window, so it has to be the
+        // one receiving input. Synthesized input follows the foreground window,
+        // not the automation element, so this is checked rather than assumed.
+        SyntheticMouse.EnsureForeground(new IntPtr(app.Window.Current.NativeWindowHandle));
+    }
+
+    private static AutomationElement FindSignPlacementContinue(PageForgeApp app)
+        => app.FindByName("Continue to signing")
+           ?? throw new InvalidOperationException("The Continue to signing command was not found.");
+
+    private static string SignPlacementHint(PageForgeApp app)
+    {
+        AutomationElement hint = app.FindById("SignPlaceHint")
+            ?? throw new InvalidOperationException("The placement hint text was not found.");
+        return PageForgeApp.GetText(hint);
+    }
+
+    /// <summary>The placement page's rectangle, clipped to what is actually on
+    /// screen. A page taller than the window reports a bounding rectangle that
+    /// runs past the bottom edge, and a drag aimed there would land on whatever
+    /// is behind the window.</summary>
+    private static System.Windows.Rect SignPlacementPageBounds(PageForgeApp app)
+    {
+        AutomationElement page = app.FindByName("Page 1 to sign")
+            ?? throw new InvalidOperationException("The placement page surface was not found.");
+
+        System.Windows.Rect bounds = page.Current.BoundingRectangle;
+        System.Windows.Rect window = app.Window.Current.BoundingRectangle;
+        bounds.Intersect(window);
+
+        if (bounds.IsEmpty || bounds.Width < 80 || bounds.Height < 80)
+        {
+            throw new InvalidOperationException(
+                $"Only {bounds.Width:F0}x{bounds.Height:F0} of the placement page is on " +
+                "screen, which is too little to drag a meaningful box across.");
+        }
+
+        return bounds;
+    }
+
+    /// <summary>Reads the placed box's lower-left corner out of the hint, which
+    /// reports it in PDF points.</summary>
+    private static (double X, double Y) ParsePlacedBox(string hint)
+    {
+        Match match = Regex.Match(
+            hint, @"\((-?[\d.]+), (-?[\d.]+)\) to \((-?[\d.]+), (-?[\d.]+)\) pt");
+
+        Assert.True(
+            match.Success,
+            $"The placement surface did not report a placed box. It said: '{hint}'.");
+
+        return (
+            double.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture),
+            double.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture));
     }
 
     private static async Task AssertPageDrawsAsync(

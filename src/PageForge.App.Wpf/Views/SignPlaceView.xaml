@@ -35,7 +35,12 @@
                     <Button Content="Cancel" Padding="8,3" Margin="6,0,0,0"
                             AutomationProperties.Name="Cancel signing" Click="Cancel_Click" />
                 </StackPanel>
-                <TextBlock x:Name="HintText" VerticalAlignment="Center" Margin="0,0,10,0"
+                <!-- The automation id is load-bearing: the UI suite drives a real
+                     mouse drag across the overlay and reads the placed box's
+                     coordinates back from here, which is how the screen-to-PDF
+                     flip is checked through the actual gesture. -->
+                <TextBlock x:Name="HintText" AutomationProperties.AutomationId="SignPlaceHint"
+                           VerticalAlignment="Center" Margin="0,0,10,0"
                            Foreground="{DynamicResource ContentMutedBrush}"
                            TextTrimming="CharacterEllipsis"
                            ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
@@ -50,7 +55,12 @@
                 <Image x:Name="PageImage" Stretch="None" SnapsToDevicePixels="True"
                        AutomationProperties.Name="Page to sign" />
 
-                <Canvas x:Name="Overlay" ClipToBounds="True" Focusable="True"
+                <!-- Background is load-bearing, not styling: a Panel whose
+                     Background is null is invisible to hit testing, so an
+                     overlay without one never receives the mouse and the drag
+                     goes to whatever is behind it. Transparent paints nothing
+                     and hit-tests everywhere. -->
+                <Canvas x:Name="Overlay" Background="Transparent" ClipToBounds="True" Focusable="True"
                         MouseLeftButtonDown="Overlay_MouseLeftButtonDown"
                         MouseMove="Overlay_MouseMove"
                         MouseLeftButtonUp="Overlay_MouseLeftButtonUp"

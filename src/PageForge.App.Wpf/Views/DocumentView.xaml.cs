@@ -1361,6 +1361,13 @@ public partial class DocumentView : UserControl
         SignPlaceHost.SetContext(_vm);
         SignPlaceHost.Visibility = Visibility.Visible;
 
+        // The page list has to go, not merely be covered. It is declared after
+        // the tool surfaces in the grid, so it sits ON TOP of them and takes
+        // every mouse event — a placement surface left underneath it renders
+        // perfectly and cannot be drawn on at all. Every other tool view does
+        // the same thing for the same reason.
+        PageList.Visibility = Visibility.Collapsed;
+
         // Focus the surface, not merely show it: the keyboard placement path
         // only listens while focus is inside the overlay, so without this a
         // keyboard user would press Enter and have nothing happen.
@@ -1370,6 +1377,7 @@ public partial class DocumentView : UserControl
     private void OnSignPlacementCancelled()
     {
         SignPlaceHost.Visibility = Visibility.Collapsed;
+        PageList.Visibility = Visibility.Visible;
         _vm?.ClearStatusHint();
     }
 
@@ -1383,6 +1391,7 @@ public partial class DocumentView : UserControl
         }
 
         SignPlaceHost.Visibility = Visibility.Collapsed;
+        PageList.Visibility = Visibility.Visible;
 
         var dialog = new SignDialog(pageIndex, bounds) { Owner = Window.GetWindow(this) };
 

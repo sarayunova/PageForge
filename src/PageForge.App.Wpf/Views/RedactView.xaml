@@ -132,7 +132,15 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
-                    <Canvas x:Name="Overlay" ClipToBounds="True" Focusable="True"
+                    <!-- Background is load-bearing, not styling. A Panel whose
+                         Background is null is invisible to hit testing, so this
+                         overlay never received the mouse and drag-to-mark did
+                         nothing at all: the presses went to the page Image
+                         underneath, which is not an ancestor of this Canvas, so
+                         they never reached these handlers. It looked right in
+                         every screenshot, and nothing drove a mouse at it until
+                         the signature placement surface hit the same wall. -->
+                    <Canvas x:Name="Overlay" Background="Transparent" ClipToBounds="True" Focusable="True"
                             MouseLeftButtonDown="Overlay_MouseLeftButtonDown"
                             MouseMove="Overlay_MouseMove"
                             MouseLeftButtonUp="Overlay_MouseLeftButtonUp"
