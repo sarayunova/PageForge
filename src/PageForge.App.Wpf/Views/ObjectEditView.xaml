@@ -84,7 +84,14 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <Canvas x:Name="Overlay" IsHitTestVisible="True" ClipToBounds="True" Focusable="True" />
+                <!-- Background is load-bearing, not styling. IsHitTestVisible is
+                     not enough on its own: a Panel whose Background is null has
+                     nothing to hit, so every press fell through to the page image
+                     and select, move and resize - the whole mouse story for
+                     FR-EDIT - never ran. The redaction surface had the identical
+                     defect. Transparent paints nothing and hit-tests everywhere. -->
+                <Canvas x:Name="Overlay" Background="Transparent" IsHitTestVisible="True"
+                        ClipToBounds="True" Focusable="True" />
             </Grid>
         </ScrollViewer>
     </DockPanel>

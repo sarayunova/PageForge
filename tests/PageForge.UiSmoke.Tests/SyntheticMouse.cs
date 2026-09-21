@@ -114,6 +114,18 @@ internal static class SyntheticMouse
     /// that tracks the rubber band during the drag would look like it worked
     /// while never having been told the box grew.
     /// </remarks>
+    /// <summary>A single click: press and release without moving, for selecting
+    /// rather than drawing.</summary>
+    public static void Click((double X, double Y) at)
+    {
+        MoveTo(at.X, at.Y);
+        Thread.Sleep(60);
+        Send(MouseEventLeftDown);
+        Thread.Sleep(60);
+        Send(MouseEventLeftUp);
+        Thread.Sleep(120);
+    }
+
     public static void Drag((double X, double Y) from, (double X, double Y) to, int steps = 12)
     {
         MoveTo(from.X, from.Y);
@@ -148,7 +160,31 @@ internal static class SyntheticMouse
         int nx = (int)Math.Round((x - originX) * 65535.0 / width);
         int ny = (int)Math.Round((y - originY) * 65535.0 / height);
 
-        Send(MouseEventMove | MouseEventAbsolute | MouseEventVirtualDesk, nx, ny);
+        // Confirm the pointer arrived, and retry if it did not.
+        //
+        // This shares a desktop: a real hand on the mouse, a window stealing
+        // focus, or the rounding above can leave the pointer somewhere other
+        // than the target, and a drag from the wrong place looks exactly like a
+        // feature that ignored it. Verifying delivery keeps the product
+        // assertions strict — what is retried here is the input, never the
+        // conclusion drawn from it.
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            Send(MouseEventMove | MouseEventAbsolute | MouseEventVirtualDesk, nx, ny);
+            Thread.Sleep(15);
+
+            PointStruct actual = CursorPosition();
+            if (Math.Abs(actual.X - x) <= 2 && Math.Abs(actual.Y - y) <= 2)
+            {
+                return;
+            }
+        }
+
+        PointStruct landed = CursorPosition();
+        throw new InvalidOperationException(
+            $"The pointer could not be placed at {x:F0},{y:F0}: it is at {landed.X},{landed.Y} " +
+            "after three attempts. Something else on this desktop is moving the mouse, so a " +
+            "synthesized gesture cannot be trusted to land where it is aimed.");
     }
 
     private static void Send(uint flags, int x = 0, int y = 0)

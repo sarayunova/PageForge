@@ -24,6 +24,11 @@ public class UiSmokeTests
 {
     private static string Sample3 => Path.Combine(PageForgeApp.FindRepoRoot(), "tools", "sample-pdf", "sample-pages3.pdf");
 
+    /// <summary>The scanned corpus fixture: a placed image per page, which is
+    /// what the object editor can select. The generated samples are text only.</summary>
+    private static string ScannedFixture => Path.Combine(
+        PageForgeApp.FindRepoRoot(), "tools", "sample-pdf", "corpus", "scan-letters.pdf");
+
     [Fact]
     public async Task Wpf_app_opens_organizes_and_saves_a_reordered_document()
     {
@@ -788,6 +793,103 @@ public class UiSmokeTests
                 "them — which is how this shipped without drag-to-mark working at all.");
         }
     }
+
+    /// <summary>
+    /// Selects a page object by clicking it (FR-EDIT).
+    ///
+    /// Object editing is the product's stated differentiator, and its entire
+    /// mouse story — click to select, drag to move, drag a handle to resize —
+    /// runs through one handler on an overlay canvas that had no Background
+    /// and therefore could not be hit. It was the third surface found with
+    /// that defect, after redaction and the new placement surface, which is
+    /// why this now has a test instead of a reasoned argument.
+    /// </summary>
+    [Fact]
+    public async Task Clicking_a_page_object_selects_it()
+    {
+        await using PageForgeApp app = await PageForgeApp.LaunchAsync();
+        await app.WaitForVisibleAsync("PageIndicatorText");
+
+        // The default sample is generated text, and an "object" here is an image
+        // or a vector drawing, so the scanned fixture is the one with something
+        // to select: each of its pages is a single placed image.
+        PageForgeApp.Activate(app.FindById("OpenPdfButton")
+            ?? throw new InvalidOperationException("The Open PDF… command was not found."));
+        await OpenFileViaDialog(app, ScannedFixture);
+        await WaitForIndicator(app, "/ 2");
+
+        SelectToolGroup(app, "EditModeTab");
+        AutomationElement toggle = app.FindByName("Object editing mode")
+            ?? throw new InvalidOperationException("The Object editing mode toggle was not found.");
+        ((TogglePattern)toggle.GetCurrentPattern(TogglePattern.Pattern)).Toggle();
+        await Task.Delay(900);
+
+        // Counted across the window rather than looked up in the selected tab:
+        // every open document carries its own object editor, and which subtree
+        // UI Automation calls the selected tab is not worth depending on here.
+        // Before the click no editor anywhere has a selection; after it, one does.
+        Assert.Equal(0, EnabledReplaceButtons(app));
+
+        // The object boxes carry their label and position as accessible names,
+        // which is also how the test learns where an object actually is rather
+        // than guessing at a coordinate on the page.
+        AutomationElement[] boxes = app.Window
+            .FindAll(TreeScope.Descendants, System.Windows.Automation.Condition.TrueCondition)
+            .Cast<AutomationElement>()
+            .Where(e => e.Current.Name.Contains(" at (", StringComparison.Ordinal)
+                        && e.Current.Name.EndsWith(" pt", StringComparison.Ordinal)
+                        && e.Current.BoundingRectangle.Width >= 8
+                        && e.Current.BoundingRectangle.Height >= 8)
+            .ToArray();
+
+        Assert.True(
+            boxes.Length > 0,
+            "The object editor listed no objects on this page, so there is nothing to click. " +
+            "This fixture is supposed to have editable content.");
+
+        SyntheticMouse.EnsureForeground(new IntPtr(app.Window.Current.NativeWindowHandle));
+
+        // Clip to what is actually on screen before aiming. A page-sized object
+        // on a page larger than the window reports a rectangle that runs off the
+        // edge, and its "centre" is then a point on someone else's window.
+        System.Windows.Rect box = boxes[0].Current.BoundingRectangle;
+        AutomationElement surface = app.FindByName("Object edit page 1")
+            ?? throw new InvalidOperationException("The object edit page surface was not found.");
+        box.Intersect(surface.Current.BoundingRectangle);
+        box.Intersect(app.Window.Current.BoundingRectangle);
+
+        Assert.False(
+            box.IsEmpty || box.Width < 8 || box.Height < 8,
+            $"None of the object '{boxes[0].Current.Name}' is on screen, so there is nowhere " +
+            "to click it.");
+
+        SyntheticMouse.Click((box.Left + (box.Width / 2), box.Top + (box.Height / 2)));
+        await Task.Delay(400);
+
+        Assert.True(
+            EnabledReplaceButtons(app) > 0,
+            $"Clicking the object at the centre of {box} selected nothing. Select, move and " +
+            "resize all run through one handler on the overlay canvas, so if the press does " +
+            "not reach it, none of object editing responds to the mouse at all.");
+    }
+
+    /// <summary>
+    /// How many object editors currently have a selection, counted by their
+    /// enabled Replace… command across the whole window.
+    ///
+    /// Counted rather than looked up in the selected tab because each open
+    /// document carries its own editor, and which subtree UI Automation
+    /// considers part of the selected tab is not a detail worth depending on.
+    /// Zero before a click and more than zero after is the same evidence
+    /// either way.
+    /// </summary>
+    private static int EnabledReplaceButtons(PageForgeApp app)
+        => app.Window
+            .FindAll(
+                TreeScope.Descendants,
+                new PropertyCondition(AutomationElement.AutomationIdProperty, "ReplaceButton"))
+            .Cast<AutomationElement>()
+            .Count(e => e.Current.IsEnabled);
 
     private static void EnterSignPlacement(PageForgeApp app)
     {

@@ -118,6 +118,14 @@ public partial class ObjectEditView : UserControl
 
     private void Rebuild(IReadOnlyList<PdfPageObject> objects)
     {
+        // What was selected has to survive the rebuild. Refresh() runs on any
+        // view-model state change - a status line, a zoom, an autosave tick -
+        // and dropping the selection each time meant an object stayed selected
+        // only until something unrelated happened, which for a click was about
+        // two hundred milliseconds. Replace… would then be disabled again with
+        // the box still highlighted on screen.
+        string? previouslySelected = _selected?.Id;
+
         Overlay.Children.Clear();
         Boxes.Clear();
         _selected = null;
@@ -129,6 +137,23 @@ public partial class ObjectEditView : UserControl
         foreach (PdfPageObject obj in objects)
         {
             Boxes.Add(new ObjectBoxViewModel(obj, _vm!.RenderDpi, _pixelH));
+        }
+
+        if (previouslySelected is not null)
+        {
+            ObjectBoxViewModel? again = Boxes.FirstOrDefault(
+                b => string.Equals(b.Id, previouslySelected, StringComparison.Ordinal));
+            if (again is not null)
+            {
+                // Restored without Select(), which takes focus: a refresh can
+                // happen while the user is somewhere else entirely, and pulling
+                // focus back to the page under them would be worse than the
+                // lost selection this fixes.
+                _selected = again;
+                again.IsSelected = true;
+                ReplaceButton.IsEnabled = true;
+                RedrawHandles();
+            }
         }
     }
 
@@ -367,6 +392,18 @@ public partial class ObjectEditView : UserControl
         Overlay.ReleaseMouseCapture();
 
         if (_vm is null || _selected is null)
+        {
+            return;
+        }
+
+        // A click is not an edit. Selecting an object is a press and a release
+        // with nothing in between, and committing that wrote a no-op move into
+        // the document: it went on the undo stack, marked the document dirty
+        // and was copied aside by the autosave buffer. The refresh that follows
+        // a commit then rebuilt the overlay and dropped the selection, so the
+        // click the user made to select something left them with nothing
+        // selected and an edited document.
+        if (_selected.Bounds == _dragStartBounds)
         {
             return;
         }

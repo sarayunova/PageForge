@@ -78,6 +78,17 @@ version heading when the tag is pushed.
 
 ### Fixed before the first release
 
+- **Object editing did not respond to the mouse at all (FR-EDIT).** Click to
+  select, drag to move and drag-a-handle to resize all run through one handler
+  on an overlay canvas that had no `Background`, so — as with redaction below —
+  no press ever reached it. Two further faults sat behind that one, found once
+  the clicks got through: a plain click was treated as a zero-distance drag and
+  **committed a no-op move into the document**, putting an entry on the undo
+  stack, marking the document dirty and handing it to the autosave buffer; and
+  the refresh that follows any view-model change rebuilt the overlay and
+  dropped the selection, so a selected object stayed selected for about two
+  hundred milliseconds. A click is no longer an edit, and a selection now
+  survives a refresh.
 - **Drag-to-mark redactions never worked (FR-SEC-02).** The redaction overlay
   is a `Canvas` with no `Background`, and a WPF panel without one is invisible
   to hit testing: every press went to the page image underneath, which is not
