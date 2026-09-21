@@ -367,19 +367,36 @@ public partial class DocumentView : UserControl
         await _vm.RunSearchAsync();
     }
 
+    /// <summary>
+    /// Shows the page whose thumbnail was selected.
+    ///
+    /// Reorder mode used to return here without doing anything, so that the
+    /// selection a drag sets would not also navigate. The cost was that the
+    /// viewer froze: while staging an order you could select any thumbnail you
+    /// liked and keep looking at the page you happened to be on, which reads
+    /// as the reorder having moved the wrong page. Staging changes the ORDER,
+    /// not which page is on screen, so the two have to be separable — and the
+    /// only way to check a staged order is to look at the pages in it.
+    ///
+    /// The difference in reorder mode is that the selection is kept rather
+    /// than cleared: it is what the drag and the Ctrl+Up/Ctrl+Down keys act
+    /// on, and clearing it would leave them with nothing to move.
+    /// </summary>
     private void ThumbList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (_vm?.IsReorderMode == true)
+        if (ThumbList.SelectedItem is not PageSlotViewModel slot)
         {
             return;
         }
 
-        if (ThumbList.SelectedItem is PageSlotViewModel slot)
+        _vm?.GoToPage(slot.PageIndex);
+
+        if (_vm?.IsReorderMode != true)
         {
-            _vm?.GoToPage(slot.PageIndex);
             ThumbList.SelectedIndex = -1;
-            RefreshAndScroll();
         }
+
+        RefreshAndScroll();
     }
 
     private void ReorderToggle_Changed(object sender, RoutedEventArgs e)

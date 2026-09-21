@@ -103,6 +103,18 @@ version heading when the tag is pushed.
 
 ### Fixed before the first release
 
+- **The viewer froze while staging a page reorder.** Selecting a thumbnail in
+  reorder mode did nothing, so the page on screen when the mode was entered
+  stayed there however many thumbnails were clicked afterwards — which reads
+  as the reorder having moved the wrong page. The selection handler returned
+  early in reorder mode so that the selection a drag sets would not also
+  navigate, and in doing so it disabled navigation for every other reason
+  too. Selecting now shows that page, and in reorder mode the selection is
+  kept rather than cleared, because the drag and the Ctrl+Up/Ctrl+Down keys
+  are what act on it. Staging still changes only the ORDER, never which page
+  is displayed; the two are separate, and checking a staged order means being
+  able to look at the pages in it.
+
 - **Every page thumbnail announced its class name.** The thumbnail strip — the
   most-used list in the application — had no accessible name on its list items,
   so each one fell back to `ToString()` on the view model and a screen reader

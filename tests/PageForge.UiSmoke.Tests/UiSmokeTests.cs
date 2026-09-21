@@ -947,6 +947,53 @@ public class UiSmokeTests
             after);
     }
 
+    /// <summary>
+    /// Selecting a thumbnail shows that page, in reorder mode as well as out
+    /// of it (FR-PAGE).
+    ///
+    /// Reported from use: with page 3 on screen, staging a move left the
+    /// viewer on page 3 whatever thumbnail was selected afterwards, which
+    /// reads as the reorder having moved the wrong page. Reorder mode was
+    /// returning out of the selection handler entirely, so that the selection
+    /// a drag sets would not also navigate — and the viewer froze for every
+    /// other reason too.
+    /// </summary>
+    [Fact]
+    public async Task Selecting_a_thumbnail_shows_that_page_while_reordering()
+    {
+        await using PageForgeApp app = await PageForgeApp.LaunchAsync();
+        await app.WaitForVisibleAsync("PageIndicatorText");
+
+        PageForgeApp.Activate(app.FindById("OpenPdfButton")
+            ?? throw new InvalidOperationException("The Open PDF… command was not found."));
+        await OpenFileViaDialog(app, Sample3);
+        await WaitForIndicator(app, "/ 3");
+
+        SelectToolGroup(app, "OrganizeModeTab");
+        PageForgeApp.Activate(app.FindInSelectedTabById("ReorderToggle")
+            ?? throw new InvalidOperationException("The Reorder toggle was not found."));
+        Assert.Contains("Reorder mode", await WaitForText(app, "StatusText"));
+
+        AutomationElement[] thumbs = ThumbnailElements(app);
+        Assert.True(thumbs.Length >= 3, $"Expected three thumbnails, found {thumbs.Length}.");
+
+        // Third page, then back to the first: one selection alone could be the
+        // page the viewer already happened to be showing.
+        ((SelectionItemPattern)thumbs[2].GetCurrentPattern(SelectionItemPattern.Pattern)).Select();
+        Assert.Equal("3 / 3", await WaitForTextToBe(app, "PageIndicatorText", "3 / 3"));
+
+        ((SelectionItemPattern)thumbs[0].GetCurrentPattern(SelectionItemPattern.Pattern)).Select();
+        Assert.Equal("1 / 3", await WaitForTextToBe(app, "PageIndicatorText", "1 / 3"));
+
+        // And the selection survives, because the drag and the Ctrl+arrow keys
+        // act on it — navigating must not cost the user their selection.
+        Assert.True(
+            ((SelectionItemPattern)ThumbnailElements(app)[0]
+                .GetCurrentPattern(SelectionItemPattern.Pattern)).Current.IsSelected,
+            "Navigating cleared the selection in reorder mode, so there is nothing left for a " +
+            "drag or Ctrl+Up/Ctrl+Down to move.");
+    }
+
     /// <summary>The thumbnails' accessible names, top to bottom.</summary>
     private static string[] ThumbnailNames(PageForgeApp app)
         => ThumbnailElements(app).Select(e => e.Current.Name).ToArray();
