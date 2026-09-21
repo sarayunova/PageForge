@@ -130,6 +130,30 @@ internal static class SyntheticMouse
     /// loop may own the cursor, and demanding exact positions there aborted
     /// every real drag with a "something else is moving the mouse" error.
     /// </remarks>
+    /// <summary>
+    /// A click that drifts a few pixels between press and release, the way a
+    /// hand does. Windows treats movement past SystemParameters.MinimumDrag
+    /// distance (4px) as the start of a drag, so a real click on a surface
+    /// that arms drag-and-drop takes a different path from a synthetic one
+    /// that does not move at all.
+    /// </summary>
+    public static void ClickWithDrift((double X, double Y) at, double drift = 6)
+    {
+        MoveTo(at.X, at.Y);
+        Thread.Sleep(250);
+        Send(MouseEventLeftDown);
+        Thread.Sleep(40);
+
+        for (int i = 1; i <= 3; i++)
+        {
+            MoveTo(at.X + (drift * i / 3), at.Y + (drift * i / 3), verify: false);
+            Thread.Sleep(30);
+        }
+
+        Send(MouseEventLeftUp);
+        Thread.Sleep(200);
+    }
+
     public static void Drag((double X, double Y) from, (double X, double Y) to, int steps = 12)
     {
         MoveTo(from.X, from.Y);

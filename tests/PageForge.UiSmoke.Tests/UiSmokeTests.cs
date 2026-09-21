@@ -1157,8 +1157,13 @@ public class UiSmokeTests
             bounds.IsEmpty || bounds.Height < 8,
             $"Thumbnail {index} is not visibly on screen: {bounds}.");
 
-        SyntheticMouse.Click((bounds.Left + (bounds.Width / 2), bounds.Top + (bounds.Height / 2)));
-        await Task.Delay(400);
+        // Drifting, not a perfectly still click: a hand always moves a few
+        // pixels, which is past the system drag threshold, and reorder mode
+        // arms a drag on every press. A motionless synthetic click never takes
+        // that path, which is why it saw nothing wrong.
+        SyntheticMouse.ClickWithDrift(
+            (bounds.Left + (bounds.Width / 2), bounds.Top + (bounds.Height / 2)));
+        await Task.Delay(500);
         return bounds;
     }
 
