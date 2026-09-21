@@ -78,6 +78,13 @@ version heading when the tag is pushed.
 
 ### Fixed before the first release
 
+- **Every page thumbnail announced its class name.** The thumbnail strip — the
+  most-used list in the application — had no accessible name on its list items,
+  so each one fell back to `ToString()` on the view model and a screen reader
+  read "PageForge.App.Wpf.ViewModels.PageSlotViewModel". The redaction and
+  object-edit lists had been given proper names; the page list, which predates
+  them, was missed.
+
 - **Object editing did not respond to the mouse at all (FR-EDIT).** Click to
   select, drag to move and drag-a-handle to resize all run through one handler
   on an overlay canvas that had no `Background`, so — as with redaction below —
@@ -107,6 +114,13 @@ version heading when the tag is pushed.
   externalization the requirement asks for has not been done.
 - **Spreadsheet export (FR-OCR-02).** OCR output converts to searchable PDF,
   DOCX and per-page PNG. Excel is not implemented.
+- **Page reorder by dragging a thumbnail, verified.** Reordering with
+  Ctrl+Up/Ctrl+Down is covered by the UI suite and works. The drag-and-drop
+  gesture could not be verified: a synthesized drag reaches the press and
+  starts the OLE drag loop, but the drop never arrives, and that is as
+  consistent with a harness limitation as with a defect. It is recorded as
+  unverified rather than asserted by a test that cannot fail honestly, and it
+  needs a manual check before the release.
 - **Documents of the scale FR-VIEW-01 names.** Lazy page loading is implemented,
   but the largest fixture in the regression corpus is four pages; nothing
   exercises the 2,000-page figure, so the requirement is unproven rather than

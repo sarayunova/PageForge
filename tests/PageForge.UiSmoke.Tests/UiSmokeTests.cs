@@ -675,6 +675,7 @@ public class UiSmokeTests
 
         // Upper part of the page, then lower. Both boxes are a good fraction of
         // the sheet, so neither can be mistaken for the stray-click case.
+        SyntheticMouse.EnsureForeground(new IntPtr(app.Window.Current.NativeWindowHandle));
         SyntheticMouse.Drag((x0, page.Top + (page.Height * 0.10)), (x1, page.Top + (page.Height * 0.28)));
         await Task.Delay(200);
 
@@ -689,6 +690,7 @@ public class UiSmokeTests
 
         (double _, double upperY) = ParsePlacedBox(SignPlacementHint(app));
 
+        SyntheticMouse.EnsureForeground(new IntPtr(app.Window.Current.NativeWindowHandle));
         SyntheticMouse.Drag((x0, page.Top + (page.Height * 0.62)), (x1, page.Top + (page.Height * 0.80)));
         await Task.Delay(200);
 
@@ -720,6 +722,7 @@ public class UiSmokeTests
         // shown to receive drags, so this failing would be a real refusal to
         // guard the size, not a dead overlay.
         System.Windows.Rect fresh = SignPlacementPageBounds(app);
+        SyntheticMouse.EnsureForeground(new IntPtr(app.Window.Current.NativeWindowHandle));
         SyntheticMouse.Drag(
             (fresh.Left + (fresh.Width * 0.4), fresh.Top + (fresh.Height * 0.4)),
             (fresh.Left + (fresh.Width * 0.4) + 6, fresh.Top + (fresh.Height * 0.4) + 6));
@@ -890,6 +893,89 @@ public class UiSmokeTests
                 new PropertyCondition(AutomationElement.AutomationIdProperty, "ReplaceButton"))
             .Cast<AutomationElement>()
             .Count(e => e.Current.IsEnabled);
+
+    /// <summary>
+    /// Reorders pages with the keyboard (FR-PAGE, WCAG 2.1.1).
+    ///
+    /// The existing save-order test toggles reorder mode and saves, which
+    /// passes whether or not a page ever moved — the order it writes is the
+    /// order it started with. This drives the gesture that actually reorders,
+    /// the last mouse path in the shell that nothing had ever exercised.
+    /// </summary>
+    [Fact]
+    public async Task Moving_a_thumbnail_with_the_keyboard_reorders_the_pages()
+    {
+        await using PageForgeApp app = await PageForgeApp.LaunchAsync();
+        await app.WaitForVisibleAsync("PageIndicatorText");
+
+        PageForgeApp.Activate(app.FindById("OpenPdfButton")
+            ?? throw new InvalidOperationException("The Open PDF… command was not found."));
+        await OpenFileViaDialog(app, Sample3);
+        await WaitForIndicator(app, "/ 3");
+
+        SelectToolGroup(app, "OrganizeModeTab");
+        PageForgeApp.Activate(app.FindInSelectedTabById("ReorderToggle")
+            ?? throw new InvalidOperationException("The Reorder toggle was not found."));
+        Assert.Contains("Reorder mode", await WaitForText(app, "StatusText"));
+
+        string[] before = ThumbnailNames(app);
+        Assert.True(
+            before.Length >= 3,
+            $"Expected three thumbnails to drag between, found {before.Length}.");
+
+        SyntheticMouse.EnsureForeground(new IntPtr(app.Window.Current.NativeWindowHandle));
+
+        // Select the first thumbnail, then Ctrl+Down to move it past the second.
+        const ushort VkDown = 0x28;
+        AutomationElement firstThumb = ThumbnailElements(app)[0];
+        ((SelectionItemPattern)firstThumb.GetCurrentPattern(SelectionItemPattern.Pattern)).Select();
+        await Task.Delay(300);
+        SyntheticMouse.PressKey(VkDown, control: true);
+        await Task.Delay(500);
+
+        string[] after = ThumbnailNames(app);
+
+        Assert.False(
+            before.SequenceEqual(after),
+            "Ctrl+Down in reorder mode left the order unchanged: " +
+            $"[{string.Join(", ", after)}]. Reorder mode was on and the first thumbnail was " +
+            "selected, so the staged order is not moving — and Save order… would then write " +
+            "the original order while reporting success.");
+
+        Assert.Equal(
+            new[] { before[1], before[0], before[2] },
+            after);
+    }
+
+    /// <summary>The thumbnails' accessible names, top to bottom.</summary>
+    private static string[] ThumbnailNames(PageForgeApp app)
+        => ThumbnailElements(app).Select(e => e.Current.Name).ToArray();
+
+    private static System.Windows.Rect ThumbnailBounds(PageForgeApp app, int index)
+        => ThumbnailElements(app)[index].Current.BoundingRectangle;
+
+    /// <summary>
+    /// The thumbnail images of the selected document, ordered as they appear.
+    ///
+    /// Ordered by their position on screen rather than by tree order: the
+    /// question this supports is whether a drag REORDERED them, and tree order
+    /// is the thing under test.
+    /// </summary>
+    private static AutomationElement[] ThumbnailElements(PageForgeApp app)
+    {
+        AutomationElement? list = app.FindInSelectedTabById("ThumbList");
+        if (list is null)
+        {
+            return Array.Empty<AutomationElement>();
+        }
+
+        return list
+            .FindAll(TreeScope.Children, System.Windows.Automation.Condition.TrueCondition)
+            .Cast<AutomationElement>()
+            .Where(e => e.Current.ControlType == ControlType.ListItem)
+            .OrderBy(e => e.Current.BoundingRectangle.Top)
+            .ToArray();
+    }
 
     private static void EnterSignPlacement(PageForgeApp app)
     {

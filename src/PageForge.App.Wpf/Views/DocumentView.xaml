@@ -405,6 +405,18 @@
                                 <StackPanel Orientation="Vertical" />
                             </ItemsPanelTemplate>
                         </ListBox.ItemsPanel>
+                        <!-- Name the list ITEM, not only the image inside it. An
+                             unnamed item falls back to ToString() on the view model,
+                             so every page in the thumbnail strip announced itself as
+                             "PageForge.App.Wpf.ViewModels.PageSlotViewModel" - in the
+                             most-used list in the application. The redaction and
+                             object-edit lists were given this treatment; the page
+                             list, which predates them, was missed. -->
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="AutomationProperties.Name" Value="{Binding AccessibleThumbnailName}" />
+                            </Style>
+                        </ListBox.ItemContainerStyle>
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <Border BorderBrush="{DynamicResource EdgeBrush}" BorderThickness="1" Margin="4"

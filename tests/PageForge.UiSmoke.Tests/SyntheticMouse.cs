@@ -103,17 +103,6 @@ internal static class SyntheticMouse
             "unlocked desktop session with no other window holding foreground lock.");
     }
 
-    /// <summary>
-    /// Presses at <paramref name="from"/>, moves to <paramref name="to"/> in
-    /// steps, and releases — all in physical screen pixels, which is what UI
-    /// Automation's BoundingRectangle reports.
-    /// </summary>
-    /// <remarks>
-    /// The intermediate moves are not decoration. A press followed by a single
-    /// jump to the release point produces no MouseMove in between, so a surface
-    /// that tracks the rubber band during the drag would look like it worked
-    /// while never having been told the box grew.
-    /// </remarks>
     /// <summary>A single click: press and release without moving, for selecting
     /// rather than drawing.</summary>
     public static void Click((double X, double Y) at)
@@ -126,17 +115,38 @@ internal static class SyntheticMouse
         Thread.Sleep(120);
     }
 
+    /// <summary>
+    /// Presses at <paramref name="from"/>, moves to <paramref name="to"/> in
+    /// steps, and releases — all in physical screen pixels, which is what UI
+    /// Automation's BoundingRectangle reports.
+    /// </summary>
+    /// <remarks>
+    /// The intermediate moves are not decoration. A press followed by a single
+    /// jump to the release point produces no MouseMove in between, so a surface
+    /// that tracks the rubber band during the drag would look like it worked
+    /// while never having been told the box grew.
+    ///
+    /// Only the aim is verified. Once the button is down an OLE drag-and-drop
+    /// loop may own the cursor, and demanding exact positions there aborted
+    /// every real drag with a "something else is moving the mouse" error.
+    /// </remarks>
     public static void Drag((double X, double Y) from, (double X, double Y) to, int steps = 12)
     {
         MoveTo(from.X, from.Y);
-        Thread.Sleep(60);
+
+        // Let the move be processed before pressing. The press carries its own
+        // coordinates, but the target still has to have SEEN the pointer arrive:
+        // pressing too soon after a long jump pairs the press with where the
+        // pointer used to be, which turns a six-pixel drag into whatever the
+        // distance from the last gesture happened to be.
+        Thread.Sleep(250);
         Send(MouseEventLeftDown);
         Thread.Sleep(60);
 
         for (int i = 1; i <= steps; i++)
         {
             double t = (double)i / steps;
-            MoveTo(from.X + ((to.X - from.X) * t), from.Y + ((to.Y - from.Y) * t));
+            MoveTo(from.X + ((to.X - from.X) * t), from.Y + ((to.Y - from.Y) * t), verify: false);
             Thread.Sleep(15);
         }
 
@@ -145,8 +155,18 @@ internal static class SyntheticMouse
         Thread.Sleep(120);
     }
 
-    private static void MoveTo(double x, double y)
+    /// <summary>Moves the pointer. `verify` confirms it arrived and retries,
+    /// which is right when AIMING but wrong once a button is down: an OLE
+    /// drag-and-drop loop owns the cursor while it runs and will not leave it
+    /// exactly where it is put, so insisting would abandon every real drag.</summary>
+    private static void MoveTo(double x, double y, bool verify = true)
     {
+        if (!verify)
+        {
+            SendMove(x, y);
+            return;
+        }
+
         // Absolute mouse input is normalized to 0..65535 across the whole
         // virtual desktop, so the conversion has to account for a monitor left
         // of or above the primary one, which has negative coordinates —
@@ -174,7 +194,13 @@ internal static class SyntheticMouse
             Thread.Sleep(15);
 
             PointStruct actual = CursorPosition();
-            if (Math.Abs(actual.X - x) <= 2 && Math.Abs(actual.Y - y) <= 2)
+            // Twelve pixels, not exact: this catches input delivered somewhere
+            // else entirely - another window, another monitor - which is the
+            // failure that makes assertions meaningless. Demanding the exact
+            // pixel instead fails on a mixed-DPI desktop for no useful reason,
+            // and every gesture here is an order of magnitude larger than the
+            // slack.
+            if (Math.Abs(actual.X - x) <= 12 && Math.Abs(actual.Y - y) <= 12)
             {
                 return;
             }
@@ -242,11 +268,24 @@ internal static class SyntheticMouse
         public IntPtr ExtraInfo;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private struct KeyboardInput
+    {
+        public ushort Vk;
+        public ushort Scan;
+        public uint DwFlags;
+        public uint Time;
+        public IntPtr ExtraInfo;
+    }
+
     [StructLayout(LayoutKind.Explicit)]
     private struct InputUnion
     {
         [FieldOffset(0)]
         public MouseInput Mouse;
+
+        [FieldOffset(0)]
+        public KeyboardInput Keyboard;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -254,6 +293,74 @@ internal static class SyntheticMouse
     {
         public uint Type;
         public InputUnion Union;
+    }
+
+    /// <summary>
+    /// Presses a key with optional Ctrl, through the same input queue as the
+    /// mouse. Keyboard input is not subject to the cursor tug-of-war an OLE
+    /// drag causes, so it is the dependable way to drive a reorder.
+    /// </summary>
+    public static void PressKey(ushort virtualKey, bool control = false)
+    {
+        const ushort VkControl = 0x11;
+
+        if (control)
+        {
+            SendKey(VkControl, up: false);
+        }
+
+        SendKey(virtualKey, up: false);
+        Thread.Sleep(40);
+        SendKey(virtualKey, up: true);
+
+        if (control)
+        {
+            SendKey(VkControl, up: true);
+        }
+
+        Thread.Sleep(120);
+    }
+
+    private static void SendKey(ushort virtualKey, bool up)
+    {
+        const uint InputKeyboard = 1;
+        const uint KeyEventKeyUp = 0x0002;
+
+        var input = new Input
+        {
+            Type = InputKeyboard,
+            Union = new InputUnion
+            {
+                Keyboard = new KeyboardInput
+                {
+                    Vk = virtualKey,
+                    Scan = 0,
+                    DwFlags = up ? KeyEventKeyUp : 0,
+                    Time = 0,
+                    ExtraInfo = IntPtr.Zero,
+                },
+            },
+        };
+
+        if (SendInput(1, new[] { input }, Marshal.SizeOf<Input>()) != 1)
+        {
+            throw new InvalidOperationException(
+                $"SendInput did not deliver the key 0x{virtualKey:x}; last error " +
+                $"{Marshal.GetLastWin32Error()}.");
+        }
+    }
+
+    private static void SendMove(double x, double y)
+    {
+        int originX = GetSystemMetrics(SmXVirtualScreen);
+        int originY = GetSystemMetrics(SmYVirtualScreen);
+        int width = Math.Max(1, GetSystemMetrics(SmCxVirtualScreen) - 1);
+        int height = Math.Max(1, GetSystemMetrics(SmCyVirtualScreen) - 1);
+
+        Send(
+            MouseEventMove | MouseEventAbsolute | MouseEventVirtualDesk,
+            (int)Math.Round((x - originX) * 65535.0 / width),
+            (int)Math.Round((y - originY) * 65535.0 / height));
     }
 
     [DllImport("user32.dll", SetLastError = true)]
