@@ -619,6 +619,22 @@ public class UiSmokeTests
         await AssertPageDrawsAsync(app, "Form fill page 1", "FormsModeTab", "Form fill mode");
         await AssertPageDrawsAsync(app, "Redact page 1", "RedactModeTab", "Redact mode");
         await AssertPageDrawsAsync(app, "Object edit page 1", "EditModeTab", "Object editing mode");
+
+        // The signature placement surface is reached by a command rather than a
+        // mode toggle, but it is a page surface with the same failure mode: it
+        // assigns the bitmap after awaiting a render, and getting that order
+        // wrong would leave the user drawing a signature box over a blank sheet.
+        SelectToolGroup(app, "DocumentModeTab");
+        PageForgeApp.Activate(
+            app.FindByName("Sign document")
+            ?? throw new InvalidOperationException("The Sign document command was not found."));
+        await AssertPageDrawsAsync(app, "Page 1 to sign", modeTab: null, toggleName: null);
+
+        // Leave the shell as it was found, so nothing later in this run is
+        // looking at the placement surface.
+        PageForgeApp.Activate(
+            app.FindByName("Cancel signing")
+            ?? throw new InvalidOperationException("The Cancel signing command was not found."));
     }
 
     private static async Task AssertPageDrawsAsync(
