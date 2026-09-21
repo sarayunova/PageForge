@@ -77,9 +77,14 @@ version heading when the tag is pushed.
   field came back holding the whole name. A signature field whose contents no
   longer parse is now reported as an unverifiable signature instead of failing
   the entire listing.
-- The FR-VIEW-01 scale figure is now measured rather than assumed: a
-  2,000-page document opens in about 10ms and adds about 2 MiB of working set,
-  and its first, middle and last pages render in 102, 34 and 32ms at 96 DPI —
+- The FR-VIEW-01 scale figure is now measured rather than assumed, on two
+  fixtures. A 2,000-page document of **distinct** pages — written as raw PDF
+  so no content can be shared between pages — grows the process by 9 MiB with
+  forty pages rendered across it, and each sampled page proves its own
+  identity, so random access returns the page that was asked for rather than
+  merely a valid one. On a 2,000-page document built from the corpus, opening
+  takes about 10ms and adds about 2 MiB of working set, and the first, middle
+  and last pages render in 102, 34 and 32ms at 96 DPI —
   inside the 150ms the TRD asks for during scroll. Opening is gated against
   the same 1.5s ceiling TRD §6 sets for a 100-page document, twenty times
   smaller, because lazy loading means open time should not follow the page
@@ -139,12 +144,6 @@ version heading when the tag is pushed.
   consistent with a harness limitation as with a defect. It is recorded as
   unverified rather than asserted by a test that cannot fail honestly, and it
   needs a manual check before the release.
-- **Documents of the scale FR-VIEW-01 names, with distinct content.** The
-  2,000-page figure is now exercised (see below), but the fixture repeats a
-  corpus document's pages, so it has 2,000 page objects over a few distinct
-  content streams. Page-table handling, random access and lazy loading are
-  demonstrated; memory behaviour with 2,000 pages of genuinely different
-  content is not.
 
 ### Hosted service
 
