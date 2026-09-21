@@ -1089,6 +1089,80 @@ public class UiSmokeTests
     }
 
     /// <summary>
+    /// Clicking a thumbnail with the mouse, in reorder mode (FR-PAGE).
+    ///
+    /// The tests above select through UI Automation, which sets the
+    /// selection directly and never touches the mouse handlers. Reorder mode
+    /// arms a drag on every press, so the mouse path is a different path, and
+    /// it is the one being reported: with page 3 showing, clicking any other
+    /// thumbnail leaves both the page and the page number where they were.
+    /// </summary>
+    [Fact]
+    public async Task Clicking_a_thumbnail_with_the_mouse_navigates_in_reorder_mode()
+    {
+        await using PageForgeApp app = await PageForgeApp.LaunchAsync();
+        await app.WaitForVisibleAsync("PageIndicatorText");
+
+        // Tall enough that every thumbnail is visible at once. At the default
+        // size the strip shows about two, and the one being clicked can be
+        // scrolled out of the viewport — which looks identical to the
+        // application ignoring the click, and cost a whole round of this
+        // investigation.
+        await app.ResizeAsync(1400, 1040);
+        await Task.Delay(500);
+
+        PageForgeApp.Activate(app.FindById("OpenPdfButton")
+            ?? throw new InvalidOperationException("The Open PDF… command was not found."));
+        await OpenFileViaDialog(app, Sample3);
+        await WaitForIndicator(app, "/ 3");
+
+        SelectToolGroup(app, "OrganizeModeTab");
+        PageForgeApp.Activate(app.FindInSelectedTabById("ReorderToggle")
+            ?? throw new InvalidOperationException("The Reorder toggle was not found."));
+        Assert.Contains("Reorder mode", await WaitForText(app, "StatusText"));
+
+        SyntheticMouse.EnsureForeground(new IntPtr(app.Window.Current.NativeWindowHandle));
+
+        // Page 3 first, by clicking it, then page 1 — both with the mouse.
+        _ = await ClickThumbnailAsync(app, 2);
+        Assert.Equal("3 / 3", await WaitForTextToBe(app, "PageIndicatorText", "3 / 3"));
+
+        System.Windows.Rect target = await ClickThumbnailAsync(app, 0);
+        string indicator = await WaitForTextToBe(app, "PageIndicatorText", "1 / 3");
+        Assert.True(
+            indicator == "1 / 3",
+            $"Clicking the first thumbnail at {target} left the viewer on '{indicator}'. " +
+            $"The pointer finished at {SyntheticMouse.CursorPosition().X},{SyntheticMouse.CursorPosition().Y}; " +
+            $"the strip reports thumbnails at [{string.Join("; ", ThumbnailElements(app).Select(t => t.Current.BoundingRectangle.ToString()))}].");
+        Assert.Equal("Document page 1", MostVisiblePage(app));
+    }
+
+    private static async Task<System.Windows.Rect> ClickThumbnailAsync(PageForgeApp app, int index)
+    {
+        AutomationElement[] thumbs = ThumbnailElements(app);
+        Assert.True(index < thumbs.Length, $"There is no thumbnail at index {index}.");
+
+        // Clip to the STRIP's viewport, not just the window. A list item that
+        // is scrolled partly out of view still reports its whole rectangle,
+        // and the part hanging outside sits under the toolbar — aiming at the
+        // middle of that rectangle clicks the chrome and looks exactly like
+        // the application ignoring the click.
+        AutomationElement strip = app.FindInSelectedTabById("ThumbList")
+            ?? throw new InvalidOperationException("The thumbnail strip was not found.");
+
+        System.Windows.Rect bounds = thumbs[index].Current.BoundingRectangle;
+        bounds.Intersect(strip.Current.BoundingRectangle);
+        bounds.Intersect(app.Window.Current.BoundingRectangle);
+        Assert.False(
+            bounds.IsEmpty || bounds.Height < 8,
+            $"Thumbnail {index} is not visibly on screen: {bounds}.");
+
+        SyntheticMouse.Click((bounds.Left + (bounds.Width / 2), bounds.Top + (bounds.Height / 2)));
+        await Task.Delay(400);
+        return bounds;
+    }
+
+    /// <summary>
     /// Which page occupies most of the page list's viewport — the page a
     /// person would say is on screen.
     /// </summary>
