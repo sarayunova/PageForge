@@ -27,9 +27,10 @@
         <TextBox x:Name="FieldNameBox" AutomationProperties.Name="Signature field name"
                  Text="Signature1" Margin="0,2,0,8" TextChanged="Inputs_Changed" />
 
-        <TextBlock Text="Page" />
-        <TextBox x:Name="PageBox" AutomationProperties.Name="Page number" Text="1" Margin="0,2,0,8"
-                 TextChanged="Inputs_Changed" />
+        <TextBlock Text="Position" />
+        <TextBlock x:Name="PlacementText" Margin="0,2,0,8" TextWrapping="Wrap"
+                   Foreground="{DynamicResource ContentMutedBrush}"
+                   AutomationProperties.Name="Signature position" />
 
         <TextBlock Text="Reason (optional)" />
         <TextBox x:Name="ReasonBox" AutomationProperties.Name="Signing reason" Margin="0,2,0,8" />

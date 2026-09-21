@@ -19,6 +19,14 @@ namespace PageForge.Core.Pdf;
 public static class PdfSigningService
 {
     /// <summary>
+    /// Where a signature goes when the user has not placed one: a 200x60 point
+    /// box above the bottom-left margin. It is also the box placement starts
+    /// from, so "I did not choose" and "I chose by dragging" produce the same
+    /// kind of result rather than following two different conventions.
+    /// </summary>
+    public static readonly PdfRect DefaultBounds = new(72, 72, 272, 132);
+
+    /// <summary>
     /// Signs the open document on <paramref name="pageIndex"/> and writes the
     /// signed copy to <paramref name="outputPath"/> (FR-SEC-03). The open
     /// document is left on disk untouched.

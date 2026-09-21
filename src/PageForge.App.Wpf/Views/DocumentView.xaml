@@ -496,6 +496,7 @@
                 <locals:ObjectEditView x:Name="ObjectView" Visibility="Collapsed" />
                 <locals:FormFillView x:Name="FormView" Visibility="Collapsed" />
                 <locals:RedactView x:Name="RedactViewHost" Visibility="Collapsed" />
+                <locals:SignPlaceView x:Name="SignPlaceHost" Visibility="Collapsed" />
                 <ListBox x:Name="PageList" ItemsSource="{Binding VisiblePages}" Background="{DynamicResource CanvasBrush}"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                      VirtualizingPanel.IsVirtualizing="True"

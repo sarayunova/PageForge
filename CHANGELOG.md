@@ -30,15 +30,20 @@ version heading when the tag is pushed.
   until it is authenticated.
 - Accessibility pass against WCAG 2.1 AA on the WPF proof shell.
 - **Sign…** and **Signatures** commands in the desktop shell (FR-SEC-03). Sign
-  asks for a PKCS#12 certificate, its password, a field name and a page, then
-  writes a signed *copy* — the open document is never modified, so a failed
-  signing run cannot damage it. Signatures reports each field's verdict,
-  keeping "the document changed after signing" separate from "the certificate
-  is not trusted": the second is the normal outcome for a self-signed
-  certificate and must not read as tampering. The shell does not reopen the
-  signed copy, because the next ordinary save would rewrite it in full and void
-  the signature. Placing the signature by dragging it on the page is not built
-  yet; it goes in a fixed box near the bottom-left of the chosen page.
+  first shows the page so the signature can be **placed by dragging a box**
+  where it belongs — any page, with the box re-projected on zoom — and then
+  asks for a PKCS#12 certificate, its password and a field name, writing a
+  signed *copy*. The open document is never modified, so a failed signing run
+  cannot damage it, and the shell does not reopen the signed copy, because the
+  next ordinary save would rewrite it in full and void the signature.
+  Placement has a full keyboard path (Enter begins a box, arrows size it,
+  Ctrl+arrows move it, Enter places it, Esc cancels) and a one-press "use the
+  default box", because putting the only route to signing behind a mouse drag
+  would make it unreachable for keyboard and assistive-technology users, and
+  signing is the last operation anyone should have to delegate.
+  Signatures reports each field's verdict, keeping "the document changed after
+  signing" separate from "the certificate is not trusted": the second is the
+  normal outcome for a self-signed certificate and must not read as tampering.
 - Local digital signing and verification reachable from the engine (FR-SEC-03):
   `SignAsync`, `SaveIncrementalAsync` and `ListSignaturesAsync` on `IPdfEngine`,
   over the existing native signer. Signing uses a PKCS#12 credential through the

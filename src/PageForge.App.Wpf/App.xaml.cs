@@ -91,6 +91,7 @@ public partial class App : Application
             await RunHeadlessCorpusDogfoodProofAsync();
             RunThemeTokenProof();
             RunRedactGeometryProof();
+            RunPlacementGeometryProof();
             RunObjectGeometryProof();
             await RunFormGeometryProofAsync();
             await RunRecoveryBufferProofAsync();
@@ -176,6 +177,79 @@ public partial class App : Application
     /// (2x), so every expected number is checkable by hand: scale 2, left 20, width
     /// 100, height 100, and a top of 800 - 350*2 = 100 measured down from the top.
     /// </summary>
+    /// <summary>
+    /// The screen-to-PDF direction, which drag-to-place a signature depends on
+    /// entirely (FR-SEC-03).
+    ///
+    /// Asserted in BOTH directions and with the corners given backwards,
+    /// because every way this fails produces a perfectly plausible rectangle:
+    /// a missed Y flip puts the signature on the opposite half of the page, and
+    /// unswapped corners produce a rectangle whose top is below its bottom.
+    /// Neither throws, and neither is visible in a passing test suite that only
+    /// checks a box was produced.
+    ///
+    /// A 400pt-tall page at 144 DPI (2x), so every number is checkable by hand:
+    /// dragging from (20,100) to (120,200) on screen is (10,300)-(60,350) in
+    /// PDF points — the same rectangle the redaction proof above starts from.
+    /// </summary>
+    private static void RunPlacementGeometryProof()
+    {
+        try
+        {
+            const double dpi = 144.0;
+            const double pageHeightPx = 400.0 * dpi / 72.0; // 800
+            var expected = new PdfRect(10, 300, 60, 350);
+
+            foreach (bool reversed in new[] { false, true })
+            {
+                (double X, double Y) a = reversed ? (120.0, 200.0) : (20.0, 100.0);
+                (double X, double Y) b = reversed ? (20.0, 100.0) : (120.0, 200.0);
+
+                PdfRect actual = ViewModels.PageBoxGeometry.ToPdf(a, b, dpi, pageHeightPx);
+
+                (string Name, double Actual, double Expected)[] checks =
+                [
+                    ("X0", actual.X0, expected.X0),
+                    ("Y0", actual.Y0, expected.Y0),
+                    ("X1", actual.X1, expected.X1),
+                    ("Y1", actual.Y1, expected.Y1),
+                ];
+
+                foreach ((string name, double got, double want) in checks)
+                {
+                    if (Math.Abs(got - want) > 0.001)
+                    {
+                        Trace($"placement-geometry proof: {name} was {got}, expected {want} " +
+                              $"(corners {(reversed ? "reversed" : "in order")}). A signature " +
+                              "would be placed somewhere other than where it was drawn.");
+                        FailProof();
+                        return;
+                    }
+                }
+            }
+
+            // And back again: the two directions must agree, or a placed box
+            // would be drawn back in the wrong place at the next zoom change.
+            ViewModels.ScreenBox back = ViewModels.PageBoxGeometry.ToScreen(expected, dpi, pageHeightPx);
+            if (Math.Abs(back.Left - 20) > 0.001 || Math.Abs(back.Top - 100) > 0.001 ||
+                Math.Abs(back.Width - 100) > 0.001 || Math.Abs(back.Height - 100) > 0.001)
+            {
+                Trace($"placement-geometry proof: the round trip did not return the box it " +
+                      $"started from (left={back.Left}, top={back.Top}, {back.Width}x{back.Height}).");
+                FailProof();
+                return;
+            }
+
+            Trace("placement-geometry proof: a drag from (20,100) to (120,200) at 144 DPI is " +
+                  "(10,300)-(60,350) pt whichever corner comes first, and maps back unchanged.");
+        }
+        catch (Exception exception)
+        {
+            Trace($"placement-geometry proof failed: {exception}");
+            FailProof(2);
+        }
+    }
+
     private static void RunRedactGeometryProof()
     {
         try
@@ -489,7 +563,7 @@ public partial class App : Application
                 0,
                 new PdfSignatureRequest(
                     "SmokeSignature1",
-                    Views.SignDialog.DefaultBounds,
+                    PdfSigningService.DefaultBounds,
                     certificate,
                     password,
                     Reason: "Smoke proof"),

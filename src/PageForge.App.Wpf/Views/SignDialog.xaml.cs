@@ -15,37 +15,39 @@ namespace PageForge.App.Wpf.Views;
 /// <see cref="PdfSignatureRequest"/> when the user confirms.
 /// </summary>
 /// <remarks>
-/// The widget rectangle is not asked for. Placing a signature by dragging it
-/// on the page is the right interaction and it is not built yet; offering a
-/// coordinate box instead would be worse than a sensible default, so the
-/// signature goes in a fixed box near the bottom-left of the chosen page
-/// (see <see cref="DefaultBounds"/>). The page number IS asked for, because
-/// which page a signature sits on is a decision no default can make.
+/// Where the signature goes is decided before this dialog opens, on the page
+/// itself (see <see cref="SignPlaceView"/>), so the position is shown here
+/// rather than asked for. It used to be a page-number box with a fixed
+/// rectangle, which made the one genuinely visual decision in signing the one
+/// thing the user could not see.
 /// </remarks>
 public partial class SignDialog : Window
 {
-    /// <summary>
-    /// Where the signature widget is placed, in PDF points from the
-    /// bottom-left: a band about 200x60 points above the bottom margin, clear
-    /// of the footer on the corpus documents and large enough to be visible.
-    /// </summary>
-    public static readonly PdfRect DefaultBounds = new(72, 72, 272, 132);
+    private readonly PdfRect _bounds;
 
-    private readonly int _pageCount;
-
-    public SignDialog(int pageCount, int initialPageIndex)
+    /// <param name="pageIndex">Zero-based page the signature was placed on.</param>
+    /// <param name="bounds">The placed box, in PDF points.</param>
+    public SignDialog(int pageIndex, PdfRect bounds)
     {
         InitializeComponent();
-        _pageCount = Math.Max(1, pageCount);
-        PageBox.Text = (Math.Clamp(initialPageIndex, 0, _pageCount - 1) + 1)
-            .ToString(CultureInfo.InvariantCulture);
+        PageIndex = pageIndex;
+        _bounds = bounds;
+
+        PlacementText.Text = string.Format(
+            CultureInfo.CurrentCulture,
+            "Page {0}, a {1:F0} by {2:F0} point box at ({3:F0}, {4:F0}). Cancel and drag again to move it.",
+            pageIndex + 1,
+            bounds.X1 - bounds.X0,
+            bounds.Y1 - bounds.Y0,
+            bounds.X0,
+            bounds.Y0);
     }
 
     /// <summary>The validated request, or null when the user cancelled.</summary>
     public PdfSignatureRequest? Request { get; private set; }
 
-    /// <summary>Zero-based page the signature goes on; meaningful once <see cref="Request"/> is set.</summary>
-    public int PageIndex { get; private set; }
+    /// <summary>Zero-based page the signature goes on.</summary>
+    public int PageIndex { get; }
 
     private void Browse_Click(object sender, RoutedEventArgs e)
     {
@@ -72,7 +74,7 @@ public partial class SignDialog : Window
             return;
         }
 
-        string? problem = Validate(out _);
+        string? problem = Validate();
         ValidationText.Text = problem ?? string.Empty;
         OkButton.IsEnabled = problem is null && CertificateBox.Text.Trim().Length > 0;
     }
@@ -82,10 +84,8 @@ public partial class SignDialog : Window
     /// One method, so the message shown while typing and the decision to enable
     /// the button can never disagree.
     /// </summary>
-    private string? Validate(out int pageIndex)
+    private string? Validate()
     {
-        pageIndex = 0;
-
         string certificate = CertificateBox.Text.Trim();
         if (certificate.Length == 0)
         {
@@ -104,29 +104,21 @@ public partial class SignDialog : Window
             return "A signature field name is required.";
         }
 
-        if (!int.TryParse(PageBox.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture,
-                          out int page) || page < 1 || page > _pageCount)
-        {
-            return $"Page must be a number between 1 and {_pageCount}.";
-        }
-
-        pageIndex = page - 1;
         return null;
     }
 
     private void Ok_Click(object sender, RoutedEventArgs e)
     {
-        string? problem = Validate(out int pageIndex);
+        string? problem = Validate();
         if (problem is not null || CertificateBox.Text.Trim().Length == 0)
         {
             ValidationText.Text = problem ?? "Choose a signing certificate.";
             return;
         }
 
-        PageIndex = pageIndex;
         Request = new PdfSignatureRequest(
             FieldName: FieldNameBox.Text.Trim(),
-            Bounds: DefaultBounds,
+            Bounds: _bounds,
             CertificatePath: CertificateBox.Text.Trim(),
             CertificatePassword: CertificatePasswordBox.Password.Length == 0
                 ? null

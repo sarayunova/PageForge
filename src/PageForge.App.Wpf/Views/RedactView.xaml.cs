@@ -209,11 +209,16 @@ public partial class RedactView : UserControl
             return;
         }
 
-        double leftPt = Math.Min(start.X, end.X) / _scale;
-        double rightPt = Math.Max(start.X, end.X) / _scale;
-        double topPt = (_pixelH - Math.Min(start.Y, end.Y)) / _scale;
-        double bottomPt = (_pixelH - Math.Max(start.Y, end.Y)) / _scale;
-        var rect = new PdfRect(leftPt, bottomPt, rightPt, topPt);
+        // Through the shared helper rather than inline: this is the same
+        // screen-to-PDF conversion the signature placement surface needs, and
+        // the Y flip is the half that fails silently, by putting the box on the
+        // other side of the page.
+        PdfRect rect = PageBoxGeometry.ToPdf(
+            (start.X, start.Y), (end.X, end.Y), _vm?.RenderDpi ?? 96.0, _pixelH);
+        double leftPt = rect.X0;
+        double rightPt = rect.X1;
+        double bottomPt = rect.Y0;
+        double topPt = rect.Y1;
 
         if (_vm is null)
         {

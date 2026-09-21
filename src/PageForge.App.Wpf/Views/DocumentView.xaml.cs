@@ -1338,21 +1338,57 @@ public partial class DocumentView : UserControl
         }
     }
 
-    private async void Sign_Click(object sender, RoutedEventArgs e)
+    /// <summary>
+    /// Step one of signing: show the page and let the user put the signature
+    /// where it belongs. Asking WHERE before asking for a certificate keeps the
+    /// cheap decision first — backing out of placement costs nothing, while
+    /// backing out after choosing a certificate and a destination wastes both.
+    /// </summary>
+    private void Sign_Click(object sender, RoutedEventArgs e)
     {
         if (_vm is null)
         {
             return;
         }
 
-        var dialog = new SignDialog(_vm.PageCount, _vm.CurrentPageIndex)
-        {
-            Owner = Window.GetWindow(this),
-        };
+        // Unsubscribe first: Sign… can be pressed again after a cancel, and a
+        // second subscription would sign twice from one placement.
+        SignPlaceHost.Placed -= OnSignaturePlaced;
+        SignPlaceHost.Cancelled -= OnSignPlacementCancelled;
+        SignPlaceHost.Placed += OnSignaturePlaced;
+        SignPlaceHost.Cancelled += OnSignPlacementCancelled;
 
-        // The certificate is asked for BEFORE the destination: a user who does
-        // not have a certificate to hand should not first be made to name a file
-        // that then never gets written.
+        SignPlaceHost.SetContext(_vm);
+        SignPlaceHost.Visibility = Visibility.Visible;
+
+        // Focus the surface, not merely show it: the keyboard placement path
+        // only listens while focus is inside the overlay, so without this a
+        // keyboard user would press Enter and have nothing happen.
+        SignPlaceHost.Focus();
+    }
+
+    private void OnSignPlacementCancelled()
+    {
+        SignPlaceHost.Visibility = Visibility.Collapsed;
+        _vm?.ClearStatusHint();
+    }
+
+    /// <summary>Step two: the box is settled, so collect the certificate and the
+    /// destination, then sign.</summary>
+    private async void OnSignaturePlaced(int pageIndex, PdfRect bounds)
+    {
+        if (_vm is null)
+        {
+            return;
+        }
+
+        SignPlaceHost.Visibility = Visibility.Collapsed;
+
+        var dialog = new SignDialog(pageIndex, bounds) { Owner = Window.GetWindow(this) };
+
+        // The certificate is asked for before the destination: a user without a
+        // certificate to hand should not first be made to name a file that then
+        // never gets written.
         if (dialog.ShowDialog() != true || dialog.Request is null)
         {
             return;

@@ -38,4 +38,33 @@ public static class PageBoxGeometry
             Width: Math.Max(0, (rect.X1 - rect.X0) * scale),
             Height: Math.Max(0, (rect.Y1 - rect.Y0) * scale));
     }
+
+    /// <summary>
+    /// The inverse: two screen corners, in any order, become a normalized PDF
+    /// rectangle. Every surface that lets the user DRAW a box needs this, and
+    /// each one was doing the arithmetic inline — the same duplication
+    /// <see cref="ToScreen"/> exists to prevent, on the direction where the Y
+    /// flip is easier to get wrong, because a flipped box lands on the opposite
+    /// half of the page rather than failing.
+    /// </summary>
+    /// <param name="a">One corner in DIPs from the page's top-left.</param>
+    /// <param name="b">The opposite corner.</param>
+    /// <param name="renderDpi">The DPI the page is currently rendered at.</param>
+    /// <param name="pageHeightPx">The rendered page height, which the flip is about.</param>
+    public static PdfRect ToPdf(
+        (double X, double Y) a, (double X, double Y) b, double renderDpi, double pageHeightPx)
+    {
+        double scale = renderDpi / PointsPerInch;
+
+        double x0 = Math.Min(a.X, b.X) / scale;
+        double x1 = Math.Max(a.X, b.X) / scale;
+
+        // The TOP edge on screen is the LARGER Y in PDF space, so the corners
+        // swap roles here. Returning them unswapped yields a rectangle whose Y1
+        // sits below its Y0, which reads as degenerate everywhere downstream.
+        double y1 = (pageHeightPx - Math.Min(a.Y, b.Y)) / scale;
+        double y0 = (pageHeightPx - Math.Max(a.Y, b.Y)) / scale;
+
+        return new PdfRect(x0, y0, x1, y1);
+    }
 }
