@@ -14,6 +14,7 @@ the `fidelity-regression` skill (`.opencode/skills/fidelity-regression/`).
 | `tools/sample-pdf/golden/` | The byte-pinned page-1 renders (`contract-multipage.p1.png`, …, `unicode-multilingual.p1.png`) recorded by `mutool draw -r 96` |
 | `tools/sample-pdf/sample-pages3.pdf`, `sample-phase0.pdf` | Deterministic FR-PAGE fixture + Phase 0 render-gate sample (not part of the fidelity corpus) |
 | `tests/PageForge.Fidelity.Tests/corpus/manifest.psd1` | The byte-pin manifest (sha256/bytes/pages/page0 per file) that the fidelity harness and CI consume |
+| `tools/sample-pdf/manual/` | Saves kept from hand-testing the app. Deliberately **outside** the corpus glob: a `.pdf` dropped into `corpus/` is picked up as a fixture candidate and fails the suite until it is pinned |
 | `tools/generate-corpus.ps1` | Deterministic generator. Defaults `-OutDir` to `tools/sample-pdf`; run with `-OutDir <throwaway>` to regenerate against a scratch dir |
 
 ## What the corpus proves (Phase 1 exit criterion)
