@@ -4,46 +4,47 @@
 <Window x:Class="PageForge.App.Wpf.Views.SignDialog"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Sign — digital signature"
+        xmlns:loc="clr-namespace:PageForge.App.Wpf.Resources"
+        Title="{loc:Str Sign_SignDigitalSignature_Title}"
         Width="460" SizeToContent="Height"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
         FontFamily="Segoe UI" TextOptions.TextFormattingMode="Display">
     <StackPanel Margin="14">
-        <TextBlock Text="Sign this document with a certificate you hold (FR-SEC-03). Signing happens on this machine; nothing is sent anywhere."
+        <TextBlock Text="{loc:Str Sign_SignThisDocumentWithA_Text}"
                    TextWrapping="Wrap" Margin="0,0,0,10" Foreground="{DynamicResource EdgeStrongBrush}" />
 
-        <TextBlock Text="Certificate (PKCS#12 .pfx, must contain a private key)" />
+        <TextBlock Text="{loc:Str Sign_CertificatePkcs12PfxMust_Text}" />
         <DockPanel Margin="0,2,0,8">
-            <Button x:Name="BrowseButton" DockPanel.Dock="Right" Content="Browse…" Width="90" Margin="8,0,0,0"
-                    AutomationProperties.Name="Browse for certificate" Click="Browse_Click" />
-            <TextBox x:Name="CertificateBox" AutomationProperties.Name="Certificate file"
+            <Button x:Name="BrowseButton" DockPanel.Dock="Right" Content="{loc:Str Sign_Browse}" Width="90" Margin="8,0,0,0"
+                    AutomationProperties.Name="{loc:Str Sign_BrowseForCertificate_Name}" Click="Browse_Click" />
+            <TextBox x:Name="CertificateBox" AutomationProperties.Name="{loc:Str Sign_CertificateFile_Name}"
                      TextChanged="Inputs_Changed" />
         </DockPanel>
 
-        <TextBlock Text="Certificate password (leave empty if it has none)" />
-        <PasswordBox x:Name="CertificatePasswordBox" AutomationProperties.Name="Certificate password" Margin="0,2,0,8" />
+        <TextBlock Text="{loc:Str Sign_CertificatePasswordLeaveEmptyIf_Text}" />
+        <PasswordBox x:Name="CertificatePasswordBox" AutomationProperties.Name="{loc:Str Sign_CertificatePassword_Name}" Margin="0,2,0,8" />
 
-        <TextBlock Text="Signature field name (must be unique in the document)" />
-        <TextBox x:Name="FieldNameBox" AutomationProperties.Name="Signature field name"
-                 Text="Signature1" Margin="0,2,0,8" TextChanged="Inputs_Changed" />
+        <TextBlock Text="{loc:Str Sign_SignatureFieldNameMustBe_Text}" />
+        <TextBox x:Name="FieldNameBox" AutomationProperties.Name="{loc:Str Sign_SignatureFieldName_Name}"
+                 Text="{loc:Str Sign_Signature1_Text}" Margin="0,2,0,8" TextChanged="Inputs_Changed" />
 
-        <TextBlock Text="Position" />
+        <TextBlock Text="{loc:Str Sign_Position_Text}" />
         <TextBlock x:Name="PlacementText" Margin="0,2,0,8" TextWrapping="Wrap"
                    Foreground="{DynamicResource ContentMutedBrush}"
-                   AutomationProperties.Name="Signature position" />
+                   AutomationProperties.Name="{loc:Str Sign_SignaturePosition_Name}" />
 
-        <TextBlock Text="Reason (optional)" />
-        <TextBox x:Name="ReasonBox" AutomationProperties.Name="Signing reason" Margin="0,2,0,8" />
+        <TextBlock Text="{loc:Str Sign_ReasonOptional_Text}" />
+        <TextBox x:Name="ReasonBox" AutomationProperties.Name="{loc:Str Sign_SigningReason_Name}" Margin="0,2,0,8" />
 
-        <TextBlock Text="Location (optional)" />
-        <TextBox x:Name="LocationBox" AutomationProperties.Name="Signing location" Margin="0,2,0,8" />
+        <TextBlock Text="{loc:Str Sign_LocationOptional_Text}" />
+        <TextBox x:Name="LocationBox" AutomationProperties.Name="{loc:Str Sign_SigningLocation_Name}" Margin="0,2,0,8" />
 
         <TextBlock x:Name="ValidationText" Foreground="#B3261E" TextWrapping="Wrap"
                    AutomationProperties.LiveSetting="Polite" Margin="0,2,0,0" />
 
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
-            <Button Content="Cancel" Width="90" Margin="0,0,8,0" IsCancel="True" />
-            <Button x:Name="OkButton" Content="Sign" Width="90" IsDefault="True" Click="Ok_Click" IsEnabled="False" />
+            <Button Content="{loc:Str Sign_Cancel}" Width="90" Margin="0,0,8,0" IsCancel="True" />
+            <Button x:Name="OkButton" Content="{loc:Str Sign_Sign}" Width="90" IsDefault="True" Click="Ok_Click" IsEnabled="False" />
         </StackPanel>
     </StackPanel>
 </Window>

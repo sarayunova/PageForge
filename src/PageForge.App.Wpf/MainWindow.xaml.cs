@@ -12,6 +12,7 @@ using PageForge.App.Wpf.ViewModels;
 using PageForge.App.Wpf.Views;
 using PageForge.Core.View;
 using PageForge.MuPdfInterop;
+using PageForge.App.Wpf.Resources;
 
 namespace PageForge.App.Wpf;
 
@@ -97,8 +98,8 @@ public partial class MainWindow : Controls.FluentShellWindow
         {
             Diagnostics.AppLog.For(typeof(MainWindow)).LogWarning(
                 ex, "Could not open the source repository link.");
-            MessageBox.Show($"Could not open the source repository.\n\n{ex.Message}",
-                "PageForge", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(UiStrings.Format("Error_CouldNotOpenTheSource", ex.Message),
+                UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
@@ -155,7 +156,7 @@ public partial class MainWindow : Controls.FluentShellWindow
             // InitializeComponent, which the message alone did not begin to explain.
             Diagnostics.AppLog.For(typeof(MainWindow)).LogError(
                 ex, "Failed to open {Path}.", path);
-            MessageBox.Show($"Failed to open:\n{path}\n\n{ex.Message}", "PageForge", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(UiStrings.Format("Error_FailedToOpen", path, ex.Message), UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 

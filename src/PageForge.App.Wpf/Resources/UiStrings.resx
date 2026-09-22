@@ -1,0 +1,798 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="0" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="MainWindow_PageforgeTitleBar_Name" xml:space="preserve">
+    <value>PageForge title bar</value>
+  </data>
+  <data name="MainWindow_Pageforge_Name" xml:space="preserve">
+    <value>PageForge</value>
+  </data>
+  <data name="MainWindow_OpenPdf_Name" xml:space="preserve">
+    <value>Open PDF…</value>
+  </data>
+  <data name="MainWindow_OpenAPdf_Name" xml:space="preserve">
+    <value>Open a PDF</value>
+  </data>
+  <data name="MainWindow_OpenOneOrMorePdf_Tip" xml:space="preserve">
+    <value>Open one or more PDF documents (FR-VIEW-04 multi-doc tabs)</value>
+  </data>
+  <data name="MainWindow_Agplv3ViewTheExactSource_Tip" xml:space="preserve">
+    <value>AGPLv3: view the exact source running here</value>
+  </data>
+  <data name="MainWindow_ChooseAPdfToOpen_Tip" xml:space="preserve">
+    <value>Choose a PDF to open</value>
+  </data>
+  <data name="MainWindow_Pageforge_Title" xml:space="preserve">
+    <value>PageForge</value>
+  </data>
+  <data name="MainWindow_Pageforge_Text" xml:space="preserve">
+    <value>PageForge</value>
+  </data>
+  <data name="MainWindow_OpenPdf_Text" xml:space="preserve">
+    <value>Open PDF…</value>
+  </data>
+  <data name="MainWindow_NoDocumentOpen_Text" xml:space="preserve">
+    <value>No document open</value>
+  </data>
+  <data name="MainWindow_OpenAPdfToView_Text" xml:space="preserve">
+    <value>Open a PDF to view, annotate, edit, fill forms or redact it. Everything happens on this machine — nothing is uploaded.</value>
+  </data>
+  <data name="Document_ShowTheSidebar_Name" xml:space="preserve">
+    <value>Show the sidebar</value>
+  </data>
+  <data name="Document_SkipToTheDocument_Name" xml:space="preserve">
+    <value>Skip to the document</value>
+  </data>
+  <data name="Document_PreviousPage_Name" xml:space="preserve">
+    <value>Previous page</value>
+  </data>
+  <data name="Document_NextPage_Name" xml:space="preserve">
+    <value>Next page</value>
+  </data>
+  <data name="Document_ZoomOut_Name" xml:space="preserve">
+    <value>Zoom out</value>
+  </data>
+  <data name="Document_ZoomIn_Name" xml:space="preserve">
+    <value>Zoom in</value>
+  </data>
+  <data name="Document_ResetZoomTo100_Name" xml:space="preserve">
+    <value>Reset zoom to 100%</value>
+  </data>
+  <data name="Document_RotateCounterClockwise_Name" xml:space="preserve">
+    <value>Rotate counter-clockwise</value>
+  </data>
+  <data name="Document_RotateClockwise_Name" xml:space="preserve">
+    <value>Rotate clockwise</value>
+  </data>
+  <data name="Document_ContinuousScrollMode_Name" xml:space="preserve">
+    <value>Continuous scroll mode</value>
+  </data>
+  <data name="Document_Undo_Name" xml:space="preserve">
+    <value>Undo</value>
+  </data>
+  <data name="Document_Redo_Name" xml:space="preserve">
+    <value>Redo</value>
+  </data>
+  <data name="Document_SearchDocumentText_Name" xml:space="preserve">
+    <value>Search document text</value>
+  </data>
+  <data name="Document_Search_Name" xml:space="preserve">
+    <value>Search</value>
+  </data>
+  <data name="Document_ToolGroups_Name" xml:space="preserve">
+    <value>Tool groups</value>
+  </data>
+  <data name="Document_OrganizeToolGroup_Name" xml:space="preserve">
+    <value>Organize tool group</value>
+  </data>
+  <data name="Document_AnnotateToolGroup_Name" xml:space="preserve">
+    <value>Annotate tool group</value>
+  </data>
+  <data name="Document_EditToolGroup_Name" xml:space="preserve">
+    <value>Edit tool group</value>
+  </data>
+  <data name="Document_FormToolGroup_Name" xml:space="preserve">
+    <value>Form tool group</value>
+  </data>
+  <data name="Document_RedactToolGroup_Name" xml:space="preserve">
+    <value>Redact tool group</value>
+  </data>
+  <data name="Document_DocumentToolGroup_Name" xml:space="preserve">
+    <value>Document tool group</value>
+  </data>
+  <data name="Document_OrganizeTools_Name" xml:space="preserve">
+    <value>Organize tools</value>
+  </data>
+  <data name="Document_RotatePage_Name" xml:space="preserve">
+    <value>Rotate page</value>
+  </data>
+  <data name="Document_DeletePage_Name" xml:space="preserve">
+    <value>Delete page</value>
+  </data>
+  <data name="Document_ExtractPage_Name" xml:space="preserve">
+    <value>Extract page</value>
+  </data>
+  <data name="Document_InsertPage_Name" xml:space="preserve">
+    <value>Insert page</value>
+  </data>
+  <data name="Document_ReorderPages_Name" xml:space="preserve">
+    <value>Reorder pages</value>
+  </data>
+  <data name="Document_SavePageOrder_Name" xml:space="preserve">
+    <value>Save page order</value>
+  </data>
+  <data name="Document_AnnotateTools_Name" xml:space="preserve">
+    <value>Annotate tools</value>
+  </data>
+  <data name="Document_AddHighlight_Name" xml:space="preserve">
+    <value>Add highlight</value>
+  </data>
+  <data name="Document_AddTextNote_Name" xml:space="preserve">
+    <value>Add text note</value>
+  </data>
+  <data name="Document_AddInkStroke_Name" xml:space="preserve">
+    <value>Add ink stroke</value>
+  </data>
+  <data name="Document_FlattenAnnotations_Name" xml:space="preserve">
+    <value>Flatten annotations</value>
+  </data>
+  <data name="Document_EditTools_Name" xml:space="preserve">
+    <value>Edit tools</value>
+  </data>
+  <data name="Document_EditTextMode_Name" xml:space="preserve">
+    <value>Edit text mode</value>
+  </data>
+  <data name="Document_ObjectEditingMode_Name" xml:space="preserve">
+    <value>Object editing mode</value>
+  </data>
+  <data name="Document_FormTools_Name" xml:space="preserve">
+    <value>Form tools</value>
+  </data>
+  <data name="Document_FormFillMode_Name" xml:space="preserve">
+    <value>Form fill mode</value>
+  </data>
+  <data name="Document_RedactTools_Name" xml:space="preserve">
+    <value>Redact tools</value>
+  </data>
+  <data name="Document_RedactMode_Name" xml:space="preserve">
+    <value>Redact mode</value>
+  </data>
+  <data name="Document_DocumentTools_Name" xml:space="preserve">
+    <value>Document tools</value>
+  </data>
+  <data name="Document_RunOcr_Name" xml:space="preserve">
+    <value>Run OCR</value>
+  </data>
+  <data name="Document_ProtectDocument_Name" xml:space="preserve">
+    <value>Protect document</value>
+  </data>
+  <data name="Document_SignDocument_Name" xml:space="preserve">
+    <value>Sign document</value>
+  </data>
+  <data name="Document_CheckSignatures_Name" xml:space="preserve">
+    <value>Check signatures</value>
+  </data>
+  <data name="Document_ResizeTheSidebar_Name" xml:space="preserve">
+    <value>Resize the sidebar</value>
+  </data>
+  <data name="Document_Working_Name" xml:space="preserve">
+    <value>Working</value>
+  </data>
+  <data name="Document_TryRenderingThisPageAgain_Name" xml:space="preserve">
+    <value>Try rendering this page again</value>
+  </data>
+  <data name="Document_HideOrShowTheThumbnails_Tip" xml:space="preserve">
+    <value>Hide or show the thumbnails, bookmarks, search and annotations panel</value>
+  </data>
+  <data name="Document_MoveKeyboardFocusToThe_Tip" xml:space="preserve">
+    <value>Move keyboard focus to the document surface (WCAG 2.4.1 bypass)</value>
+  </data>
+  <data name="Document_PreviousPage_Tip" xml:space="preserve">
+    <value>Previous page</value>
+  </data>
+  <data name="Document_NextPage_Tip" xml:space="preserve">
+    <value>Next page</value>
+  </data>
+  <data name="Document_ZoomOut_Tip" xml:space="preserve">
+    <value>Zoom out</value>
+  </data>
+  <data name="Document_ZoomIn_Tip" xml:space="preserve">
+    <value>Zoom in</value>
+  </data>
+  <data name="Document_ResetZoomTo100_Tip" xml:space="preserve">
+    <value>Reset zoom to 100%</value>
+  </data>
+  <data name="Document_RotateTheViewCounterClockwise_Tip" xml:space="preserve">
+    <value>Rotate the view counter-clockwise</value>
+  </data>
+  <data name="Document_RotateTheViewClockwise_Tip" xml:space="preserve">
+    <value>Rotate the view clockwise</value>
+  </data>
+  <data name="Document_ScrollAllPagesContinuouslyInstead_Tip" xml:space="preserve">
+    <value>Scroll all pages continuously instead of one at a time</value>
+  </data>
+  <data name="Document_UndoLastEditCtrlZ_Tip" xml:space="preserve">
+    <value>Undo last edit (Ctrl+Z)</value>
+  </data>
+  <data name="Document_RedoLastUndoneEditCtrl_Tip" xml:space="preserve">
+    <value>Redo last undone edit (Ctrl+Y)</value>
+  </data>
+  <data name="Document_SearchTheDocumentText_Tip" xml:space="preserve">
+    <value>Search the document text</value>
+  </data>
+  <data name="Document_SaveARotatedCopyOf_Tip" xml:space="preserve">
+    <value>Save a rotated copy of the current page to a new file</value>
+  </data>
+  <data name="Document_DeleteTheCurrentPageInto_Tip" xml:space="preserve">
+    <value>Delete the current page into a new file</value>
+  </data>
+  <data name="Document_ExtractTheCurrentPageTo_Tip" xml:space="preserve">
+    <value>Extract the current page to a new file</value>
+  </data>
+  <data name="Document_InsertAnotherPdfBeforeAfter_Tip" xml:space="preserve">
+    <value>Insert another PDF before/after the current page</value>
+  </data>
+  <data name="Document_DragThumbnailsToReorderPages_Tip" xml:space="preserve">
+    <value>Drag thumbnails to reorder pages, then save</value>
+  </data>
+  <data name="Document_WriteTheReorderedPagesTo_Tip" xml:space="preserve">
+    <value>Write the reordered pages to a new PDF</value>
+  </data>
+  <data name="Document_AddAHighlightOverThe_Tip" xml:space="preserve">
+    <value>Add a highlight over the top of the current page</value>
+  </data>
+  <data name="Document_AddATextNoteTo_Tip" xml:space="preserve">
+    <value>Add a text note to the current page</value>
+  </data>
+  <data name="Document_AddAnInkStrokeTo_Tip" xml:space="preserve">
+    <value>Add an ink stroke to the current page</value>
+  </data>
+  <data name="Document_SaveACopyWithSelected_Tip" xml:space="preserve">
+    <value>Save a copy with selected annotation types baked into static content</value>
+  </data>
+  <data name="Document_ClickAWordOnThe_Tip" xml:space="preserve">
+    <value>Click a word on the page to edit it; edits grow the box and warn on collision</value>
+  </data>
+  <data name="Document_SelectMoveResizeOrReplace_Tip" xml:space="preserve">
+    <value>Select, move, resize, or replace image/vector objects on the page</value>
+  </data>
+  <data name="Document_FillAcroformFieldsOnThe_Tip" xml:space="preserve">
+    <value>Fill AcroForm fields on the page, then flatten the form to static content</value>
+  </data>
+  <data name="Document_DragBoxesOverSensitiveContent_Tip" xml:space="preserve">
+    <value>Drag boxes over sensitive content; apply removes it and paints black (undoable)</value>
+  </data>
+  <data name="Document_RenderASearchableCopyRecognize_Tip" xml:space="preserve">
+    <value>Render a searchable copy: recognize the document's text offline and embed it (FR-OCR-01)</value>
+  </data>
+  <data name="Document_WriteAnEncryptedCopyProtected_Tip" xml:space="preserve">
+    <value>Write an encrypted copy protected by an open password (FR-SEC-01)</value>
+  </data>
+  <data name="Document_SignACopyWithA_Tip" xml:space="preserve">
+    <value>Sign a copy with a certificate you hold, on this machine (FR-SEC-03)</value>
+  </data>
+  <data name="Document_CheckTheSignaturesThisDocument_Tip" xml:space="preserve">
+    <value>Check the signatures this document already carries (FR-SEC-03)</value>
+  </data>
+  <data name="Document_DragToResizeTheSidebar_Tip" xml:space="preserve">
+    <value>Drag to resize the sidebar, or focus it and use the arrow keys</value>
+  </data>
+  <data name="Document_Pages_Header" xml:space="preserve">
+    <value>Pages</value>
+  </data>
+  <data name="Document_Bookmarks_Header" xml:space="preserve">
+    <value>Bookmarks</value>
+  </data>
+  <data name="Document_Search_Header" xml:space="preserve">
+    <value>Search</value>
+  </data>
+  <data name="Document_Annotations_Header" xml:space="preserve">
+    <value>Annotations</value>
+  </data>
+  <data name="Document_Continuous" xml:space="preserve">
+    <value>Continuous</value>
+  </data>
+  <data name="Document_Organize" xml:space="preserve">
+    <value>Organize</value>
+  </data>
+  <data name="Document_Annotate" xml:space="preserve">
+    <value>Annotate</value>
+  </data>
+  <data name="Document_Edit" xml:space="preserve">
+    <value>Edit</value>
+  </data>
+  <data name="Document_Forms" xml:space="preserve">
+    <value>Forms</value>
+  </data>
+  <data name="Document_Redact" xml:space="preserve">
+    <value>Redact</value>
+  </data>
+  <data name="Document_Document" xml:space="preserve">
+    <value>Document</value>
+  </data>
+  <data name="Document_TryAgain" xml:space="preserve">
+    <value>Try again</value>
+  </data>
+  <data name="Document_SkipToPage_Text" xml:space="preserve">
+    <value>Skip to page</value>
+  </data>
+  <data name="Document_Organize_Text" xml:space="preserve">
+    <value>Organize</value>
+  </data>
+  <data name="Document_RotatePage_Text" xml:space="preserve">
+    <value>Rotate page</value>
+  </data>
+  <data name="Document_DeletePage_Text" xml:space="preserve">
+    <value>Delete page</value>
+  </data>
+  <data name="Document_ExtractPage_Text" xml:space="preserve">
+    <value>Extract page</value>
+  </data>
+  <data name="Document_Insert_Text" xml:space="preserve">
+    <value>Insert…</value>
+  </data>
+  <data name="Document_Reorder_Text" xml:space="preserve">
+    <value>Reorder</value>
+  </data>
+  <data name="Document_SaveOrder_Text" xml:space="preserve">
+    <value>Save order…</value>
+  </data>
+  <data name="Document_Annotate_Text" xml:space="preserve">
+    <value>Annotate</value>
+  </data>
+  <data name="Document_Highlight_Text" xml:space="preserve">
+    <value>Highlight</value>
+  </data>
+  <data name="Document_Note_Text" xml:space="preserve">
+    <value>Note</value>
+  </data>
+  <data name="Document_Ink_Text" xml:space="preserve">
+    <value>Ink</value>
+  </data>
+  <data name="Document_Flatten_Text" xml:space="preserve">
+    <value>Flatten…</value>
+  </data>
+  <data name="Document_Edit_Text" xml:space="preserve">
+    <value>Edit</value>
+  </data>
+  <data name="Document_EditText_Text" xml:space="preserve">
+    <value>Edit text</value>
+  </data>
+  <data name="Document_EditObjects_Text" xml:space="preserve">
+    <value>Edit objects</value>
+  </data>
+  <data name="Document_Forms_Text" xml:space="preserve">
+    <value>Forms</value>
+  </data>
+  <data name="Document_FillForm_Text" xml:space="preserve">
+    <value>Fill form</value>
+  </data>
+  <data name="Document_Redact_Text" xml:space="preserve">
+    <value>Redact</value>
+  </data>
+  <data name="Document_Document_Text" xml:space="preserve">
+    <value>Document</value>
+  </data>
+  <data name="Document_Ocr_Text" xml:space="preserve">
+    <value>OCR…</value>
+  </data>
+  <data name="Document_Protect_Text" xml:space="preserve">
+    <value>Protect…</value>
+  </data>
+  <data name="Document_Sign_Text" xml:space="preserve">
+    <value>Sign…</value>
+  </data>
+  <data name="Document_Signatures_Text" xml:space="preserve">
+    <value>Signatures</value>
+  </data>
+  <data name="Document_AnnotationsOnCurrentPage_Text" xml:space="preserve">
+    <value>Annotations on current page</value>
+  </data>
+  <data name="FormFill_FormFillPage_Name" xml:space="preserve">
+    <value>Form fill page</value>
+  </data>
+  <data name="FormFill_CreateANewAcroformText_Tip" xml:space="preserve">
+    <value>Create a new AcroForm text field on this page (with required/max-length validation)</value>
+  </data>
+  <data name="FormFill_BakeEveryFieldValueInto_Tip" xml:space="preserve">
+    <value>Bake every field value into static page content (fields stop being interactive)</value>
+  </data>
+  <data name="FormFill_NewTextField" xml:space="preserve">
+    <value>New text field…</value>
+  </data>
+  <data name="FormFill_FlattenForm" xml:space="preserve">
+    <value>Flatten form…</value>
+  </data>
+  <data name="FormFill_Checked" xml:space="preserve">
+    <value>Checked</value>
+  </data>
+  <data name="FormFill_Set" xml:space="preserve">
+    <value>Set</value>
+  </data>
+  <data name="FormFill_FillForm_Text" xml:space="preserve">
+    <value>Fill form</value>
+  </data>
+  <data name="FormFill_SetAFieldValueValues_Text" xml:space="preserve">
+    <value>Set a field value; values appear on the page at once.</value>
+  </data>
+  <data name="FormFill_FieldsOnThisPage_Text" xml:space="preserve">
+    <value>Fields on this page</value>
+  </data>
+  <data name="ObjectEdit_ObjectEditPage_Name" xml:space="preserve">
+    <value>Object edit page</value>
+  </data>
+  <data name="ObjectEdit_PickAPngJpegTo_Tip" xml:space="preserve">
+    <value>Pick a PNG/JPEG to paint inside the selected object's box</value>
+  </data>
+  <data name="ObjectEdit_Replace" xml:space="preserve">
+    <value>Replace…</value>
+  </data>
+  <data name="ObjectEdit_Undo" xml:space="preserve">
+    <value>↩ Undo</value>
+  </data>
+  <data name="ObjectEdit_Redo" xml:space="preserve">
+    <value>↪ Redo</value>
+  </data>
+  <data name="ObjectEdit_ObjectEdit_Text" xml:space="preserve">
+    <value>Object edit</value>
+  </data>
+  <data name="ObjectEdit_ClickAnObjectToSelect_Text" xml:space="preserve">
+    <value>Click an object to select; drag to move; drag a handle to resize. Keyboard: Tab selects, arrows move, Ctrl+arrows resize, Enter commits.</value>
+  </data>
+  <data name="Protect_OpenPassword_Name" xml:space="preserve">
+    <value>Open password</value>
+  </data>
+  <data name="Protect_PermissionsPassword_Name" xml:space="preserve">
+    <value>Permissions password</value>
+  </data>
+  <data name="Protect_EncryptionMethod_Name" xml:space="preserve">
+    <value>Encryption method</value>
+  </data>
+  <data name="Protect_Permissions_Header" xml:space="preserve">
+    <value>Permissions</value>
+  </data>
+  <data name="Protect_ProtectPasswordProtection_Title" xml:space="preserve">
+    <value>Protect — password protection</value>
+  </data>
+  <data name="Protect_Aes256Recommended" xml:space="preserve">
+    <value>AES-256 (recommended)</value>
+  </data>
+  <data name="Protect_Aes128" xml:space="preserve">
+    <value>AES-128</value>
+  </data>
+  <data name="Protect_Rc4128Legacy" xml:space="preserve">
+    <value>RC4-128 (legacy)</value>
+  </data>
+  <data name="Protect_Rc440Legacy" xml:space="preserve">
+    <value>RC4-40 (legacy)</value>
+  </data>
+  <data name="Protect_Print" xml:space="preserve">
+    <value>Print</value>
+  </data>
+  <data name="Protect_CopyExtractText" xml:space="preserve">
+    <value>Copy / extract text</value>
+  </data>
+  <data name="Protect_ModifyContents" xml:space="preserve">
+    <value>Modify contents</value>
+  </data>
+  <data name="Protect_AnnotateFillForms" xml:space="preserve">
+    <value>Annotate / fill forms</value>
+  </data>
+  <data name="Protect_AssemblePages" xml:space="preserve">
+    <value>Assemble pages</value>
+  </data>
+  <data name="Protect_Cancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="Protect_Protect" xml:space="preserve">
+    <value>Protect</value>
+  </data>
+  <data name="Protect_ChoosePasswordsForTheProtected_Text" xml:space="preserve">
+    <value>Choose passwords for the protected copy (FR-SEC-01).</value>
+  </data>
+  <data name="Protect_OpenPasswordRequiredToOpen_Text" xml:space="preserve">
+    <value>Open password (required to open the copy)</value>
+  </data>
+  <data name="Protect_PermissionsPasswordOptionalUnlockEverything_Text" xml:space="preserve">
+    <value>Permissions password (optional; unlock everything, lets you change permissions)</value>
+  </data>
+  <data name="Protect_Encryption_Text" xml:space="preserve">
+    <value>Encryption</value>
+  </data>
+  <data name="Protect_PermissionsForTheOpenPassword_Text" xml:space="preserve">
+    <value>Permissions for the open password (owner password bypasses these)</value>
+  </data>
+  <data name="Redact_UndoRedaction_Name" xml:space="preserve">
+    <value>Undo redaction</value>
+  </data>
+  <data name="Redact_RedactPage_Name" xml:space="preserve">
+    <value>Redact page</value>
+  </data>
+  <data name="Redact_UndoTheLastRedactionApply_Tip" xml:space="preserve">
+    <value>Undo the last redaction apply (restores the covered content from a snapshot)</value>
+  </data>
+  <data name="Redact_WriteANewPdfWith_Tip" xml:space="preserve">
+    <value>Write a new PDF with the redactions applied and the covered content permanently gone</value>
+  </data>
+  <data name="Redact_DeleteEveryMarkedRegionS_Tip" xml:space="preserve">
+    <value>Delete every marked region's content now (undoable via ↩ Undo)</value>
+  </data>
+  <data name="Redact_Undo" xml:space="preserve">
+    <value>↩ Undo</value>
+  </data>
+  <data name="Redact_SaveRedacted" xml:space="preserve">
+    <value>Save redacted…</value>
+  </data>
+  <data name="Redact_ApplyRedactions" xml:space="preserve">
+    <value>Apply redactions…</value>
+  </data>
+  <data name="Redact_Redact_Text" xml:space="preserve">
+    <value>Redact</value>
+  </data>
+  <data name="Redact_DragABoxOverContent_Text" xml:space="preserve">
+    <value>Drag a box over content to remove, or use the keyboard: Enter begins a box, arrows size it, Ctrl+arrows move it, Enter places it, Esc cancels. Apply deletes the covered text and paints it black (undoable).</value>
+  </data>
+  <data name="Redact_RegionsMarkedOnThisPage_Text" xml:space="preserve">
+    <value>Regions marked on this page</value>
+  </data>
+  <data name="Redact_NoRegionsOnThisPage_Text" xml:space="preserve">
+    <value>No regions on this page yet — drag a box over the content to redact.</value>
+  </data>
+  <data name="Sign_BrowseForCertificate_Name" xml:space="preserve">
+    <value>Browse for certificate</value>
+  </data>
+  <data name="Sign_CertificateFile_Name" xml:space="preserve">
+    <value>Certificate file</value>
+  </data>
+  <data name="Sign_CertificatePassword_Name" xml:space="preserve">
+    <value>Certificate password</value>
+  </data>
+  <data name="Sign_SignatureFieldName_Name" xml:space="preserve">
+    <value>Signature field name</value>
+  </data>
+  <data name="Sign_SignaturePosition_Name" xml:space="preserve">
+    <value>Signature position</value>
+  </data>
+  <data name="Sign_SigningReason_Name" xml:space="preserve">
+    <value>Signing reason</value>
+  </data>
+  <data name="Sign_SigningLocation_Name" xml:space="preserve">
+    <value>Signing location</value>
+  </data>
+  <data name="Sign_SignDigitalSignature_Title" xml:space="preserve">
+    <value>Sign — digital signature</value>
+  </data>
+  <data name="Sign_Browse" xml:space="preserve">
+    <value>Browse…</value>
+  </data>
+  <data name="Sign_Cancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="Sign_Sign" xml:space="preserve">
+    <value>Sign</value>
+  </data>
+  <data name="Sign_SignThisDocumentWithA_Text" xml:space="preserve">
+    <value>Sign this document with a certificate you hold (FR-SEC-03). Signing happens on this machine; nothing is sent anywhere.</value>
+  </data>
+  <data name="Sign_CertificatePkcs12PfxMust_Text" xml:space="preserve">
+    <value>Certificate (PKCS#12 .pfx, must contain a private key)</value>
+  </data>
+  <data name="Sign_CertificatePasswordLeaveEmptyIf_Text" xml:space="preserve">
+    <value>Certificate password (leave empty if it has none)</value>
+  </data>
+  <data name="Sign_SignatureFieldNameMustBe_Text" xml:space="preserve">
+    <value>Signature field name (must be unique in the document)</value>
+  </data>
+  <data name="Sign_Signature1_Text" xml:space="preserve">
+    <value>Signature1</value>
+  </data>
+  <data name="Sign_Position_Text" xml:space="preserve">
+    <value>Position</value>
+  </data>
+  <data name="Sign_ReasonOptional_Text" xml:space="preserve">
+    <value>Reason (optional)</value>
+  </data>
+  <data name="Sign_LocationOptional_Text" xml:space="preserve">
+    <value>Location (optional)</value>
+  </data>
+  <data name="SignPlace_PreviousPage_Name" xml:space="preserve">
+    <value>Previous page</value>
+  </data>
+  <data name="SignPlace_NextPage_Name" xml:space="preserve">
+    <value>Next page</value>
+  </data>
+  <data name="SignPlace_UseTheDefaultSignatureBox_Name" xml:space="preserve">
+    <value>Use the default signature box</value>
+  </data>
+  <data name="SignPlace_ContinueToSigning_Name" xml:space="preserve">
+    <value>Continue to signing</value>
+  </data>
+  <data name="SignPlace_CancelSigning_Name" xml:space="preserve">
+    <value>Cancel signing</value>
+  </data>
+  <data name="SignPlace_PageToSign_Name" xml:space="preserve">
+    <value>Page to sign</value>
+  </data>
+  <data name="SignPlace_SignaturePlacementSurface_Name" xml:space="preserve">
+    <value>Signature placement surface</value>
+  </data>
+  <data name="SignPlace_PlaceTheSignatureOnThe_Tip" xml:space="preserve">
+    <value>Place the signature on the previous page</value>
+  </data>
+  <data name="SignPlace_PlaceTheSignatureOnThe_Tip2" xml:space="preserve">
+    <value>Place the signature on the next page</value>
+  </data>
+  <data name="SignPlace_SkipPlacingItPutThe_Tip" xml:space="preserve">
+    <value>Skip placing it: put the signature in the standard box near the bottom-left of this page</value>
+  </data>
+  <data name="SignPlace_SignWithTheBoxPlaced_Tip" xml:space="preserve">
+    <value>Sign with the box placed on this page</value>
+  </data>
+  <data name="SignPlace_Page" xml:space="preserve">
+    <value>◀ Page</value>
+  </data>
+  <data name="SignPlace_Page2" xml:space="preserve">
+    <value>Page ▶</value>
+  </data>
+  <data name="SignPlace_UseTheDefaultBox" xml:space="preserve">
+    <value>Use the default box</value>
+  </data>
+  <data name="SignPlace_Continue" xml:space="preserve">
+    <value>Continue…</value>
+  </data>
+  <data name="SignPlace_Cancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="SignPlace_PlaceSignature_Text" xml:space="preserve">
+    <value>Place signature</value>
+  </data>
+  <data name="SignPlace_DragABoxWhereThe_Text" xml:space="preserve">
+    <value>Drag a box where the signature should appear, or use the keyboard: Enter begins a box, arrows size it, Ctrl+arrows move it, Enter places it, Esc cancels.</value>
+  </data>
+  <data name="Common_AppTitle" xml:space="preserve">
+    <value>PageForge</value>
+  </data>
+  <data name="Error_CouldNotOpenTheSource" xml:space="preserve">
+    <value>Could not open the source repository.
+
+{0}</value>
+  </data>
+  <data name="Error_FailedToOpen" xml:space="preserve">
+    <value>Failed to open:
+{0}
+
+{1}</value>
+  </data>
+  <data name="Error_ReorderFailed" xml:space="preserve">
+    <value>Reorder failed:
+{0}</value>
+  </data>
+  <data name="Error_AddHighlightFailed" xml:space="preserve">
+    <value>Add highlight failed:
+{0}</value>
+  </data>
+  <data name="Error_AddNoteFailed" xml:space="preserve">
+    <value>Add note failed:
+{0}</value>
+  </data>
+  <data name="Error_AddInkFailed" xml:space="preserve">
+    <value>Add ink failed:
+{0}</value>
+  </data>
+  <data name="Error_FlattenFailed" xml:space="preserve">
+    <value>Flatten failed:
+{0}</value>
+  </data>
+  <data name="Error_UndoFailed" xml:space="preserve">
+    <value>Undo failed:
+{0}</value>
+  </data>
+  <data name="Error_RedoFailed" xml:space="preserve">
+    <value>Redo failed:
+{0}</value>
+  </data>
+  <data name="Error_EditFailed" xml:space="preserve">
+    <value>Edit failed:
+{0}</value>
+  </data>
+  <data name="Error_RotateFailed" xml:space="preserve">
+    <value>Rotate failed:
+{0}</value>
+  </data>
+  <data name="Error_DeleteFailed" xml:space="preserve">
+    <value>Delete failed:
+{0}</value>
+  </data>
+  <data name="Error_ExtractFailed" xml:space="preserve">
+    <value>Extract failed:
+{0}</value>
+  </data>
+  <data name="Error_InsertFailed" xml:space="preserve">
+    <value>Insert failed:
+{0}</value>
+  </data>
+  <data name="Error_OcrFailed" xml:space="preserve">
+    <value>OCR failed:
+{0}</value>
+  </data>
+  <data name="Error_ProtectFailed" xml:space="preserve">
+    <value>Protect failed:
+{0}</value>
+  </data>
+  <data name="Error_CouldNotFillField" xml:space="preserve">
+    <value>Could not fill field {0}:
+{1}</value>
+  </data>
+  <data name="Error_CouldNotCreateTheField" xml:space="preserve">
+    <value>Could not create the field:
+{0}</value>
+  </data>
+  <data name="Error_ReplaceFailed" xml:space="preserve">
+    <value>Replace failed:
+{0}</value>
+  </data>
+  <data name="Error_CouldNotMarkTheRegion" xml:space="preserve">
+    <value>Could not mark the region:
+{0}</value>
+  </data>
+  <data name="Error_ApplyFailed" xml:space="preserve">
+    <value>Apply failed:
+{0}</value>
+  </data>
+  <data name="Error_SaveFailed" xml:space="preserve">
+    <value>Save failed:
+{0}</value>
+  </data>
+  <data name="Status_ReorderModeDragThumbnailsOr" xml:space="preserve">
+    <value>Reorder mode: drag thumbnails, or Ctrl+Up/Ctrl+Down to move the selected page, then Save order…</value>
+  </data>
+  <data name="Status_EditModeThisPageHas" xml:space="preserve">
+    <value>Edit mode: this page has no editable words.</value>
+  </data>
+  <data name="Status_NoEditableTextAtThat" xml:space="preserve">
+    <value>No editable text at that point (edit mode).</value>
+  </data>
+  <data name="Status_EditCancelled" xml:space="preserve">
+    <value>Edit cancelled.</value>
+  </data>
+</root>

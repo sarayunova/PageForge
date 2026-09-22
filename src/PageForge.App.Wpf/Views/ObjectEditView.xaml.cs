@@ -10,6 +10,7 @@ using System.Windows.Media;
 using System.Windows.Shapes;
 using PageForge.App.Wpf.ViewModels;
 using PageForge.Core.Pdf;
+using PageForge.App.Wpf.Resources;
 
 namespace PageForge.App.Wpf.Views;
 
@@ -574,7 +575,7 @@ public partial class ObjectEditView : UserControl
 
         if (format is not ("png" or "jpeg" or "bmp" or "gif"))
         {
-            MessageBox.Show($"Unsupported image format '.{ext}' for object replace.", "PageForge", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show($"Unsupported image format '.{ext}' for object replace.", UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
@@ -587,7 +588,7 @@ public partial class ObjectEditView : UserControl
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Replace failed:\n{ex.Message}", "PageForge", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(UiStrings.Format("Error_ReplaceFailed", ex.Message), UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -608,7 +609,7 @@ public partial class ObjectEditView : UserControl
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Undo failed:\n{ex.Message}", "PageForge", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(UiStrings.Format("Error_UndoFailed", ex.Message), UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -629,7 +630,7 @@ public partial class ObjectEditView : UserControl
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Redo failed:\n{ex.Message}", "PageForge", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(UiStrings.Format("Error_RedoFailed", ex.Message), UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {

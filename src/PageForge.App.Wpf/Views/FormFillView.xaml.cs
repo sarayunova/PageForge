@@ -11,6 +11,7 @@ using System.Windows.Media;
 using System.Windows.Shapes;
 using PageForge.App.Wpf.ViewModels;
 using PageForge.Core.Pdf;
+using PageForge.App.Wpf.Resources;
 
 namespace PageForge.App.Wpf.Views;
 
@@ -165,7 +166,7 @@ public partial class FormFillView : UserControl
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Could not fill field {fieldId}:\n{ex.Message}", "PageForge", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(UiStrings.Format("Error_CouldNotFillField", fieldId, ex.Message), UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         finally
         {
@@ -182,7 +183,7 @@ public partial class FormFillView : UserControl
 
         var confirm = MessageBox.Show(
             "Flatten the form? Every field value is baked into static page content and the fields stop being interactive.",
-            "PageForge", MessageBoxButton.OKCancel, MessageBoxImage.Question);
+            UiStrings.Get("Common_AppTitle"), MessageBoxButton.OKCancel, MessageBoxImage.Question);
         if (confirm != MessageBoxResult.OK)
         {
             return;
@@ -196,7 +197,7 @@ public partial class FormFillView : UserControl
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Flatten failed:\n{ex.Message}", "PageForge", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(UiStrings.Format("Error_FlattenFailed", ex.Message), UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -240,7 +241,7 @@ public partial class FormFillView : UserControl
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Could not create the field:\n{ex.Message}", "PageForge", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(UiStrings.Format("Error_CouldNotCreateTheField", ex.Message), UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {

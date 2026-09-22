@@ -11,6 +11,7 @@ using System.Windows.Media;
 using System.Windows.Shapes;
 using PageForge.App.Wpf.ViewModels;
 using PageForge.Core.Pdf;
+using PageForge.App.Wpf.Resources;
 
 namespace PageForge.App.Wpf.Views;
 
@@ -235,7 +236,7 @@ public partial class RedactView : UserControl
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Could not mark the region:\n{ex.Message}", "PageForge", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(UiStrings.Format("Error_CouldNotMarkTheRegion", ex.Message), UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 
@@ -369,7 +370,7 @@ public partial class RedactView : UserControl
 
         var confirm = MessageBox.Show(
             $"Apply {_regions.Count} redaction region(s)? The covered text (if any) is permanently deleted and the box is painted black. You can undo this once by using ↩ Undo.",
-            "PageForge", MessageBoxButton.OKCancel, MessageBoxImage.Warning);
+            UiStrings.Get("Common_AppTitle"), MessageBoxButton.OKCancel, MessageBoxImage.Warning);
         if (confirm != MessageBoxResult.OK)
         {
             return;
@@ -384,7 +385,7 @@ public partial class RedactView : UserControl
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Apply failed:\n{ex.Message}", "PageForge", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(UiStrings.Format("Error_ApplyFailed", ex.Message), UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -407,7 +408,7 @@ public partial class RedactView : UserControl
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Undo failed:\n{ex.Message}", "PageForge", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(UiStrings.Format("Error_UndoFailed", ex.Message), UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -439,7 +440,7 @@ public partial class RedactView : UserControl
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Save failed:\n{ex.Message}", "PageForge", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(UiStrings.Format("Error_SaveFailed", ex.Message), UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 

@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging;
 using PageForge.App.Wpf.ViewModels;
 using PageForge.Core.Pdf;
 using PageForge.MuPdfInterop;
+using PageForge.App.Wpf.Resources;
 
 namespace PageForge.App.Wpf.Views;
 
@@ -425,7 +426,7 @@ public partial class DocumentView : UserControl
         if (ReorderToggle.IsChecked == true)
         {
             _vm.EnterReorderMode();
-            _vm?.ShowStatusHint("Reorder mode: drag thumbnails, or Ctrl+Up/Ctrl+Down to move the selected page, then Save order…");
+            _vm?.ShowStatusHint(UiStrings.Get("Status_ReorderModeDragThumbnailsOr"));
         }
         else
         {
@@ -524,7 +525,7 @@ public partial class DocumentView : UserControl
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Reorder failed:\n{ex.Message}", "PageForge", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(UiStrings.Format("Error_ReorderFailed", ex.Message), UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -568,7 +569,7 @@ public partial class DocumentView : UserControl
 
         _vm.MoveReorderItem(index, target);
         ThumbList.SelectedIndex = target;
-        _vm?.ShowStatusHint("Reorder mode: drag thumbnails, or Ctrl+Up/Ctrl+Down to move the selected page, then Save order…");
+        _vm?.ShowStatusHint(UiStrings.Get("Status_ReorderModeDragThumbnailsOr"));
         e.Handled = true;
     }
 
@@ -744,7 +745,7 @@ public partial class DocumentView : UserControl
             _wordIndex = -1;
             if (_wordRuns.Count == 0)
             {
-                _vm?.ShowStatusHint("Edit mode: this page has no editable words.");
+                _vm?.ShowStatusHint(UiStrings.Get("Status_EditModeThisPageHas"));
                 return;
             }
 
@@ -874,7 +875,7 @@ public partial class DocumentView : UserControl
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Add highlight failed:\n{ex.Message}", "PageForge", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(UiStrings.Format("Error_AddHighlightFailed", ex.Message), UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -891,7 +892,7 @@ public partial class DocumentView : UserControl
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Add note failed:\n{ex.Message}", "PageForge", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(UiStrings.Format("Error_AddNoteFailed", ex.Message), UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -908,7 +909,7 @@ public partial class DocumentView : UserControl
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Add ink failed:\n{ex.Message}", "PageForge", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(UiStrings.Format("Error_AddInkFailed", ex.Message), UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -933,7 +934,7 @@ public partial class DocumentView : UserControl
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Flatten failed:\n{ex.Message}", "PageForge", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(UiStrings.Format("Error_FlattenFailed", ex.Message), UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -1061,7 +1062,7 @@ public partial class DocumentView : UserControl
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Undo failed:\n{ex.Message}", "PageForge", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(UiStrings.Format("Error_UndoFailed", ex.Message), UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -1078,7 +1079,7 @@ public partial class DocumentView : UserControl
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Redo failed:\n{ex.Message}", "PageForge", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(UiStrings.Format("Error_RedoFailed", ex.Message), UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -1107,7 +1108,7 @@ public partial class DocumentView : UserControl
             PdfTextRun? run = await _vm.HitTestAsync(xPt, yPt).ConfigureAwait(true);
             if (run is null)
             {
-                _vm?.ShowStatusHint("No editable text at that point (edit mode).");
+                _vm?.ShowStatusHint(UiStrings.Get("Status_NoEditableTextAtThat"));
                 return;
             }
 
@@ -1115,7 +1116,7 @@ public partial class DocumentView : UserControl
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Edit failed:\n{ex.Message}", "PageForge", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(UiStrings.Format("Error_EditFailed", ex.Message), UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -1155,7 +1156,7 @@ public partial class DocumentView : UserControl
             }
             else
             {
-                _vm?.ShowStatusHint("Edit cancelled.");
+                _vm?.ShowStatusHint(UiStrings.Get("Status_EditCancelled"));
             }
 
             return;
@@ -1233,7 +1234,7 @@ public partial class DocumentView : UserControl
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Rotate failed:\n{ex.Message}", "PageForge", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(UiStrings.Format("Error_RotateFailed", ex.Message), UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -1257,7 +1258,7 @@ public partial class DocumentView : UserControl
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Delete failed:\n{ex.Message}", "PageForge", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(UiStrings.Format("Error_DeleteFailed", ex.Message), UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -1281,7 +1282,7 @@ public partial class DocumentView : UserControl
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Extract failed:\n{ex.Message}", "PageForge", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(UiStrings.Format("Error_ExtractFailed", ex.Message), UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -1317,7 +1318,7 @@ public partial class DocumentView : UserControl
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Insert failed:\n{ex.Message}", "PageForge", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(UiStrings.Format("Error_InsertFailed", ex.Message), UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -1367,7 +1368,7 @@ public partial class DocumentView : UserControl
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"OCR failed:\n{ex.Message}", "PageForge", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(UiStrings.Format("Error_OcrFailed", ex.Message), UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -1399,7 +1400,7 @@ public partial class DocumentView : UserControl
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Protect failed:\n{ex.Message}", "PageForge", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(UiStrings.Format("Error_ProtectFailed", ex.Message), UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
