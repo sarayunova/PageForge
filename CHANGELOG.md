@@ -144,18 +144,36 @@ version heading when the tag is pushed.
   now paint a transparent background, and both gestures are driven by a real
   synthesized mouse in the UI smoke suite.
 
-### Not in this release, despite work existing for it
+- **UI strings externalized to resource files (TRD §6).** All 287 readable
+  strings live in `Resources/UiStrings.resx`; XAML reaches them through a
+  `{loc:Str Key}` markup extension and code through `UiStrings.Get`/`Format`.
+  English only, which matches the v1 plan — what changes is that translating
+  it no longer means editing the shell.
 
-- **Localized UI strings (TRD §6).** Strings are literals in XAML and code
-  rather than resource files. English only, which matches the v1 plan, but the
-  externalization the requirement asks for has not been done.
-- **Page reorder by dragging a thumbnail, verified.** Reordering with
-  Ctrl+Up/Ctrl+Down is covered by the UI suite and works. The drag-and-drop
-  gesture could not be verified: a synthesized drag reaches the press and
-  starts the OLE drag loop, but the drop never arrives, and that is as
-  consistent with a harness limitation as with a defect. It is recorded as
-  unverified rather than asserted by a test that cannot fail honestly, and it
-  needs a manual check before the release.
+  The migration is guarded rather than declared finished, because a
+  part-migration that looks complete is the failure this project keeps
+  repeating. Five checks fail the build: a key used but undefined, a resource
+  defined but unused, a literal left in markup, a literal reaching a UI sink
+  in code, and a resource that resolves to its own key — the last catches a
+  wrong `ResourceManager` base name, which compiles cleanly and would ship an
+  app whose every button reads `Document_NextPage_Name`.
+
+  The code check works from the sinks (`Hint`, `ShowStatusHint`,
+  `MessageBox.Show`, `SetName`) and reads each call's whole argument span,
+  because a log message and a button label are indistinguishable to a regex
+  and differ only in where they go. Scanning spans rather than lines found 44
+  messages where a per-line search had found 23: the literals that survive
+  longest are the ones broken across lines.
+
+- **Page reorder by dragging a thumbnail, verified.** The drag-and-drop
+  gesture works. It could not be verified from a synthesized drag — the press
+  and the OLE drag loop start, but the drop never arrives, which is a harness
+  limitation rather than a defect: the drag loop owns the cursor. It is
+  confirmed instead from the application's own log, which records real drops
+  with distinct source and target indices (`from 1 to 0`, `from 3 to 0`,
+  `from 0 to 1`), each preceded by its matching selection. The drop handler
+  calls the same `MoveReorderItem` the Ctrl+Up/Ctrl+Down path uses, and that
+  path is covered by the UI suite.
 
 ### Hosted service
 
