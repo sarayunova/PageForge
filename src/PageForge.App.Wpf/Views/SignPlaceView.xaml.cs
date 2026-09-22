@@ -10,6 +10,7 @@ using System.Windows.Media;
 using System.Windows.Shapes;
 using PageForge.App.Wpf.ViewModels;
 using PageForge.Core.Pdf;
+using PageForge.App.Wpf.Resources;
 
 namespace PageForge.App.Wpf.Views;
 
@@ -93,7 +94,7 @@ public partial class SignPlaceView : UserControl
             PageText.Text = $"Page {_pageIndex + 1} of {_vm.PageCount}";
             PrevPageButton.IsEnabled = _pageIndex > 0;
             NextPageButton.IsEnabled = _pageIndex < _vm.PageCount - 1;
-            AutomationProperties.SetName(PageImage, $"Page {_pageIndex + 1} to sign");
+            AutomationProperties.SetName(PageImage, UiStrings.Format("SignPlace_PageImage_Name", _pageIndex + 1));
 
             PdfPageRegion region = _vm.Core.PageSizes[Math.Min(_pageIndex, _vm.Core.PageCount - 1)];
             _pixelW = region.WidthPt * _scale;
@@ -210,16 +211,14 @@ public partial class SignPlaceView : UserControl
 
         if (rect.X1 - rect.X0 < MinimumSizePt || rect.Y1 - rect.Y0 < MinimumSizePt)
         {
-            Hint($"That box is too small to hold a signature (at least {MinimumSizePt:F0} by {MinimumSizePt:F0} points). " +
-                 "Drag a larger one, or use the default box.");
+            Hint(UiStrings.Format("SignPlace_BoxTooSmall", MinimumSizePt, MinimumSizePt));
             return;
         }
 
         _placed = rect;
         ContinueButton.IsEnabled = true;
         RedrawPlacement();
-        Hint($"Signature box on page {_pageIndex + 1}: ({rect.X0:F0}, {rect.Y0:F0}) to ({rect.X1:F0}, {rect.Y1:F0}) pt. " +
-             "Drag again to move it, or Continue to choose a certificate.");
+        Hint(UiStrings.Format("SignPlace_BoxPlaced", _pageIndex + 1, rect.X0, rect.Y0, rect.X1, rect.Y1));
     }
 
     private void ClearPlacement()
@@ -255,7 +254,7 @@ public partial class SignPlaceView : UserControl
         _placedShape.Height = box.Height;
         AutomationProperties.SetName(
             _placedShape,
-            $"Signature box on page {_pageIndex + 1}, {rect.X1 - rect.X0:F0} by {rect.Y1 - rect.Y0:F0} points");
+            UiStrings.Format("SignPlace_PlacedShape_Name", _pageIndex + 1, rect.X1 - rect.X0, rect.Y1 - rect.Y0));
         Canvas.SetLeft(_placedShape, box.Left);
         Canvas.SetTop(_placedShape, box.Top);
         Overlay.Children.Add(_placedShape);
@@ -308,7 +307,7 @@ public partial class SignPlaceView : UserControl
             if (_kbdActive)
             {
                 CancelKeyboardBox();
-                Hint("Box cancelled. Drag one, press Enter to begin another, or Cancel to stop signing.");
+                Hint(UiStrings.Get("SignPlace_BoxCancelled"));
             }
             else
             {
@@ -329,7 +328,7 @@ public partial class SignPlaceView : UserControl
                 _preview = NewBoxShape(dashed: true);
                 Overlay.Children.Add(_preview);
                 SizeShapeTo(_preview, _kbdAnchor, _kbdCorner);
-                Hint("Sizing a box: arrows resize, Ctrl+arrows move, Enter places it, Esc cancels.");
+                Hint(UiStrings.Get("SignPlace_SizingBox"));
             }
             else
             {

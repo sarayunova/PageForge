@@ -136,7 +136,7 @@ public partial class DocumentView : UserControl
         Sidebar.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
         SidebarSplitter.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
         System.Windows.Automation.AutomationProperties.SetName(
-            SidebarToggle, show ? "Hide the sidebar" : "Show the sidebar");
+            SidebarToggle, show ? UiStrings.Get("Document_HideTheSidebar_Name") : UiStrings.Get("Document_ShowTheSidebar_Name"));
     }
 
     /// <summary>Shows a tool mode's hint while it is on, and takes it down again
@@ -753,7 +753,7 @@ public partial class DocumentView : UserControl
         }
         catch (Exception ex)
         {
-            _vm?.ShowStatusHint($"Edit mode: could not load words ({ex.Message}).");
+            _vm?.ShowStatusHint(UiStrings.Format("Status_EditModeCouldNotLoadWords", ex.Message));
         }
     }
 
@@ -786,7 +786,7 @@ public partial class DocumentView : UserControl
             }
         }
 
-        _vm?.ShowStatusHint($"Edit mode: word {index + 1} of {_wordRuns.Count}: “{run.Text}” — Enter to edit, Tab for the next word, Esc to stop.");
+        _vm?.ShowStatusHint(UiStrings.Format("Status_EditModeWord", index + 1, _wordRuns.Count, run.Text));
     }
 
     private async void CommitSelectedWordAsync()
@@ -1142,8 +1142,8 @@ public partial class DocumentView : UserControl
         if (outcome.Kind == TextEditOutcomeKind.NeedsConfirmation)
         {
             var confirm = MessageBox.Show(
-                $"{outcome.Message}\n\nApply it anyway?",
-                "Overflow / collision",
+                UiStrings.Format("Confirm_ApplyAnyway", outcome.Message),
+                UiStrings.Get("Confirm_OverflowCollision_Title"),
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning);
             if (confirm == MessageBoxResult.Yes)
@@ -1151,7 +1151,7 @@ public partial class DocumentView : UserControl
                 TextEditOutcome forced = await _vm.EditTextRunAsync(run.Index, newText, allowCollision: true).ConfigureAwait(true);
                 if (!forced.Succeeded)
                 {
-                    _vm.ShowStatusHint(forced.Message ?? "Edit not applied.");
+                    _vm.ShowStatusHint(forced.Message ?? UiStrings.Get("Status_EditNotApplied"));
                 }
             }
             else
@@ -1163,8 +1163,8 @@ public partial class DocumentView : UserControl
         }
 
         // FR-EDIT-03 font fidelity: the text can't be painted faithfully.
-        _vm?.ShowStatusHint(outcome.Message ?? "Edit not applied.");
-        MessageBox.Show(outcome.Message ?? "The new text cannot be rendered by the run's font.", "Font fidelity", MessageBoxButton.OK, MessageBoxImage.Information);
+        _vm?.ShowStatusHint(outcome.Message ?? UiStrings.Get("Status_EditNotApplied"));
+        MessageBox.Show(outcome.Message ?? UiStrings.Get("Error_FontFidelityMessage"), UiStrings.Get("Error_FontFidelity_Title"), MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     /// <summary>Opens a small prompt for replacement text. Returns the text, or
@@ -1172,7 +1172,7 @@ public partial class DocumentView : UserControl
     private static string? AskEditText(string initial)
     {
         var box = new TextBox { Text = initial, MinWidth = 320 };
-        System.Windows.Automation.AutomationProperties.SetName(box, "Replacement text");
+        System.Windows.Automation.AutomationProperties.SetName(box, UiStrings.Get("Dialog_ReplacementText_Name"));
         var ok = new Button { Content = "OK", IsDefault = true, Width = 80, Margin = new Thickness(0, 0, 6, 0) };
         var cancel = new Button { Content = "Cancel", IsCancel = true, Width = 80 };
         var buttons = new StackPanel
@@ -1486,7 +1486,7 @@ public partial class DocumentView : UserControl
         catch (Exception ex)
         {
             MessageBox.Show(
-                $"Signing failed:\n{ex.Message}", "PageForge",
+                UiStrings.Format("Error_SigningFailed", ex.Message), UiStrings.Get("Common_AppTitle"),
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
@@ -1505,7 +1505,7 @@ public partial class DocumentView : UserControl
             if (signatures.Count == 0)
             {
                 MessageBox.Show(
-                    "This document carries no signature fields.", "PageForge — signatures",
+                    UiStrings.Get("Signatures_None"), UiStrings.Get("Signatures_Title"),
                     MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
@@ -1522,13 +1522,13 @@ public partial class DocumentView : UserControl
             // follows the worst verdict rather than always saying "information".
             bool anyBroken = signatures.Any(s => s.IsSigned && !s.IsDigestIntact);
             MessageBox.Show(
-                report.ToString(), "PageForge — signatures", MessageBoxButton.OK,
+                report.ToString(), UiStrings.Get("Signatures_Title"), MessageBoxButton.OK,
                 anyBroken ? MessageBoxImage.Warning : MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
             MessageBox.Show(
-                $"Checking signatures failed:\n{ex.Message}", "PageForge",
+                UiStrings.Format("Error_CheckingSignaturesFailed", ex.Message), UiStrings.Get("Common_AppTitle"),
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }

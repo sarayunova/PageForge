@@ -62,7 +62,7 @@ public partial class FormFillView : UserControl
         {
             int pageIndex = _vm.Core.CurrentPage;
             _scale = _vm.RenderDpi / 72.0;
-            AutomationProperties.SetName(PageImage, $"Form fill page {pageIndex + 1}");
+            AutomationProperties.SetName(PageImage, UiStrings.Format("FormFill_PageImage_Name", pageIndex + 1));
 
             PdfPageRegion region = _vm.Core.PageSizes[Math.Min(pageIndex, _vm.Core.PageCount - 1)];
             _pixelW = region.WidthPt * _scale;
@@ -118,7 +118,7 @@ public partial class FormFillView : UserControl
             nameof(EmptyStateText),
             typeof(string),
             typeof(FormFillView),
-            new PropertyMetadata("This page has no fillable form fields."));
+            new PropertyMetadata(UiStrings.Get("FormFill_EmptyState")));
 
     private void Rebuild(IReadOnlyList<PdfFormField> fields)
     {
@@ -130,19 +130,19 @@ public partial class FormFillView : UserControl
         // remove. It used to be appended to the panel, which meant every path
         // that rebuilt the list had to clear it first or it would stack up.
         EmptyStateText = _justFlattened
-            ? "This page has no form fields left — the form has been flattened."
-            : "This page has no fillable form fields.";
+            ? UiStrings.Get("FormFill_EmptyStateFlattened")
+            : UiStrings.Get("FormFill_EmptyState");
 
         if (fields.Count == 0)
         {
             Overlay.Children.Clear();
             Hint(_justFlattened
-                ? "No fields left on this page after flattening."
-                : $"No fillable form fields on page {(_vm?.Core.CurrentPage ?? 0) + 1}.");
+                ? UiStrings.Get("FormFill_NoFieldsAfterFlatten")
+                : UiStrings.Format("FormFill_NoFields", (_vm?.Core.CurrentPage ?? 0) + 1));
             return;
         }
 
-        Hint($"Fill the fields below; values appear on the page at once. {fields.Count} field(s).");
+        Hint(UiStrings.Format("FormFill_FillTheFields", fields.Count));
 
         foreach (PdfFormField field in fields)
         {
@@ -162,7 +162,7 @@ public partial class FormFillView : UserControl
         try
         {
             await _vm.SetFormFieldValueAsync(fieldId, value).ConfigureAwait(true);
-            Hint($"Set field {fieldId}.");
+            Hint(UiStrings.Format("FormFill_SetField", fieldId));
         }
         catch (Exception ex)
         {
@@ -182,7 +182,7 @@ public partial class FormFillView : UserControl
         }
 
         var confirm = MessageBox.Show(
-            "Flatten the form? Every field value is baked into static page content and the fields stop being interactive.",
+            UiStrings.Get("FormFill_ConfirmFlatten"),
             UiStrings.Get("Common_AppTitle"), MessageBoxButton.OKCancel, MessageBoxImage.Question);
         if (confirm != MessageBoxResult.OK)
         {
@@ -193,7 +193,7 @@ public partial class FormFillView : UserControl
         {
             await _vm.FlattenFormAsync().ConfigureAwait(true);
             _justFlattened = true;
-            Hint("Form flattened — fields are now static page content.");
+            Hint(UiStrings.Get("FormFill_Flattened"));
         }
         catch (Exception ex)
         {
@@ -237,7 +237,7 @@ public partial class FormFillView : UserControl
                 Flags: FormFieldFlags.Required);
 
             await _vm.CreateFormFieldAsync(spec).ConfigureAwait(true);
-            Hint($"Created field '{name.Trim()}'. Fill it below or flatten the form.");
+            Hint(UiStrings.Format("FormFill_CreatedField", name.Trim()));
         }
         catch (Exception ex)
         {
@@ -267,7 +267,7 @@ public partial class FormFillView : UserControl
             Margin = new Thickness(0, 0, 0, 6),
         }.Themed(TextBlock.ForegroundProperty, "ContentBrush"));
         var nameBox = new TextBox { Width = 330 };
-        AutomationProperties.SetName(nameBox, "Field name");
+        AutomationProperties.SetName(nameBox, UiStrings.Get("FormFill_FieldName_Name"));
         grid.Children.Add(nameBox);
 
         var buttons = new StackPanel

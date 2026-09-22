@@ -795,4 +795,140 @@
   <data name="Status_EditCancelled" xml:space="preserve">
     <value>Edit cancelled.</value>
   </data>
+  <data name="Tab_CloseDocument_Name" xml:space="preserve">
+    <value>Close {0}</value>
+  </data>
+  <data name="Recovery_Prompt" xml:space="preserve">
+    <value>PageForge closed unexpectedly with unsaved changes in {0} document(s):{1}{1}{2}{1}{1}Reopen the recovered copies? They open as new documents — your original files have not been changed.</value>
+  </data>
+  <data name="Recovery_Title" xml:space="preserve">
+    <value>PageForge — recover unsaved work</value>
+  </data>
+  <data name="Document_HideTheSidebar_Name" xml:space="preserve">
+    <value>Hide the sidebar</value>
+  </data>
+  <data name="Status_EditModeCouldNotLoadWords" xml:space="preserve">
+    <value>Edit mode: could not load words ({0}).</value>
+  </data>
+  <data name="Status_EditModeWord" xml:space="preserve">
+    <value>Edit mode: word {0} of {1}: “{2}” — Enter to edit, Tab for the next word, Esc to stop.</value>
+  </data>
+  <data name="Confirm_ApplyAnyway" xml:space="preserve">
+    <value>{0}
+
+Apply it anyway?</value>
+  </data>
+  <data name="Confirm_OverflowCollision_Title" xml:space="preserve">
+    <value>Overflow / collision</value>
+  </data>
+  <data name="Status_EditNotApplied" xml:space="preserve">
+    <value>Edit not applied.</value>
+  </data>
+  <data name="Error_FontFidelityMessage" xml:space="preserve">
+    <value>The new text cannot be rendered by the run's font.</value>
+  </data>
+  <data name="Error_FontFidelity_Title" xml:space="preserve">
+    <value>Font fidelity</value>
+  </data>
+  <data name="Dialog_ReplacementText_Name" xml:space="preserve">
+    <value>Replacement text</value>
+  </data>
+  <data name="Error_SigningFailed" xml:space="preserve">
+    <value>Signing failed:
+{0}</value>
+  </data>
+  <data name="Signatures_None" xml:space="preserve">
+    <value>This document carries no signature fields.</value>
+  </data>
+  <data name="Signatures_Title" xml:space="preserve">
+    <value>PageForge — signatures</value>
+  </data>
+  <data name="Error_CheckingSignaturesFailed" xml:space="preserve">
+    <value>Checking signatures failed:
+{0}</value>
+  </data>
+  <data name="FormFill_PageImage_Name" xml:space="preserve">
+    <value>Form fill page {0}</value>
+  </data>
+  <data name="FormFill_NoFieldsAfterFlatten" xml:space="preserve">
+    <value>No fields left on this page after flattening.</value>
+  </data>
+  <data name="FormFill_NoFields" xml:space="preserve">
+    <value>No fillable form fields on page {0}.</value>
+  </data>
+  <data name="FormFill_FillTheFields" xml:space="preserve">
+    <value>Fill the fields below; values appear on the page at once. {0} field(s).</value>
+  </data>
+  <data name="FormFill_SetField" xml:space="preserve">
+    <value>Set field {0}.</value>
+  </data>
+  <data name="FormFill_ConfirmFlatten" xml:space="preserve">
+    <value>Flatten the form? Every field value is baked into static page content and the fields stop being interactive.</value>
+  </data>
+  <data name="FormFill_Flattened" xml:space="preserve">
+    <value>Form flattened — fields are now static page content.</value>
+  </data>
+  <data name="FormFill_CreatedField" xml:space="preserve">
+    <value>Created field '{0}'. Fill it below or flatten the form.</value>
+  </data>
+  <data name="FormFill_FieldName_Name" xml:space="preserve">
+    <value>Field name</value>
+  </data>
+  <data name="FormFill_EmptyState" xml:space="preserve">
+    <value>This page has no fillable form fields.</value>
+  </data>
+  <data name="FormFill_EmptyStateFlattened" xml:space="preserve">
+    <value>This page has no form fields left — the form has been flattened.</value>
+  </data>
+  <data name="ObjectEdit_PageImage_Name" xml:space="preserve">
+    <value>Object edit page {0}</value>
+  </data>
+  <data name="ObjectEdit_NoObjects" xml:space="preserve">
+    <value>No image/vector objects on this page to edit.</value>
+  </data>
+  <data name="ObjectEdit_ClickAnObject" xml:space="preserve">
+    <value>Click an object to select; drag to move; drag a handle to resize.</value>
+  </data>
+  <data name="Error_UnsupportedImageFormat" xml:space="preserve">
+    <value>Unsupported image format '.{0}' for object replace.</value>
+  </data>
+  <data name="Redact_PageImage_Name" xml:space="preserve">
+    <value>Redact page {0}</value>
+  </data>
+  <data name="Redact_MarkedRegion" xml:space="preserve">
+    <value>Marked a region; drag more boxes or apply. Region: ({0:F0}, {1:F0}) → ({2:F0}, {3:F0}) pt.</value>
+  </data>
+  <data name="Redact_KeyboardBox" xml:space="preserve">
+    <value>Keyboard box: Enter places, arrows size, Ctrl+arrows move the top-left, Esc cancels.</value>
+  </data>
+  <data name="Redact_ConfirmApply" xml:space="preserve">
+    <value>Apply {0} redaction region(s)? The covered text (if any) is permanently deleted and the box is painted black. You can undo this once by using ↩ Undo.</value>
+  </data>
+  <data name="Redact_Removed" xml:space="preserve">
+    <value>Removed {0} redaction region(s) — the covered content is gone.</value>
+  </data>
+  <data name="Redact_Undid" xml:space="preserve">
+    <value>Undid the last redaction apply — the covered content is back (re-apply to remove again).</value>
+  </data>
+  <data name="Redact_Saved" xml:space="preserve">
+    <value>Saved redacted copy to {0}.</value>
+  </data>
+  <data name="SignPlace_PageImage_Name" xml:space="preserve">
+    <value>Page {0} to sign</value>
+  </data>
+  <data name="SignPlace_BoxTooSmall" xml:space="preserve">
+    <value>That box is too small to hold a signature (at least {0:F0} by {1:F0} points). Drag a larger one, or use the default box.</value>
+  </data>
+  <data name="SignPlace_BoxPlaced" xml:space="preserve">
+    <value>Signature box on page {0}: ({1:F0}, {2:F0}) to ({3:F0}, {4:F0}) pt. Drag again to move it, or Continue to choose a certificate.</value>
+  </data>
+  <data name="SignPlace_PlacedShape_Name" xml:space="preserve">
+    <value>Signature box on page {0}, {1:F0} by {2:F0} points</value>
+  </data>
+  <data name="SignPlace_BoxCancelled" xml:space="preserve">
+    <value>Box cancelled. Drag one, press Enter to begin another, or Cancel to stop signing.</value>
+  </data>
+  <data name="SignPlace_SizingBox" xml:space="preserve">
+    <value>Sizing a box: arrows resize, Ctrl+arrows move, Enter places it, Esc cancels.</value>
+  </data>
 </root>

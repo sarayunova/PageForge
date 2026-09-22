@@ -124,8 +124,8 @@ public partial class MainWindow : Controls.FluentShellWindow
                 Padding = new Thickness(4, 0, 4, 0),
                 Cursor = System.Windows.Input.Cursors.Hand,
             };
-            System.Windows.Automation.AutomationProperties.SetName(close, $"Close {vm.DisplayName}");
-            close.ToolTip = $"Close {vm.DisplayName}";
+            System.Windows.Automation.AutomationProperties.SetName(close, UiStrings.Format("Tab_CloseDocument_Name", vm.DisplayName));
+            close.ToolTip = UiStrings.Format("Tab_CloseDocument_Name", vm.DisplayName);
             close.Click += (_, _) => CloseTab(tab, vm);
             header.Children.Add(close);
             tab.Header = header;
@@ -208,11 +208,8 @@ public partial class MainWindow : Controls.FluentShellWindow
             found.Select(d => $"  • {d.DisplayName} (autosaved {d.SavedAtUtc.ToLocalTime():t})"));
 
         MessageBoxResult answer = MessageBox.Show(
-            $"PageForge closed unexpectedly with unsaved changes in {found.Count} " +
-            $"document(s):{Environment.NewLine}{Environment.NewLine}{list}{Environment.NewLine}{Environment.NewLine}" +
-            "Reopen the recovered copies? They open as new documents — your original " +
-            "files have not been changed.",
-            "PageForge — recover unsaved work",
+            UiStrings.Format("Recovery_Prompt", found.Count, Environment.NewLine, list),
+            UiStrings.Get("Recovery_Title"),
             MessageBoxButton.YesNo,
             MessageBoxImage.Question);
 

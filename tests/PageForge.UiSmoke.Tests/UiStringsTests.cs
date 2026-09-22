@@ -175,4 +175,101 @@ public sealed class UiStringsTests
             "These readable strings are still hard-coded in markup (TRD section 6):\n"
             + string.Join("\n", offenders));
     }
+
+    /// <summary>
+    /// The C# half of the markup check. "User-facing" cannot be decided from a
+    /// literal alone - a log message and a button label look identical to a
+    /// regex - so this works from the sinks instead: the handful of calls whose
+    /// arguments a user reads. Anything literal that reaches one of those is a
+    /// string that escaped the migration.
+    ///
+    /// <para>
+    /// Scanning is span-based rather than line-based because the strings that
+    /// hide longest are the ones broken across lines - a MessageBox whose text
+    /// sits on the line after the call, or a Hint built from two concatenated
+    /// pieces. Both were present when this test was written, and neither shows
+    /// up in a per-line grep.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void No_readable_literal_reaches_a_ui_sink()
+    {
+        // The leading boundary matters: without it "Hint(" also matches inside
+        // "ShowStatusHint(", and every status hint is reported twice.
+        const string SinkPattern =
+            @"(?<![A-Za-z0-9_])(?:Hint|ShowStatusHint|MessageBox\.Show|AutomationProperties\.SetName)\s*\(";
+
+        var offenders = new List<string>();
+        foreach (string file in SourceFiles("*.cs"))
+        {
+            string text = File.ReadAllText(file);
+
+            {
+                foreach (Match sinkMatch in Regex.Matches(text, SinkPattern))
+                {
+                    int at = sinkMatch.Index;
+                    string sink = sinkMatch.Value.Trim();
+                    string span = ArgumentSpan(text, sinkMatch.Index + sinkMatch.Length - 1);
+
+                    // A key passed to the resource lookup is a key, not a label.
+                    string scrubbed = Regex.Replace(span, @"UiStrings\.(?:Get|Format)\(\s*""[^""]*""", "UiStrings.Resolved(");
+
+                    foreach (Match lit in Regex.Matches(scrubbed, @"\$?""(?<v>[^""]*)"""))
+                    {
+                        string value = lit.Groups["v"].Value;
+
+                        // Two letters and a space: enough to be a sentence
+                        // fragment rather than a format specifier or a name.
+                        if (Regex.IsMatch(value, @"[A-Za-z]{2}") && value.Contains(' ', StringComparison.Ordinal))
+                        {
+                            int line = text.Take(at).Count(c => c == '\n') + 1;
+                            offenders.Add($"  {Path.GetFileName(file)}:{line}  {sink}… \"{value}\"");
+                        }
+                    }
+                }
+            }
+        }
+
+        Assert.True(offenders.Count == 0,
+            "These readable strings still reach a UI sink as literals (TRD section 6):\n"
+            + string.Join("\n", offenders.Distinct()));
+    }
+
+    /// <summary>
+    /// The text between <paramref name="openParen"/> and its matching close,
+    /// so a call broken across lines is read whole. Quoted text is skipped so a
+    /// bracket inside a message cannot end the span early.
+    /// </summary>
+    private static string ArgumentSpan(string text, int openParen)
+    {
+        int depth = 0;
+        bool inString = false;
+        for (int i = openParen; i < text.Length; i++)
+        {
+            char c = text[i];
+
+            if (inString)
+            {
+                if (c == '\\') { i++; }
+                else if (c == '"') { inString = false; }
+                continue;
+            }
+
+            switch (c)
+            {
+                case '"': inString = true; break;
+                case '(': depth++; break;
+                case ')':
+                    depth--;
+                    if (depth == 0)
+                    {
+                        return text[openParen..(i + 1)];
+                    }
+
+                    break;
+            }
+        }
+
+        return text[openParen..];
+    }
 }

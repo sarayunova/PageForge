@@ -70,7 +70,7 @@ public partial class RedactView : UserControl
         {
             int pageIndex = _vm.Core.CurrentPage;
             _scale = _vm.RenderDpi / 72.0;
-            AutomationProperties.SetName(PageImage, $"Redact page {pageIndex + 1}");
+            AutomationProperties.SetName(PageImage, UiStrings.Format("Redact_PageImage_Name", pageIndex + 1));
 
             PdfPageRegion region = _vm.Core.PageSizes[Math.Min(pageIndex, _vm.Core.PageCount - 1)];
             _pixelW = region.WidthPt * _scale;
@@ -232,7 +232,7 @@ public partial class RedactView : UserControl
             _regions.Add(rect);
             _justApplied = false;
             Rebuild(_regions);
-            Hint($"Marked a region; drag more boxes or apply. Region: ({leftPt:F0}, {bottomPt:F0}) → ({rightPt:F0}, {topPt:F0}) pt.");
+            Hint(UiStrings.Format("Redact_MarkedRegion", leftPt, bottomPt, rightPt, topPt));
         }
         catch (Exception ex)
         {
@@ -310,7 +310,7 @@ public partial class RedactView : UserControl
         _kbdCorner = new Point(_kbdAnchor.X + 150, _kbdAnchor.Y + 40);
         _kbdActive = true;
         PaintKeyboardBox();
-        Hint("Keyboard box: Enter places, arrows size, Ctrl+arrows move the top-left, Esc cancels.");
+        Hint(UiStrings.Get("Redact_KeyboardBox"));
     }
 
     private void PaintKeyboardBox()
@@ -369,7 +369,7 @@ public partial class RedactView : UserControl
         }
 
         var confirm = MessageBox.Show(
-            $"Apply {_regions.Count} redaction region(s)? The covered text (if any) is permanently deleted and the box is painted black. You can undo this once by using ↩ Undo.",
+            UiStrings.Format("Redact_ConfirmApply", _regions.Count),
             UiStrings.Get("Common_AppTitle"), MessageBoxButton.OKCancel, MessageBoxImage.Warning);
         if (confirm != MessageBoxResult.OK)
         {
@@ -381,7 +381,7 @@ public partial class RedactView : UserControl
             int applied = await _vm.ApplyRedactionsCurrentPageAsync().ConfigureAwait(true);
             _regions.Clear();
             _justApplied = true;
-            Hint($"Removed {applied} redaction region(s) — the covered content is gone.");
+            Hint(UiStrings.Format("Redact_Removed", applied));
         }
         catch (Exception ex)
         {
@@ -404,7 +404,7 @@ public partial class RedactView : UserControl
         {
             await _vm.UndoEditAsync().ConfigureAwait(true);
             _justApplied = false;
-            Hint("Undid the last redaction apply — the covered content is back (re-apply to remove again).");
+            Hint(UiStrings.Get("Redact_Undid"));
         }
         catch (Exception ex)
         {
@@ -436,7 +436,7 @@ public partial class RedactView : UserControl
         try
         {
             await _vm.SaveRedactedAsync(dialog.FileName).ConfigureAwait(true);
-            Hint($"Saved redacted copy to {System.IO.Path.GetFileName(dialog.FileName)}.");
+            Hint(UiStrings.Format("Redact_Saved", System.IO.Path.GetFileName(dialog.FileName)));
         }
         catch (Exception ex)
         {

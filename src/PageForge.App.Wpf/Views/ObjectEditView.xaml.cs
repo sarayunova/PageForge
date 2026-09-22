@@ -84,7 +84,7 @@ public partial class ObjectEditView : UserControl
         {
             int pageIndex = _vm.Core.CurrentPage;
             _scale = _vm.RenderDpi / 72.0;
-            AutomationProperties.SetName(PageImage, $"Object edit page {pageIndex + 1}");
+            AutomationProperties.SetName(PageImage, UiStrings.Format("ObjectEdit_PageImage_Name", pageIndex + 1));
 
             PdfPageRegion region = _vm.Core.PageSizes[Math.Min(pageIndex, _vm.Core.PageCount - 1)];
             _pixelW = region.WidthPt * _scale;
@@ -132,8 +132,8 @@ public partial class ObjectEditView : UserControl
         _selected = null;
         ReplaceButton.IsEnabled = false;
         Hint(objects.Count == 0
-            ? "No image/vector objects on this page to edit."
-            : "Click an object to select; drag to move; drag a handle to resize.");
+            ? UiStrings.Get("ObjectEdit_NoObjects")
+            : UiStrings.Get("ObjectEdit_ClickAnObject"));
 
         foreach (PdfPageObject obj in objects)
         {
@@ -575,7 +575,7 @@ public partial class ObjectEditView : UserControl
 
         if (format is not ("png" or "jpeg" or "bmp" or "gif"))
         {
-            MessageBox.Show($"Unsupported image format '.{ext}' for object replace.", UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(UiStrings.Format("Error_UnsupportedImageFormat", ext), UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
