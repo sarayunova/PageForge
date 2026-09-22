@@ -78,22 +78,17 @@ jobs:
       - name: Restore + build managed projects (WinUI shell builds in its own lane)
         shell: pwsh
         run: |
-          $managed = @(
-            'src/PageForge.Core/PageForge.Core.csproj',
-            'src/PageForge.MuPdfInterop/PageForge.MuPdfInterop.csproj',
-            'src/PageForge.App.Wpf/PageForge.App.Wpf.csproj',
-            'tests/PageForge.RenderSpike/PageForge.RenderSpike.csproj',
-            'tests/PageForge.Core.Tests/PageForge.Core.Tests.csproj',
-            'tests/PageForge.Fidelity.Tests/PageForge.Fidelity.Tests.csproj',
-            'services/PageForge.Api/PageForge.Api.csproj',
-            'tests/PageForge.Api.Tests/PageForge.Api.Tests.csproj')
-          # Same trap as the Test step below: a failing dotnet build inside a
-          # foreach neither stops the loop nor fails the step, so only the last
-          # project's result would have been reported.
-          foreach ($p in $managed) {
-            dotnet build $p -c Release -warnaserror
-            if ($LASTEXITCODE -ne 0) { throw "build failed for $p (exit $LASTEXITCODE)" }
-          }
+          # The managed project list lives in tools/build-managed.ps1, which is
+          # also what AGENTS.md tells a developer to run. It used to be spelled
+          # out both here and there, and the two drifted: the documented
+          # command built the solution, which on a dev machine fails MSB4062 on
+          # the WinUI spike every time. One list, one command, both places.
+          # The script keeps the exit-code handling the Test step below also
+          # needs -- a failing dotnet build inside a foreach neither stops the
+          # loop nor fails the step, so only the last project's result would
+          # have been reported.
+          ./tools/build-managed.ps1 -Configuration Release -WarnAsError
+          if ($LASTEXITCODE -ne 0) { throw "managed build failed (exit $LASTEXITCODE)" }
       - name: Test
         shell: pwsh
         run: |
