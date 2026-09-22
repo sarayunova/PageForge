@@ -49,6 +49,11 @@ jobs:
     runs-on: windows-latest
     outputs:
       signed: ${{ steps.sign-check.outputs.signed }}
+      # The release notes name the asset, so they must use the SAME version
+      # string the zip was built from -- the tag with its leading "v" stripped,
+      # not github.ref_name. They disagreed, and the notes named a file that
+      # was never in the release.
+      version: ${{ steps.ver.outputs.version }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
@@ -81,6 +86,44 @@ jobs:
       - name: Build native MuPDF shim
         shell: pwsh
         run: ./native/build-mupdf.ps1
+
+      # The release notes tell the reader this build "passes the managed-build
+      # lane ... before tagging". Nothing used to make that true: release.yml
+      # triggers on a v* tag with no dependency on ci.yml and no required
+      # status check, so tagging a red commit produced a draft release whose
+      # notes asserted it had been tested.
+      #
+      # The suites run HERE, in the job that produces the payload, rather than
+      # in a separate job: the native shim above is the expensive part and the
+      # fidelity suite needs it, and a failing step fails this job, which
+      # publish-release `needs`. So an untested payload cannot reach a release.
+      - name: Build managed projects
+        shell: pwsh
+        run: |
+          ./tools/build-managed.ps1 -Configuration Release -WarnAsError
+          if ($LASTEXITCODE -ne 0) { throw "managed build failed (exit $LASTEXITCODE)" }
+
+      - name: Test (the suites the release notes promise)
+        shell: pwsh
+        run: |
+          # Each suite checked individually: a pwsh step takes its exit code
+          # from the LAST command and a failing native command does not stop
+          # the script, so a plain sequence would report only the final suite.
+          # ci.yml records a real green-check-over-red-suite incident from
+          # exactly this.
+          $suites = @(
+            'tests/PageForge.Core.Tests',
+            'tests/PageForge.Fidelity.Tests',
+            'tests/PageForge.Api.Tests')
+          $failed = @()
+          foreach ($s in $suites) {
+            Write-Host "::group::dotnet test $s"
+            dotnet test $s -c Release --no-build
+            $code = $LASTEXITCODE
+            Write-Host '::endgroup::'
+            if ($code -ne 0) { $failed += "$s (exit $code)" }
+          }
+          if ($failed) { throw "release gate failed: $($failed -join ', ')" }
 
       # Stage the payload but do NOT zip it yet: signing rewrites the .exe in
       # place, so the zip is built afterwards from the signed folder.
@@ -153,6 +196,8 @@ jobs:
         shell: bash
         env:
           SIGNED: ${{ needs.build-and-sign.outputs.signed }}
+          # Built from the same string publish-release.ps1 named the zip with.
+          ASSET: pageforge-${{ needs.build-and-sign.outputs.version }}-win-x64.zip
         run: |
           {
             echo "PageForge release ${{ github.ref_name }}."
@@ -160,9 +205,9 @@ jobs:
             echo "## Desktop"
             echo ""
             if [ "$SIGNED" = "true" ]; then
-              echo "- \`pageforge-${{ github.ref_name }}-win-x64.zip\` — self-contained (no runtime install needed), code-signed via Azure Artifact Signing."
+              echo "- \`$ASSET\` — self-contained (no runtime install needed), code-signed via Azure Artifact Signing."
             else
-              echo "- \`pageforge-${{ github.ref_name }}-win-x64.zip\` — self-contained (no runtime install needed). **Not code-signed in this build.**"
+              echo "- \`$ASSET\` — self-contained (no runtime install needed). **Not code-signed in this build.**"
               echo ""
               echo "## Windows security prompts"
               echo ""
@@ -173,7 +218,7 @@ jobs:
             echo ""
             echo "## Verification"
             echo ""
-            echo "This release was produced by the \`release\` workflow and passes the managed-build lane (Core/Fidelity/Api tests + fidelity render proof) before tagging. See CONTRIBUTING.md for the AGPL checklist and THIRD-PARTY-NOTICES.md for component licenses."
+            echo "This release was produced by the \`release\` workflow. The payload attached here was built only after the Core, Fidelity and Api suites passed in the same job that produced it — the fidelity suite is the corpus render proof, so a rendering regression blocks the release rather than shipping in it. See CONTRIBUTING.md for the AGPL checklist and THIRD-PARTY-NOTICES.md for component licenses."
           } > release-body.md
       - name: Create draft GitHub Release
         uses: softprops/action-gh-release@v2
