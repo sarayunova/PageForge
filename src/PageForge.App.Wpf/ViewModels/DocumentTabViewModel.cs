@@ -1067,6 +1067,24 @@ public sealed class DocumentTabViewModel : ObservableObject
         }
     }
 
+    /// <summary>Writes the current in-memory document — including text and object
+    /// edits pushed onto the undo stack (FR-EDIT-01/04), which have no other save
+    /// path — to <paramref name="outputPath"/> as a new file.</summary>
+    public async Task SaveDocumentAsync(string outputPath, CancellationToken ct = default)
+    {
+        GuardPageCount();
+        IsBusy = true;
+        try
+        {
+            await _doc.Engine.SaveAsAsync(outputPath, ct).ConfigureAwait(false);
+            DocumentStatus = $"saved {Path.GetFileName(outputPath)}";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
     /// <summary>Runs local OCR over the whole document, fully offline, and writes
     /// a new searchable PDF to <paramref name="outputPath"/> (FR-OCR-01). The open
     /// document is left untouched; the result is a fresh file the shell should

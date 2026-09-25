@@ -161,6 +161,9 @@
   <data name="Document_SavePageOrder_Name" xml:space="preserve">
     <value>Save page order</value>
   </data>
+  <data name="Document_SaveEdits_Name" xml:space="preserve">
+    <value>Save edits</value>
+  </data>
   <data name="Document_AnnotateTools_Name" xml:space="preserve">
     <value>Annotate tools</value>
   </data>
@@ -278,6 +281,9 @@
   <data name="Document_WriteTheReorderedPagesTo_Tip" xml:space="preserve">
     <value>Write the reordered pages to a new PDF</value>
   </data>
+  <data name="Document_WriteTextAndObjectEdits_Tip" xml:space="preserve">
+    <value>Write your text and object edits to a new PDF</value>
+  </data>
   <data name="Document_AddAHighlightOverThe_Tip" xml:space="preserve">
     <value>Add a highlight over the top of the current page</value>
   </data>
@@ -376,6 +382,9 @@
   </data>
   <data name="Document_SaveOrder_Text" xml:space="preserve">
     <value>Save order…</value>
+  </data>
+  <data name="Document_SaveEdits_Text" xml:space="preserve">
+    <value>Save…</value>
   </data>
   <data name="Document_Annotate_Text" xml:space="preserve">
     <value>Annotate</value>
@@ -721,6 +730,10 @@
   </data>
   <data name="Error_FlattenFailed" xml:space="preserve">
     <value>Flatten failed:
+{0}</value>
+  </data>
+  <data name="Error_SaveEditsFailed" xml:space="preserve">
+    <value>Save failed:
 {0}</value>
   </data>
   <data name="Error_UndoFailed" xml:space="preserve">

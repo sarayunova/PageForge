@@ -290,13 +290,22 @@
                         </ToggleButton>
                         <ToggleButton x:Name="ObjectModeToggle" AutomationProperties.Name="{loc:Str Document_ObjectEditingMode_Name}"
                                       Checked="ObjectModeToggle_Changed" Unchecked="ObjectModeToggle_Changed"
-                                      Padding="10,3"
+                                      Padding="10,3" Margin="0,0,4,0"
                                       ToolTip="{loc:Str Document_SelectMoveResizeOrReplace_Tip}">
                             <StackPanel Orientation="Horizontal">
                                 <ui:SymbolIcon Symbol="Shapes24" FontSize="14" Margin="0,0,6,0" />
                                 <TextBlock Text="{loc:Str Document_EditObjects_Text}" VerticalAlignment="Center" />
                             </StackPanel>
                         </ToggleButton>
+                        <Separator Margin="8,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
+                        <Button x:Name="SaveEditsButton" AutomationProperties.Name="{loc:Str Document_SaveEdits_Name}"
+                                Click="SaveEdits_Click" Padding="10,3"
+                                ToolTip="{loc:Str Document_WriteTextAndObjectEdits_Tip}">
+                            <StackPanel Orientation="Horizontal">
+                                <ui:SymbolIcon Symbol="Save24" FontSize="14" Margin="0,0,6,0" />
+                                <TextBlock Text="{loc:Str Document_SaveEdits_Text}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
                     </StackPanel>
 
                     <StackPanel x:Name="FormsGroup" Orientation="Horizontal" VerticalAlignment="Center"

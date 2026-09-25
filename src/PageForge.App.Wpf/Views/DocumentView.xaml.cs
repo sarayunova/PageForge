@@ -938,6 +938,30 @@ public partial class DocumentView : UserControl
         }
     }
 
+    private async void SaveEdits_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm is null)
+        {
+            return;
+        }
+
+        string? path = AskSavePath("Edited.pdf");
+        if (path is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _vm.SaveDocumentAsync(path);
+            OpenDocumentRequested?.Invoke(path);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(UiStrings.Format("Error_SaveEditsFailed", ex.Message), UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
     private void EditModeToggle_Changed(object sender, RoutedEventArgs e)
     {
         if (EditModeToggle?.IsChecked == true && ObjectModeToggle?.IsChecked == true)
