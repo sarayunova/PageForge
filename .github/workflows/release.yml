@@ -3,23 +3,30 @@
 # This file is part of PageForge. See LICENSE for the full license text.
 #
 # Phase 7 release lane: produce the self-contained desktop payload via
-# tools/publish-release.ps1, code-sign it with Azure Artifact Signing (formerly
-# Trusted Signing), and attach it to a draft GitHub Release on a v* tag.
+# tools/publish-release.ps1, code-sign it via SignPath (SignPath Foundation's
+# free code signing for open-source projects), and attach it to a draft GitHub
+# Release on a v* tag.
 #
-# Signing setup — Azure Artifact Signing, via OIDC (no key material in GitHub):
-#   secrets:   AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
-#   variables: AZURE_SIGNING_ENDPOINT, AZURE_SIGNING_ACCOUNT,
-#              AZURE_CERT_PROFILE
-# The app registration needs the "Trusted Signing Certificate Profile Signer"
-# role on the signing account, and a federated credential for this repository.
+# Signing backend: SignPath, not Azure Artifact Signing. Azure Artifact
+# Signing's identity validation is not available for an India-based
+# maintainer, so this project uses SignPath instead — apply at
+# https://signpath.io/solutions/open-source-community (public repo, OSI
+# license, active development; manual review, ~1-2 weeks). The private key
+# never leaves SignPath's infrastructure: CI uploads the unsigned zip as a
+# build artifact and SignPath's action returns a signed one.
+#
+# Signing setup, once approved:
+#   secrets:   SIGNPATH_API_TOKEN
+#   variables: SIGNPATH_ORG_ID, SIGNPATH_PROJECT_SLUG,
+#              SIGNPATH_SIGNING_POLICY_SLUG, SIGNPATH_CONNECTOR_URL
 # See CONTRIBUTING.md for the full setup walkthrough.
 #
-# Distribution policy (decided 2026-09-12, see session-phase7.md): Azure Artifact
-# Signing remains the preferred, fully-gated path when configured. Until then,
-# v* tags DO create a draft release with an UNSIGNED payload — an unsigned beta
-# is better than no beta. The release notes state the signing status truthfully
-# (see the "Compose release notes" step) and never claim "code-signed". TSD §12.1
-# was amended accordingly; the signed path becomes the distribution path once the
+# Distribution policy (decided 2026-09-12, see session-phase7.md): a fully
+# gated signing path is preferred when configured. Until then, v* tags DO
+# create a draft release with an UNSIGNED payload — an unsigned beta is better
+# than no beta. The release notes state the signing status truthfully (see the
+# "Compose release notes" step) and never claim "code-signed". TSD §12.1 was
+# amended accordingly; the signed path becomes the distribution path once the
 # signing secrets/variables exist.
 
 name: release
@@ -41,7 +48,6 @@ env:
 
 permissions:
   contents: read
-  id-token: write # required for the OIDC login to Azure
 
 jobs:
   build-and-sign:
@@ -75,12 +81,12 @@ jobs:
         id: sign-check
         shell: pwsh
         env:
-          CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
         run: |
-          $configured = -not [string]::IsNullOrWhiteSpace($env:CLIENT_ID)
+          $configured = -not [string]::IsNullOrWhiteSpace($env:API_TOKEN)
           "signed=$($configured.ToString().ToLower())" >> $env:GITHUB_OUTPUT
           if (-not $configured) {
-            Write-Warning "AZURE_CLIENT_ID is not set - building an UNSIGNED payload; the v* tag releases as an unsigned beta."
+            Write-Warning "SIGNPATH_API_TOKEN is not set - building an UNSIGNED payload; the v* tag releases as an unsigned beta."
           }
 
       - name: Build native MuPDF shim
@@ -125,51 +131,59 @@ jobs:
           }
           if ($failed) { throw "release gate failed: $($failed -join ', ')" }
 
-      # Stage the payload but do NOT zip it yet: signing rewrites the .exe in
-      # place, so the zip is built afterwards from the signed folder.
-      - name: Publish release payload (staged, unzipped)
+      # SignPath signs a zip as a whole (not an exe-in-place rewrite like
+      # Azure's), so the payload is built and zipped UNSIGNED here regardless
+      # of whether signing is configured.
+      - name: Publish release payload (zipped, unsigned)
         shell: pwsh
         run: >
           powershell -ExecutionPolicy Bypass -File tools/publish-release.ps1
-          -Version ${{ steps.ver.outputs.version }} -SkipApi -NoZip
+          -Version ${{ steps.ver.outputs.version }} -SkipApi
 
-      - name: Azure login (OIDC)
+      - name: Upload unsigned payload for SignPath
         if: steps.sign-check.outputs.signed == 'true'
-        uses: azure/login@v2
+        id: upload-unsigned
+        uses: actions/upload-artifact@v7
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          name: pageforge-unsigned
+          path: artifacts/release/pageforge-${{ steps.ver.outputs.version }}-win-x64.zip
+          if-no-files-found: error
 
-      - name: Sign desktop payload (Azure Artifact Signing)
+      - name: Sign desktop payload (SignPath)
         if: steps.sign-check.outputs.signed == 'true'
-        uses: azure/artifact-signing-action@v2
+        uses: SignPath/github-action-submit-signing-request@v1
         with:
-          endpoint: ${{ vars.AZURE_SIGNING_ENDPOINT }}
-          signing-account-name: ${{ vars.AZURE_SIGNING_ACCOUNT }}
-          certificate-profile-name: ${{ vars.AZURE_CERT_PROFILE }}
-          files-folder: ${{ github.workspace }}\artifacts\release\PageForge-${{ steps.ver.outputs.version }}
-          files-folder-filter: exe
-          file-digest: SHA256
-          timestamp-rfc3161: http://timestamp.acs.microsoft.com
-          timestamp-digest: SHA256
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORG_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          connector-url: ${{ vars.SIGNPATH_CONNECTOR_URL }}
+          github-artifact-id: ${{ steps.upload-unsigned.outputs.artifact-id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-for-completion: true
+          output-artifact-directory: artifacts/release/signed
 
-      # -RequireSignature makes the script verify every shipped .exe with
-      # `signtool verify /pa` BEFORE it builds the zip, so a signing step that
-      # silently no-ops can never produce a published "signed" release.
-      - name: Package signed payload
+      # SignPath returns a signed zip; verify the exe inside it with signtool
+      # BEFORE it becomes the published asset. This is the equivalent of the
+      # old -RequireSignature verify-before-zip gate, adapted to a signing
+      # service that signs the whole zip rather than a staged folder — a
+      # silently skipped or failed signing step can never ship as "signed".
+      - name: Verify SignPath-signed payload
         if: steps.sign-check.outputs.signed == 'true'
         shell: pwsh
-        run: >
-          powershell -ExecutionPolicy Bypass -File tools/publish-release.ps1
-          -Version ${{ steps.ver.outputs.version }} -SkipApi -ZipOnly -RequireSignature
-
-      - name: Package unsigned payload
-        if: steps.sign-check.outputs.signed != 'true'
-        shell: pwsh
-        run: >
-          powershell -ExecutionPolicy Bypass -File tools/publish-release.ps1
-          -Version ${{ steps.ver.outputs.version }} -SkipApi -ZipOnly
+        run: |
+          $signtool = & ./tools/find-signtool.ps1
+          $signedZip = "artifacts/release/signed/pageforge-${{ steps.ver.outputs.version }}-win-x64.zip"
+          if (-not (Test-Path $signedZip)) { throw "SignPath did not return the expected zip: $signedZip" }
+          $verifyDir = "artifacts/release/verify"
+          Expand-Archive -Path $signedZip -DestinationPath $verifyDir -Force
+          $exe = Join-Path $verifyDir "PageForge.App.Wpf.exe"
+          if (-not (Test-Path $exe)) { throw "signed payload missing PageForge.App.Wpf.exe" }
+          & $signtool verify /pa /v $exe
+          if ($LASTEXITCODE -ne 0) { throw "signature verification failed (unsigned or untrusted): $exe" }
+          Write-Host "signature verified: $exe" -ForegroundColor Green
+          # Replace the unsigned release asset with the verified signed one.
+          Copy-Item $signedZip "artifacts/release/pageforge-${{ steps.ver.outputs.version }}-win-x64.zip" -Force
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v7
@@ -205,7 +219,7 @@ jobs:
             echo "## Desktop"
             echo ""
             if [ "$SIGNED" = "true" ]; then
-              echo "- \`$ASSET\` — self-contained (no runtime install needed), code-signed via Azure Artifact Signing."
+              echo "- \`$ASSET\` — self-contained (no runtime install needed), code-signed via SignPath."
             else
               echo "- \`$ASSET\` — self-contained (no runtime install needed). **Not code-signed in this build.**"
               echo ""
@@ -213,7 +227,7 @@ jobs:
               echo ""
               echo "This beta is released unsigned, so Windows SmartScreen may show \"Windows protected your PC / Unknown publisher\", Microsoft Defender may quarantine the binary until you choose \"More info > Run anyway\", and Edge/Chrome may warn about the download. This is expected for an unsigned open-source beta and does not mean the file is malicious — cross-check the asset SHA-256 against this run's build output if you want extra assurance."
               echo ""
-              echo "Signed builds with an established publisher identity will replace these warnings once Azure Artifact Signing is configured."
+              echo "Signed builds with an established publisher identity will replace these warnings once SignPath signing is configured."
             fi
             echo ""
             echo "## Verification"

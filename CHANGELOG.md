@@ -193,11 +193,17 @@ version heading when the tag is pushed.
   so a fork advertises its own source rather than this one.
 - Community governance: contribution guide, code of conduct and security policy.
 - Release pipeline (`tools/publish-release.ps1` plus the `release` workflow).
-  Azure Artifact Signing over OIDC is the preferred path, with a
-  `-RequireSignature` gate that refuses to package an unsigned binary **when
-  signing is configured**. Until signing is configured, `v*` tags ship an
-  unsigned beta with release notes that say so and warn about SmartScreen
-  "unknown publisher" prompts — decided 2026-09-12, recorded in TSD §12.1.
+  **SignPath** (SignPath Foundation's free OSS code signing) is the preferred
+  signing path — switched from the originally planned Azure Artifact Signing,
+  whose identity validation is not available for an India-based maintainer
+  (amended 2026-09-24, TSD §12.1). The workflow builds and zips the payload
+  unsigned, and, when `SIGNPATH_API_TOKEN` is configured, submits it to
+  SignPath and verifies the returned executable with `signtool verify /pa`
+  before it can replace the release asset — a signing step that silently
+  no-ops or fails can never ship as "signed". Until signing is configured,
+  `v*` tags ship an unsigned beta with release notes that say so and warn
+  about SmartScreen "unknown publisher" prompts — decided 2026-09-12, recorded
+  in TSD §12.1. Application to the SignPath Foundation program is pending.
 - Third-party notices for the vendored native dependencies.
 
 ### Known limitations

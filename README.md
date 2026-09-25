@@ -87,8 +87,8 @@ anyway", and Edge/Chrome may warn on download — this is expected for an unsign
 open-source beta and does not mean the file is malicious. For extra assurance,
 cross-check the zip's SHA-256 against the release run's build artifact.
 
-Signed installers (via Azure Artifact Signing) become the distribution path once
-the signing setup in `CONTRIBUTING.md` is in place.
+Signed installers (via SignPath) become the distribution path once the signing
+setup in `CONTRIBUTING.md` is in place.
 
 Release payloads deliberately exclude the hosted API (`-SkipApi`): hosted
 services deploy separately from desktop releases, so installers never bundle a

@@ -227,6 +227,17 @@ Defender / browser "unknown publisher" warnings; the "signed installers
 published" criterion is amended to "installers published (code-signed when code
 signing is configured)".
 
+**Amendment (2026-09-24): signing backend switched to SignPath.** Azure
+Artifact Signing's identity validation is not available for an India-based
+maintainer, so `release.yml` and `publish-release.ps1` now target **SignPath**
+(SignPath Foundation's free code signing for qualifying open-source projects)
+instead. The mechanics differ — SignPath signs an already-built zip as a whole
+and returns a signed zip, rather than rewriting executables in a staged folder
+via OIDC — but the policy is unchanged: signing is gated on
+`SIGNPATH_API_TOKEN` existing, an unsigned beta still ships when it does not,
+and `signtool verify /pa` still runs before a signed payload can be published.
+See CONTRIBUTING.md for the SignPath setup walkthrough.
+
 ## 13. Risk register
 
 | Risk | Mitigation |

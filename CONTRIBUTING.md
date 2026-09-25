@@ -76,9 +76,15 @@ Output lands in `artifacts/release/`. The script signs **only if a certificate i
 provided**; otherwise it warns loudly and produces an **unsigned** payload, which is
 not a release.
 
-Signing — the production path is **Azure Artifact Signing** (formerly Trusted
-Signing). The signing key never leaves Azure, so nothing secret is stored in
-GitHub: CI authenticates with OIDC and the signing service does the work.
+Signing — the production path is **SignPath** (SignPath Foundation's free code
+signing for qualifying open-source projects). The signing key never leaves
+SignPath's infrastructure: CI uploads the unsigned zip as a build artifact,
+SignPath signs it server-side, and its action downloads the signed zip back.
+
+Azure Artifact Signing (the originally planned backend) is not used: its
+identity-validation step is not available for an India-based maintainer.
+SignPath was chosen instead because it accepts a project application rather
+than requiring account-holder identity validation in a specific country list.
 
 Public CAs no longer issue exportable `.pfx` files (since June 2023 OV
 certificates ship on a FIPS token or HSM), so the local `PAGEFORGE_CERT_PFX` /
@@ -86,36 +92,37 @@ certificates ship on a FIPS token or HSM), so the local `PAGEFORGE_CERT_PFX` /
 certificates only — useful to rehearse the pipeline, but not a publishable
 release.
 
-### One-time Azure setup
+### One-time SignPath setup
 
-1. Create an **Azure Artifact Signing account** and complete identity
-   validation (an individual takes roughly three business days; a business
-   needs 3+ years of verifiable history). Then create a **certificate
-   profile** under that account.
-2. Create an **app registration** (Microsoft Entra ID) for CI, and add a
-   **federated credential** for this repository — entity type "Environment" or
-   "Branch"/tag as appropriate. No client secret is needed with OIDC.
-3. Grant that app registration the **Trusted Signing Certificate Profile
-   Signer** role on the signing account (Access control (IAM) → Add role
-   assignment).
-4. In the repository, add:
-   - secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`
-   - variables `AZURE_SIGNING_ENDPOINT` (e.g. `https://eus.codesigning.azure.net/`),
-     `AZURE_SIGNING_ACCOUNT`, `AZURE_CERT_PROFILE`
+1. Apply at <https://signpath.io/solutions/open-source-community>. Eligibility:
+   a public repository, an OSI-recognized license (AGPL-3.0 qualifies), visible
+   active development, and 2FA enabled on the GitHub account holding the repo.
+   Review is manual, typically 1-2 weeks, and may include follow-up questions.
+2. Once approved, in the SignPath dashboard create (or note) the **project**
+   and a **signing policy** (a "release-signing" or "public trust" policy,
+   named per your SignPath setup), and generate an **API token** for a
+   submitter-role CI user.
+3. In the repository, add:
+   - secret `SIGNPATH_API_TOKEN`
+   - variables `SIGNPATH_ORG_ID`, `SIGNPATH_PROJECT_SLUG`,
+     `SIGNPATH_SIGNING_POLICY_SLUG`, `SIGNPATH_CONNECTOR_URL` (the GitHub
+     Actions endpoint of your SignPath Pipeline Connector, from the dashboard)
 
 ### How a release runs
 
 `release.yml`, on a `v*` tag push:
 
-1. builds the native shim, then stages the desktop payload **unzipped**
-   (`publish-release.ps1 -NoZip`);
-2. **if signing is configured** (secrets `AZURE_CLIENT_ID` etc. are set), logs in
-   to Azure with OIDC, signs the staged executables, then re-runs
-   `publish-release.ps1 -ZipOnly -RequireSignature`, which verifies every
-   executable with `signtool verify /pa` **before** building the zip, then
-   packages it;
-3. **if signing is not configured**, packages the payload unsigned (`-ZipOnly`)
-   — an unsigned beta ships rather than a signing-pipeline hold-up;
+1. builds the native shim, then publishes and zips the desktop payload
+   **unsigned** (`publish-release.ps1`) — SignPath signs a zip as a whole
+   rather than rewriting an `.exe` in a staged folder, so there is no unzipped
+   staging step here;
+2. **if signing is configured** (secret `SIGNPATH_API_TOKEN` is set), uploads
+   the unsigned zip as a build artifact, submits it to SignPath via
+   `SignPath/github-action-submit-signing-request`, waits for the signed zip,
+   then extracts and verifies the executable with `signtool verify /pa`
+   **before** it replaces the release asset;
+3. **if signing is not configured**, ships the unsigned zip as-is — an
+   unsigned beta ships rather than a signing-pipeline hold-up;
 4. attaches the zip to a **draft** GitHub Release for manual review, with release
    notes that state the signing status truthfully (they say "Not code-signed in
    this build" for unsigned payloads) and document the SmartScreen / Defender /
@@ -123,22 +130,23 @@ release.
    misrepresented as signed.
 
 The distribution policy is recorded in TSD §12.1: the v0.1 beta ships unsigned
-until Azure Artifact Signing is configured; signed installers take over as the
-distribution path once the signing setup below exists.
+until signing is configured; signed installers take over as the distribution
+path once the SignPath setup below exists.
 
-Ordering matters for the signed path: signtool rewrites the `.exe` in place, so
-a zip built before signing would ship an unsigned binary inside a nominally
-signed release. The `-RequireSignature` verification is what makes a silently
-skipped signing step fail the build instead of shipping. Note also that a newly
-issued certificate has no SmartScreen reputation; early signed downloads may
-still warn until reputation accrues.
+Ordering matters for the signed path: SignPath returns a new zip rather than
+modifying files in place, and the workflow verifies the executable inside that
+returned zip with `signtool verify /pa` before it overwrites the release
+asset — a signing step that silently no-ops or fails can never produce a
+release claiming to be signed. Note also that a newly issued certificate has
+no SmartScreen reputation; early signed downloads may still warn until
+reputation accrues.
 
-Prereqs to enable the **signed** release path (the Azure Artifact Signing
-distribution path):
+Prereqs to enable the **signed** release path (the SignPath distribution
+path):
 
-- An Azure Artifact Signing account with a validated identity and a certificate
-  profile, plus the app registration and role assignment above.
-- The three repository secrets and three variables listed above.
+- An approved SignPath Foundation project, with a signing policy and a
+  submitter API token.
+- The one repository secret and four variables listed above.
 - ~~A public hosted repository (the `/source` endpoint's `PAGEFORGE_REPO_URL`).~~
   Done — the repository is live at <https://github.com/sarayunova/PageForge>. CI
   sets `PAGEFORGE_REPO_URL` from `github.repository`, and the same value is the

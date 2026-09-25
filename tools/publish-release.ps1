@@ -21,10 +21,12 @@ param(
     [switch]$SkipApi,
 
     # Stop after publishing + verifying the payload, leaving the folder unzipped
-    # and unsigned. Used by the Azure Artifact Signing lane, which signs the
-    # binaries in the staged folder with an external action and then re-invokes
-    # this script with -ZipOnly. Zipping must never precede signing: signtool
-    # rewrites the .exe in place, so an earlier zip would ship an unsigned file.
+    # and unsigned. Useful for a local Option-B (.pfx) dry run where signing
+    # should happen before the zip is built. Zipping must never precede
+    # signing: signtool rewrites the .exe in place, so an earlier zip would
+    # ship an unsigned file. The SignPath lane in release.yml does not use
+    # this switch — it signs the already-zipped, already-unsigned payload as a
+    # whole and gets a signed zip back.
     [switch]$NoZip,
 
     # Skip publishing entirely and only zip the already-staged (and by now
@@ -114,11 +116,13 @@ if (-not $ZipOnly) {
 
 # --- 5. sign (optional) -----------------------------------------------------
 # Two supported signing sources:
-#   A) Azure Artifact Signing (formerly Trusted Signing) — the production path.
+#   A) SignPath (SignPath Foundation's free OSS signing) — the production path.
 #      Signing happens OUTSIDE this script, in release.yml's
-#      azure/artifact-signing-action step, because the signing key never leaves
-#      Azure. That lane runs this script with -NoZip, signs the staged folder,
-#      then re-runs it with -ZipOnly -RequireSignature.
+#      SignPath/github-action-submit-signing-request step: the payload is
+#      zipped UNSIGNED here, uploaded as a build artifact, sent to SignPath,
+#      and the signed zip comes back from their service — the private key
+#      never leaves SignPath's infrastructure. release.yml then verifies the
+#      returned exe with signtool before it is published.
 #   B) A local .pfx: PAGEFORGE_CERT_PFX (path) + PAGEFORGE_CERT_PASSWORD. Public
 #      CAs no longer issue exportable .pfx files, so this is for self-signed
 #      dry runs and internal-CA certificates only.
@@ -136,36 +140,11 @@ if ($pfx -and (Test-Path $pfx)) {
     $signArgs = @("/f", $pfx, "/p", $pass, "/tr", $tsUri, "/td", "sha256", "/fd", "sha256")
 }
 
-$signtool = Get-Command "signtool.exe" -ErrorAction SilentlyContinue
-if (-not $signtool) {
-    # signtool is rarely on PATH; locate it under the Windows 10/11 SDK kits.
-    # The kits install under Program Files (x86) on 64-bit Windows — including on
-    # GitHub's windows-latest runners — so search both roots, not just
-    # $env:ProgramFiles.
-    $kitsRoots = @(
-        (Join-Path $env:ProgramFiles "Windows Kits\10\bin"),
-        (Join-Path ${env:ProgramFiles(x86)} "Windows Kits\10\bin")
-    ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
-    $candidates = @()
-    foreach ($kitsRoot in $kitsRoots) {
-        $candidates += Get-ChildItem $kitsRoot -Recurse -Filter "signtool.exe" -ErrorAction SilentlyContinue |
-            Where-Object { $_.FullName -match "\\x64\\signtool\.exe$" }
-    }
-    # Newest SDK version wins (directory names sort as 10.0.<build>.<rev>).
-    $candidates = $candidates | Sort-Object FullName -Descending
-    if ($candidates) {
-        $signtool = Get-Item $candidates[0].FullName
-    }
-}
-if (-not $signtool -and $signArgs.Count -gt 0) {
-    Write-Warning "signtool.exe not found — cannot sign."
-}
-# Normalize signtool to an absolute path (works whether found on PATH or via kits scan).
-if ($signtool) {
-    $signtoolPath = if ($signtool -is [System.IO.FileInfo]) { $signtool.FullName }
-                    else { $signtool.Path }
-} else {
+try {
+    $signtoolPath = & (Join-Path $PSScriptRoot "find-signtool.ps1")
+} catch {
     $signtoolPath = $null
+    if ($signArgs.Count -gt 0) { Write-Warning "signtool.exe not found — cannot sign." }
 }
 
 if ($signArgs.Count -gt 0 -and $signtoolPath) {
@@ -178,17 +157,17 @@ if ($signArgs.Count -gt 0 -and $signtoolPath) {
     }
 } elseif (-not $RequireSignature) {
     Write-Warning "No code-signing certificate provided — OUTPUT IS UNSIGNED."
-    Write-Warning "Sign via the Azure Artifact Signing lane in release.yml, or set"
+    Write-Warning "Sign via the SignPath lane in release.yml, or set"
     Write-Warning "PAGEFORGE_CERT_PFX (+ PAGEFORGE_CERT_PASSWORD) for a local/self-signed"
     Write-Warning "dry run. Do not publish an unsigned payload."
 }
 
 # --- 5b. verify signatures BEFORE packaging ---------------------------------
 # Runs when this script signed the payload itself, and whenever the caller
-# passes -RequireSignature (the Azure Artifact Signing lane's -ZipOnly pass,
-# where signing was done by an external action). Verifying before the zip is
-# built is what guarantees a "signed release" zip can never contain an unsigned
-# binary.
+# passes -RequireSignature (for a local Option-B dry run where the caller wants
+# the same enforcement release.yml applies to a SignPath-returned zip).
+# Verifying before the zip is built is what guarantees a "signed release" zip
+# can never contain an unsigned binary.
 $signedHere = ($signArgs.Count -gt 0 -and $signtoolPath)
 if ($RequireSignature -or $signedHere) {
     if (-not $signtoolPath) { throw "signtool.exe not found — cannot verify signatures." }
