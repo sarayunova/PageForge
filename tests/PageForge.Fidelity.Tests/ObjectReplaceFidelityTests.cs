@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // This file is part of PageForge. See LICENSE for the full license text.
 
+using System.Linq;
 using PageForge.Core.Pdf;
 using PageForge.MuPdfInterop;
 using Xunit;
@@ -66,13 +67,20 @@ public sealed class ObjectReplaceFidelityTests
 
                 for (int page = 0; page < pageCount && !replaced; page++)
                 {
+                    // Replace repoints a resource name at a new XObject, so it only
+                    // ever made sense for a `Do`-based object; ListObjectsAsync now
+                    // also lists raw vector paths (FR-EDIT-04 follow-on), which have
+                    // no such name, so the first object on a page can be one of
+                    // those. Filter to Image specifically rather than taking
+                    // objects[0] blindly.
                     IReadOnlyList<PdfPageObject> objects = await engine.ListObjectsAsync(page);
-                    if (objects.Count == 0)
+                    PdfPageObject? found = objects.FirstOrDefault(o => o.Kind == PageObjectKind.Image);
+                    if (found is null)
                     {
                         continue;
                     }
 
-                    PdfPageObject target = objects[0];
+                    PdfPageObject target = found;
                     replacedPage = page;
                     replacedId = target.Id;
                     originalBounds = target.Bounds;

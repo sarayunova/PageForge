@@ -1490,6 +1490,16 @@ pdf_save_document(ctx, pdf, out_path_utf8, &opts);
 #define PF_OBJ_TAG_IMAGE    1
 #define PF_OBJ_TAG_FORM     2
 
+/* FR-EDIT-04 follow-on: a raw vector-drawing path (path-construction operators
+ * `m`/`l`/`c`/`v`/`y`/`re` terminated by a paint operator), as opposed to an
+ * XObject invoked via `Do`. Most shapes a PDF author draws - a rectangle, a
+ * line, a freehand curve from Office/Illustrator/etc. - are exactly this: raw
+ * operators straight in the content stream, never wrapped in a Form XObject.
+ * pf_list_objects previously only walked `Do`, so none of these were ever
+ * listed, and the object-edit surface had nothing to select for them. */
+#define PF_OBJ_OP_PATH      4
+#define PF_OBJ_TAG_VECTOR   3
+
 #define PF_MAX_TOKEN_NAME   256
 #define PF_MAX_NUM          16
 #define PF_MAX_FONTS        8
@@ -2622,6 +2632,19 @@ typedef struct pf_textw_s
 	int in_arr;
 	size_t arr_close_end;
 	pf_text_op_s *cur;
+	/* FR-EDIT-04 follow-on: raw vector-path tracking (see PF_OBJ_OP_PATH). A
+	 * path starts at the first construction operator after the previous paint
+	 * op (or the walk's start) and ends at the paint operator that terminates
+	 * it; path_bbox accumulates the device-space bounds of every point the
+	 * construction operators touch (control points included - a superset of
+	 * the true curve bounds, which is fine for a selection box). path_ctm is
+	 * the CTM in effect when the path began, matching how obj_ctm already
+	 * works for `Do` objects. */
+	int in_path;
+	size_t path_start;
+	fz_matrix path_ctm;
+	fz_rect path_bbox;
+	int path_has_pts;
 } pf_textw_s;
 
 static int pf_textw_finalize_string(fz_context *ctx, pf_textw_s *w, int kind,
@@ -2768,6 +2791,53 @@ static int pf_objpush(fz_context *ctx, pf_textw_s *w, size_t do_start, size_t do
 	}
 	w->pending_cm = 0;
 	(void)namekey;
+	return 1;
+}
+
+/* FR-EDIT-04 follow-on: folds one raw path-construction point into the
+ * in-progress path's device-space bounding box, transforming it by the CTM
+ * current right now (the same one every other point of this path is folded
+ * in under, since path_ctm is captured once when the path starts and PDF
+ * forbids a `cm` in the middle of path construction). */
+static void pf_path_extend(pf_textw_s *w, float ux, float uy)
+{
+	fz_point p = fz_transform_point(fz_make_point(ux, uy), w->ctm);
+	if (!w->path_has_pts)
+	{
+		w->path_bbox.x0 = w->path_bbox.x1 = p.x;
+		w->path_bbox.y0 = w->path_bbox.y1 = p.y;
+		w->path_has_pts = 1;
+	}
+	else
+	{
+		if (p.x < w->path_bbox.x0) { w->path_bbox.x0 = p.x; }
+		if (p.x > w->path_bbox.x1) { w->path_bbox.x1 = p.x; }
+		if (p.y < w->path_bbox.y0) { w->path_bbox.y0 = p.y; }
+		if (p.y > w->path_bbox.y1) { w->path_bbox.y1 = p.y; }
+	}
+}
+
+/* FR-EDIT-04 follow-on: records the path that just ended at a paint operator
+ * as a selectable object. Mirrors pf_objpush's op-recording shape so
+ * pf_list_objects/pf_move_resize_object can treat PF_OBJ_OP_PATH alongside
+ * PF_OBJ_OP_DO with only the branches that actually differ. */
+static int pf_pathpush(pf_textw_s *w, size_t path_start, size_t paint_end)
+{
+	pf_text_op_s *op;
+	if (!pf_opspush(&w->ops, &w->nops, &w->opcap))
+	{
+		return 0;
+	}
+	op = &w->ops[w->nops++];
+	memset(op, 0, sizeof(*op));
+	op->stream_index = w->stream_index;
+	op->kind = PF_OBJ_OP_PATH;
+	op->obj_tag = PF_OBJ_TAG_VECTOR;
+	op->obj_ctm = w->path_ctm;
+	op->bbox = w->path_bbox;
+	op->geom_ok = 1;
+	op->span_start = path_start;
+	op->span_end = paint_end;
 	return 1;
 }
 
@@ -2947,6 +3017,81 @@ static int pf_walk_content(fz_context *ctx, pdf_document *pdf, pdf_obj *resource
 					{
 						rc = 0;
 					}
+				}
+				/* FR-EDIT-04 follow-on: raw vector-path construction/paint,
+				 * illegal inside BT/ET so guarded the same way as Do. `m`/`re`
+				 * open a path if one is not already open; `l`/`c`/`v`/`y` only
+				 * extend an already-open one (a path with no `m` first is
+				 * malformed PDF - ignored rather than guessed at). `h` (close)
+				 * adds no new bound and needs no handling here. */
+				else if (strcmp(opname, "m") == 0 && !w.in_text && w.ring.count >= 2)
+				{
+					if (!w.in_path)
+					{
+						w.in_path = 1;
+						w.path_has_pts = 0;
+						w.path_ctm = w.ctm;
+						w.path_start = w.num_first_armed ? w.num_first_start : tok.start;
+					}
+					pf_path_extend(&w, (float)pf_ring_at(&w.ring, 0), (float)pf_ring_at(&w.ring, 1));
+				}
+				else if (strcmp(opname, "re") == 0 && !w.in_text && w.ring.count >= 4)
+				{
+					float rx = (float)pf_ring_at(&w.ring, 0), ry = (float)pf_ring_at(&w.ring, 1);
+					float rw = (float)pf_ring_at(&w.ring, 2), rh = (float)pf_ring_at(&w.ring, 3);
+					if (!w.in_path)
+					{
+						w.in_path = 1;
+						w.path_has_pts = 0;
+						w.path_ctm = w.ctm;
+						w.path_start = w.num_first_armed ? w.num_first_start : tok.start;
+					}
+					pf_path_extend(&w, rx, ry);
+					pf_path_extend(&w, rx + rw, ry);
+					pf_path_extend(&w, rx, ry + rh);
+					pf_path_extend(&w, rx + rw, ry + rh);
+				}
+				else if (strcmp(opname, "l") == 0 && !w.in_text && w.in_path && w.ring.count >= 2)
+				{
+					pf_path_extend(&w, (float)pf_ring_at(&w.ring, 0), (float)pf_ring_at(&w.ring, 1));
+				}
+				else if (strcmp(opname, "c") == 0 && !w.in_text && w.in_path && w.ring.count >= 6)
+				{
+					/* Both control points and the endpoint - a superset of the
+					 * curve's true bounds, not the tight bound, which is fine
+					 * for a selection box. */
+					pf_path_extend(&w, (float)pf_ring_at(&w.ring, 0), (float)pf_ring_at(&w.ring, 1));
+					pf_path_extend(&w, (float)pf_ring_at(&w.ring, 2), (float)pf_ring_at(&w.ring, 3));
+					pf_path_extend(&w, (float)pf_ring_at(&w.ring, 4), (float)pf_ring_at(&w.ring, 5));
+				}
+				else if ((strcmp(opname, "v") == 0 || strcmp(opname, "y") == 0)
+				         && !w.in_text && w.in_path && w.ring.count >= 4)
+				{
+					pf_path_extend(&w, (float)pf_ring_at(&w.ring, 0), (float)pf_ring_at(&w.ring, 1));
+					pf_path_extend(&w, (float)pf_ring_at(&w.ring, 2), (float)pf_ring_at(&w.ring, 3));
+				}
+				else if (!w.in_text && w.in_path &&
+				         (strcmp(opname, "f") == 0 || strcmp(opname, "F") == 0 ||
+				          strcmp(opname, "f*") == 0 || strcmp(opname, "S") == 0 ||
+				          strcmp(opname, "s") == 0 || strcmp(opname, "B") == 0 ||
+				          strcmp(opname, "B*") == 0 || strcmp(opname, "b") == 0 ||
+				          strcmp(opname, "b*") == 0))
+				{
+					/* A path painted (filled/stroked) is a selectable object.
+					 * `n` (below) ends a path with no paint - typically a clip
+					 * region for something else - and is deliberately excluded:
+					 * there is nothing visible there to select. */
+					if (w.path_has_pts && !pf_pathpush(&w, w.path_start, tok.end))
+					{
+						rc = 0;
+					}
+					w.in_path = 0;
+					w.path_has_pts = 0;
+				}
+				else if (strcmp(opname, "n") == 0 && !w.in_text && w.in_path)
+				{
+					w.in_path = 0;
+					w.path_has_pts = 0;
 				}
 
 				if (w.in_text)
@@ -3912,9 +4057,22 @@ int pf_revert_text_rewrite(pf_context context, pf_document document, int page_in
 static void pf_obj_bbox(const pf_text_op_s *op, float *x0, float *y0,
                         float *x1, float *y1)
 {
-	fz_point p0 = fz_transform_point(fz_make_point(0, 0), op->obj_ctm);
-	fz_point p1 = fz_transform_point(fz_make_point(op->obj_w, op->obj_h),
-	                                 op->obj_ctm);
+	fz_point p0, p1;
+
+	/* A path's bbox was already accumulated in device space while walking its
+	 * construction operators - there is no unit-square source rect to map,
+	 * unlike a `Do` invocation. */
+	if (op->kind == PF_OBJ_OP_PATH)
+	{
+		*x0 = op->bbox.x0; *y0 = op->bbox.y0; *x1 = op->bbox.x1; *y1 = op->bbox.y1;
+		if (*x0 > *x1) { float t = *x0; *x0 = *x1; *x1 = t; }
+		if (*y0 > *y1) { float t = *y0; *y0 = *y1; *y1 = t; }
+		return;
+	}
+
+	p0 = fz_transform_point(fz_make_point(0, 0), op->obj_ctm);
+	p1 = fz_transform_point(fz_make_point(op->obj_w, op->obj_h),
+	                        op->obj_ctm);
 	*x0 = p0.x; *y0 = p0.y; *x1 = p1.x; *y1 = p1.y;
 	if (*x0 > *x1) { float t = *x0; *x0 = *x1; *x1 = t; }
 	if (*y0 > *y1) { float t = *y0; *y0 = *y1; *y1 = t; }
@@ -4014,7 +4172,7 @@ int pf_list_objects(pf_context context, pf_document document, int page_index,
 		{
 			pf_text_op_s *op = &ops[i];
 			float x0, y0, x1, y1;
-			if (op->kind != PF_OBJ_OP_DO)
+			if (op->kind != PF_OBJ_OP_DO && op->kind != PF_OBJ_OP_PATH)
 			{
 				continue;
 			}
@@ -4055,8 +4213,8 @@ int pf_move_resize_object(pf_context context, pf_document document,
 	int i, j = 0;
 	unsigned char *oldbytes = NULL;
 	size_t oldlen = 0, offset = 0;
-	char newop[768];
-	size_t newlen;
+	unsigned char *newop = NULL;
+	size_t newlen = 0;
 	char *b64old = NULL, *b64new = NULL;
 	char *name = NULL;
 	double na, nb, nc, nd, ne, nf;
@@ -4088,7 +4246,7 @@ int pf_move_resize_object(pf_context context, pf_document document,
 		for (i = 0; i < nops; i++)
 		{
 			pf_text_op_s *o = &ops[i];
-			if (o->kind != PF_OBJ_OP_DO)
+			if (o->kind != PF_OBJ_OP_DO && o->kind != PF_OBJ_OP_PATH)
 			{
 				continue;
 			}
@@ -4104,50 +4262,10 @@ int pf_move_resize_object(pf_context context, pf_document document,
 			fz_throw(ctx, FZ_ERROR_GENERIC, "pf_move_resize_object: object index out of range");
 		}
 
-		/* Map the target bounds back to a content-stream cm matrix. The object's
-		 * source rect (0,0,ow,oh) - the unit square - must land on
-		 * (x0,y0,x1,y1). */
-		na = (x1 - x0) / (double)op->obj_w;
-		nd = (y1 - y0) / (double)op->obj_h;
-		nb = 0.0;
-		nc = 0.0;
-		ne = x0;
-		nf = y0;
-		name = op->obj_name;
-		if (name == NULL || name[0] == '\0')
-		{
-			fz_throw(ctx, FZ_ERROR_GENERIC, "pf_move_resize_object: object has no resource name");
-		}
-
-		/* The `cm` operator itself, which this used to omit: the replacement read
-		 * "a b c d e f /Name Do", six numbers that no operator ever consumed. The
-		 * matrix was therefore never applied, and since the span it replaces
-		 * covers the ORIGINAL `cm` too, the object lost the placement it already
-		 * had and was painted through whatever CTM was current - for a page-sized
-		 * scan that meant a 1pt square in the corner. Every move and resize on
-		 * this path silently did that.
-		 *
-		 * When the object had no `cm` of its own the span is the bare `Do`, so
-		 * the matrix introduced here is wrapped in q/Q: without that it would
-		 * stay in force for the rest of the content stream and displace every
-		 * object painted after the one that was moved. */
-		if (op->obj_has_cm)
-		{
-			newlen = (size_t)PF_SNPRINTF(newop, sizeof(newop), _TRUNCATE,
-			                             "%g %g %g %g %g %g cm /%s Do",
-			                             na, nb, nc, nd, ne, nf, name);
-		}
-		else
-		{
-			newlen = (size_t)PF_SNPRINTF(newop, sizeof(newop), _TRUNCATE,
-			                             "q %g %g %g %g %g %g cm /%s Do Q",
-			                             na, nb, nc, nd, ne, nf, name);
-		}
-		if (newlen == (size_t)-1)
-		{
-			fz_throw(ctx, FZ_ERROR_GENERIC, "pf_move_resize_object: replacement is too long");
-		}
-
+		/* Fetch the object's current raw bytes first: both branches below need
+		 * them (the path branch wraps them verbatim; the receipt always
+		 * records them as the "old" side of the splice), and the path branch's
+		 * replacement is built FROM them, so it must happen before either. */
 		offset = op->span_start;
 		oldlen = op->span_end - op->span_start;
 		if (oldlen == 0)
@@ -4180,8 +4298,106 @@ int pf_move_resize_object(pf_context context, pf_document document,
 			fz_drop_buffer(ctx, buf);
 		}
 
+		if (op->kind == PF_OBJ_OP_PATH)
+		{
+			/* No resource name and no unit-square source rect to map, unlike a
+			 * `Do` object - the path's own points are arbitrary. Instead: wrap
+			 * the untouched path+paint bytes in a fresh `cm` that maps the
+			 * path's OWN current bbox onto the requested one, exactly the
+			 * q/cm/Q wrap already used below for a `Do` with no `cm` of its
+			 * own, just solved from the object's bbox instead of the unit
+			 * square. Not a single scale+translate that would also apply to
+			 * anything drawn after it: the wrap is scoped to this object's
+			 * span alone by q/Q, so it cannot displace what comes next. */
+			double oldw = (double)op->bbox.x1 - (double)op->bbox.x0;
+			double oldh = (double)op->bbox.y1 - (double)op->bbox.y0;
+			char prefix[192];
+			int plen;
+
+			na = oldw != 0.0 ? (x1 - x0) / oldw : 1.0;
+			nd = oldh != 0.0 ? (y1 - y0) / oldh : 1.0;
+			nb = 0.0;
+			nc = 0.0;
+			ne = x0 - (double)op->bbox.x0 * na;
+			nf = y0 - (double)op->bbox.y0 * nd;
+
+			plen = PF_SNPRINTF(prefix, sizeof(prefix), _TRUNCATE,
+			                   "q %g %g %g %g %g %g cm\n", na, nb, nc, nd, ne, nf);
+			if (plen < 0)
+			{
+				fz_throw(ctx, FZ_ERROR_GENERIC, "pf_move_resize_object: replacement is too long");
+			}
+
+			newlen = (size_t)plen + oldlen + 2;
+			newop = (unsigned char *)malloc(newlen);
+			if (newop == NULL)
+			{
+				fz_throw(ctx, FZ_ERROR_GENERIC, "pf_move_resize_object: out of memory");
+			}
+			memcpy(newop, prefix, (size_t)plen);
+			memcpy(newop + plen, oldbytes, oldlen);
+			memcpy(newop + plen + oldlen, "\nQ", 2);
+		}
+		else
+		{
+			char textbuf[768];
+			int tlen;
+
+			/* Map the target bounds back to a content-stream cm matrix. The
+			 * object's source rect (0,0,ow,oh) - the unit square - must land
+			 * on (x0,y0,x1,y1). */
+			na = (x1 - x0) / (double)op->obj_w;
+			nd = (y1 - y0) / (double)op->obj_h;
+			nb = 0.0;
+			nc = 0.0;
+			ne = x0;
+			nf = y0;
+			name = op->obj_name;
+			if (name == NULL || name[0] == '\0')
+			{
+				fz_throw(ctx, FZ_ERROR_GENERIC, "pf_move_resize_object: object has no resource name");
+			}
+
+			/* The `cm` operator itself, which this used to omit: the replacement
+			 * read "a b c d e f /Name Do", six numbers that no operator ever
+			 * consumed. The matrix was therefore never applied, and since the
+			 * span it replaces covers the ORIGINAL `cm` too, the object lost the
+			 * placement it already had and was painted through whatever CTM was
+			 * current - for a page-sized scan that meant a 1pt square in the
+			 * corner. Every move and resize on this path silently did that.
+			 *
+			 * When the object had no `cm` of its own the span is the bare `Do`,
+			 * so the matrix introduced here is wrapped in q/Q: without that it
+			 * would stay in force for the rest of the content stream and
+			 * displace every object painted after the one that was moved. */
+			if (op->obj_has_cm)
+			{
+				tlen = PF_SNPRINTF(textbuf, sizeof(textbuf), _TRUNCATE,
+				                   "%g %g %g %g %g %g cm /%s Do",
+				                   na, nb, nc, nd, ne, nf, name);
+			}
+			else
+			{
+				tlen = PF_SNPRINTF(textbuf, sizeof(textbuf), _TRUNCATE,
+				                   "q %g %g %g %g %g %g cm /%s Do Q",
+				                   na, nb, nc, nd, ne, nf, name);
+			}
+			if (tlen < 0)
+			{
+				fz_throw(ctx, FZ_ERROR_GENERIC, "pf_move_resize_object: replacement is too long");
+			}
+
+			newlen = (size_t)tlen;
+			newop = (unsigned char *)malloc(newlen);
+			if (newop == NULL)
+			{
+				fz_throw(ctx, FZ_ERROR_GENERIC, "pf_move_resize_object: out of memory");
+			}
+			memcpy(newop, textbuf, newlen);
+		}
+
 		if (pf_splice_stream(ctx, pdf, page_index, op->stream_index, offset,
-		                     oldlen, (const unsigned char *)newop, newlen) != PF_OK)
+		                     oldlen, newop, newlen) != PF_OK)
 		{
 			fz_throw(ctx, FZ_ERROR_GENERIC, "pf_move_resize_object: content stream splice failed");
 		}
@@ -4200,7 +4416,7 @@ int pf_move_resize_object(pf_context context, pf_document document,
 			fz_throw(ctx, FZ_ERROR_GENERIC, "pf_move_resize_object: out of memory writing the receipt");
 		}
 		pf_b64_encode(oldbytes, oldlen, b64old);
-		pf_b64_encode((const unsigned char *)newop, newlen, b64new);
+		pf_b64_encode(newop, newlen, b64new);
 		fprintf(fh, "PF-TRW\t1\n");
 		fprintf(fh, "R\t%d\t%llu\t%llu\t%llu\n", op->stream_index,
 		        (unsigned long long)offset, (unsigned long long)oldlen,
@@ -4219,6 +4435,7 @@ int pf_move_resize_object(pf_context context, pf_document document,
 
 	pf_free_text_ops(ops, nops);
 	free(oldbytes);
+	free(newop);
 	free(b64old);
 	free(b64new);
 	if (fh != NULL)
@@ -4832,7 +5049,11 @@ int pf_replace_object(pf_context context, pf_document document, int page_index,
 		for (i = 0; i < nops; i++)
 		{
 			pf_text_op_s *o = &ops[i];
-			if (o->kind != PF_OBJ_OP_DO)
+			/* Counts PF_OBJ_OP_PATH too, even though replace rejects it below:
+			 * pf_list_objects reports both kinds under one shared numbering,
+			 * so object_index means nothing unless this loop counts the same
+			 * way, whichever kind it turns out to land on. */
+			if (o->kind != PF_OBJ_OP_DO && o->kind != PF_OBJ_OP_PATH)
 			{
 				continue;
 			}
@@ -4846,6 +5067,16 @@ int pf_replace_object(pf_context context, pf_document document, int page_index,
 		if (op == NULL)
 		{
 			fz_throw(ctx, FZ_ERROR_GENERIC, "pf_replace_object: object index out of range");
+		}
+		if (op->kind == PF_OBJ_OP_PATH)
+		{
+			/* A raw vector path has no resource name to re-point at a new
+			 * XObject - there is nothing here for "replace" to mean yet.
+			 * Move/resize (which only rewrites the object's own placement,
+			 * not its content) already works for it; painting a picture into
+			 * a hand-drawn shape is unscoped follow-on work. */
+			fz_throw(ctx, FZ_ERROR_GENERIC,
+			        "pf_replace_object: replace is not supported for a vector path (no XObject to re-point)");
 		}
 
 		/* 1. Load + embed the replacement image as a new XObject. */
