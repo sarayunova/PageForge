@@ -121,6 +121,12 @@
                                 Padding="8,3" ToolTip="{loc:Str Document_RedoLastUndoneEditCtrl_Tip}">
                             <ui:SymbolIcon Symbol="ArrowRedo24" FontSize="14" />
                         </Button>
+                        <Separator Margin="8,0" Width="1" Background="{DynamicResource EdgeStrongBrush}" />
+
+                        <Button AutomationProperties.Name="{loc:Str Document_Print_Name}" Click="Print_Click"
+                                Padding="8,3" ToolTip="{loc:Str Document_Print_Tip}">
+                            <ui:SymbolIcon Symbol="Print24" FontSize="14" />
+                        </Button>
                     </StackPanel>
 
                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">

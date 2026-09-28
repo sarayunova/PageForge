@@ -2,11 +2,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // This file is part of PageForge. See LICENSE for the full license text.
 
+using System.IO;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Markup;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using Microsoft.Extensions.Logging;
 using PageForge.App.Wpf.ViewModels;
 using PageForge.Core.Pdf;
@@ -959,6 +963,69 @@ public partial class DocumentView : UserControl
         catch (Exception ex)
         {
             MessageBox.Show(UiStrings.Format("Error_SaveEditsFailed", ex.Message), UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    /// <summary>Prints the whole open document to a Windows printer (FR-VIEW-05).
+    /// Each page is rendered by the engine at 300 DPI — the same in-memory state
+    /// the user sees on screen, unsaved edits included — and laid out as a
+    /// <see cref="FixedDocument"/> page sized to the PDF page's own dimensions,
+    /// so the Windows print dialog handles printer/paper/copies selection exactly
+    /// as it would for any other document.</summary>
+    private async void Print_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm is null)
+        {
+            return;
+        }
+
+        var printDialog = new PrintDialog();
+        if (printDialog.ShowDialog() != true)
+        {
+            return;
+        }
+
+        try
+        {
+            IReadOnlyList<PrintPage> pages = await _vm.RenderPagesForPrintAsync(0, _vm.PageCount - 1);
+
+            var fixedDocument = new FixedDocument();
+            foreach (PrintPage page in pages)
+            {
+                double widthDip = page.Size.WidthPt * 96.0 / 72.0;
+                double heightDip = page.Size.HeightPt * 96.0 / 72.0;
+
+                var bitmap = new BitmapImage();
+                using (var stream = new MemoryStream(page.PngBytes))
+                {
+                    bitmap.BeginInit();
+                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                    bitmap.StreamSource = stream;
+                    bitmap.EndInit();
+                }
+                bitmap.Freeze();
+
+                var image = new System.Windows.Controls.Image
+                {
+                    Source = bitmap,
+                    Width = widthDip,
+                    Height = heightDip,
+                    Stretch = Stretch.Fill,
+                };
+
+                var fixedPage = new FixedPage { Width = widthDip, Height = heightDip };
+                fixedPage.Children.Add(image);
+
+                var pageContent = new PageContent();
+                ((IAddChild)pageContent).AddChild(fixedPage);
+                fixedDocument.Pages.Add(pageContent);
+            }
+
+            printDialog.PrintDocument(fixedDocument.DocumentPaginator, _vm.DisplayName);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(UiStrings.Format("Error_PrintFailed", ex.Message), UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 

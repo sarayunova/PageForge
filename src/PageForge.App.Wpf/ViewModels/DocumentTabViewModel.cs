@@ -12,6 +12,11 @@ using PageForge.Core.View;
 
 namespace PageForge.App.Wpf.ViewModels;
 
+/// <summary>One rendered page ready to hand to the Windows print pipeline
+/// (FR-VIEW-05): its PDF-point size (for the printed page's physical
+/// dimensions) and a print-quality (300 DPI) PNG raster of its content.</summary>
+public sealed record PrintPage(PdfPageRegion Size, byte[] PngBytes);
+
 /// <summary>Which conversion an OCR run should produce (FR-OCR-02/03/04).
 /// A searchable PDF is <see cref="DocumentTabViewModel.RunOcrAsync"/>, which
 /// predates these and reopens its result.</summary>
@@ -1083,6 +1088,38 @@ public sealed class DocumentTabViewModel : ObservableObject
         {
             IsBusy = false;
         }
+    }
+
+    /// <summary>Renders every page from <paramref name="firstPage"/> to
+    /// <paramref name="lastPage"/> (both 0-based, inclusive) at print quality
+    /// (300 DPI) for the Windows print pipeline (FR-VIEW-05). The current
+    /// in-memory state — including unsaved text/object edits — is what gets
+    /// printed, matching what the user sees on screen.</summary>
+    public async Task<IReadOnlyList<PrintPage>> RenderPagesForPrintAsync(
+        int firstPage, int lastPage, CancellationToken ct = default)
+    {
+        GuardPageCount();
+        firstPage = Math.Max(0, firstPage);
+        lastPage = Math.Min(_doc.PageCount - 1, lastPage);
+
+        var pages = new List<PrintPage>();
+        IsBusy = true;
+        try
+        {
+            for (int i = firstPage; i <= lastPage; i++)
+            {
+                ct.ThrowIfCancellationRequested();
+                PdfPageRegion size = await _doc.Engine.GetPageSizeAsync(i, ct).ConfigureAwait(false);
+                RenderedPdfPage rendered = await _doc.Engine.RenderPageToPngAsync(i, 300f, ct).ConfigureAwait(false);
+                pages.Add(new PrintPage(size, rendered.PngBytes));
+            }
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+
+        return pages;
     }
 
     /// <summary>Runs local OCR over the whole document, fully offline, and writes

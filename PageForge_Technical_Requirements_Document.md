@@ -53,6 +53,7 @@ edition.
 - **FR-VIEW-02**: Support continuous-scroll and single-page navigation modes, zoom, and view rotation.
 - **FR-VIEW-03**: Provide a page-thumbnail panel, an outline/bookmark panel, and full-text search with in-page result highlighting.
 - **FR-VIEW-04**: Support multiple documents open in tabs within one window.
+- **FR-VIEW-05**: Print the open document (all pages or a chosen range) to any Windows-installed printer via the standard Windows print dialog, fully offline.
 
 ### 5.2 Annotation (FR-ANNOT)
 - **FR-ANNOT-01**: Highlight, underline, strikethrough, free-hand ink, text notes/comments, stamps, and basic shape annotations.

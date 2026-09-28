@@ -113,6 +113,9 @@
   <data name="Document_Redo_Name" xml:space="preserve">
     <value>Redo</value>
   </data>
+  <data name="Document_Print_Name" xml:space="preserve">
+    <value>Print</value>
+  </data>
   <data name="Document_SearchDocumentText_Name" xml:space="preserve">
     <value>Search document text</value>
   </data>
@@ -259,6 +262,9 @@
   </data>
   <data name="Document_RedoLastUndoneEditCtrl_Tip" xml:space="preserve">
     <value>Redo last undone edit (Ctrl+Y)</value>
+  </data>
+  <data name="Document_Print_Tip" xml:space="preserve">
+    <value>Print the document</value>
   </data>
   <data name="Document_SearchTheDocumentText_Tip" xml:space="preserve">
     <value>Search the document text</value>
@@ -734,6 +740,10 @@
   </data>
   <data name="Error_SaveEditsFailed" xml:space="preserve">
     <value>Save failed:
+{0}</value>
+  </data>
+  <data name="Error_PrintFailed" xml:space="preserve">
+    <value>Print failed:
 {0}</value>
   </data>
   <data name="Error_UndoFailed" xml:space="preserve">

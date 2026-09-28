@@ -41,11 +41,17 @@ $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 
-# This dev machine's SDK is user-scope and installed with -NoPath, so the bare
-# `dotnet` alias resolves to nothing in a non-path shell. CI's dotnet is on the
-# path, so prefer the local one only when it is actually there.
-$dotnet = Join-Path $env:LOCALAPPDATA 'Microsoft\dotnet\dotnet.exe'
-if (-not (Test-Path $dotnet)) { $dotnet = 'dotnet' }
+# This dev machine also has a user-scope SDK installed with -NoPath at
+# %LOCALAPPDATA%\Microsoft\dotnet, but as of 2026-09-29 that install (8.0.424)
+# is broken (MSB4022: $(MicrosoftNETBuildTasksAssembly) resolves empty) and its
+# host does not multi-level-lookup the machine-wide install to route around it.
+# global.json now pins 8.0.425, which only the machine-wide, on-PATH `dotnet`
+# has, so that is preferred; the user-scope one is a fallback only for a
+# machine where it is the sole install and actually works.
+$dotnet = 'dotnet'
+if (-not (Get-Command $dotnet -ErrorAction SilentlyContinue)) {
+    $dotnet = Join-Path $env:LOCALAPPDATA 'Microsoft\dotnet\dotnet.exe'
+}
 
 # Every project in PageForge.sln except src/PageForge.App.
 $managed = @(
