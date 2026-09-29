@@ -773,7 +773,7 @@
     <value>Snip - {0}</value>
   </data>
   <data name="Snip_Hint" xml:space="preserve">
-    <value>Drag a rectangle on the page to choose what to snip.</value>
+    <value>Drag a rectangle to choose what to snip. Use Pen, Arrow, Box, Highlight or Text to mark it up first.</value>
   </data>
   <data name="Snip_Selected" xml:space="preserve">
     <value>Region chosen. Copy it or save it as a PNG.</value>
@@ -805,6 +805,48 @@
   <data name="Snip_Failed" xml:space="preserve">
     <value>Snip failed:
 {0}</value>
+  </data>
+  <data name="Snip_Tool_Select" xml:space="preserve">
+    <value>Select area</value>
+  </data>
+  <data name="Snip_Tool_Pen" xml:space="preserve">
+    <value>Pen</value>
+  </data>
+  <data name="Snip_Tool_Arrow" xml:space="preserve">
+    <value>Arrow</value>
+  </data>
+  <data name="Snip_Tool_Box" xml:space="preserve">
+    <value>Box</value>
+  </data>
+  <data name="Snip_Tool_Highlight" xml:space="preserve">
+    <value>Highlight</value>
+  </data>
+  <data name="Snip_Tool_Text" xml:space="preserve">
+    <value>Text</value>
+  </data>
+  <data name="Snip_Color_Red" xml:space="preserve">
+    <value>Red</value>
+  </data>
+  <data name="Snip_Color_Blue" xml:space="preserve">
+    <value>Blue</value>
+  </data>
+  <data name="Snip_Color_Green" xml:space="preserve">
+    <value>Green</value>
+  </data>
+  <data name="Snip_Color_Yellow" xml:space="preserve">
+    <value>Yellow</value>
+  </data>
+  <data name="Snip_Color_Black" xml:space="preserve">
+    <value>Black</value>
+  </data>
+  <data name="Snip_Undo" xml:space="preserve">
+    <value>Undo mark</value>
+  </data>
+  <data name="Snip_ClearMarks" xml:space="preserve">
+    <value>Clear marks</value>
+  </data>
+  <data name="Snip_TextBox_Name" xml:space="preserve">
+    <value>Annotation text</value>
   </data>
   <data name="Error_PrintFailed" xml:space="preserve">
     <value>Print failed:
