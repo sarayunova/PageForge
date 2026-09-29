@@ -47,6 +47,7 @@ public partial class MainWindow : Controls.FluentShellWindow
     public MainWindow()
     {
         InitializeComponent();
+        Closing += OnWindowClosing;
         Loaded += async (_, _) =>
         {
             await OfferRecoveredDocumentsAsync();
@@ -126,7 +127,13 @@ public partial class MainWindow : Controls.FluentShellWindow
             };
             System.Windows.Automation.AutomationProperties.SetName(close, UiStrings.Format("Tab_CloseDocument_Name", vm.DisplayName));
             close.ToolTip = UiStrings.Format("Tab_CloseDocument_Name", vm.DisplayName);
-            close.Click += (_, _) => CloseTab(tab, vm);
+            close.Click += async (_, _) =>
+            {
+                if (await ConfirmDiscardAsync(vm))
+                {
+                    CloseTab(tab, vm);
+                }
+            };
             header.Children.Add(close);
             tab.Header = header;
 
@@ -158,6 +165,84 @@ public partial class MainWindow : Controls.FluentShellWindow
                 ex, "Failed to open {Path}.", path);
             MessageBox.Show(UiStrings.Format("Error_FailedToOpen", path, ex.Message), UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
+    }
+
+    /// <summary>
+    /// True when the document has edits that exist nowhere but in memory. If the
+    /// engine cannot say, the answer is "yes": asking once too often is cheap,
+    /// silently discarding someone's work is not.
+    /// </summary>
+    private static async Task<bool> HasUnsavedAsync(DocumentTabViewModel vm)
+    {
+        try
+        {
+            return await vm.Core.Engine.HasUnsavedChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.AppLog.For(typeof(MainWindow)).LogWarning(
+                ex, "Could not tell whether {Name} has unsaved changes; asking to be safe.", vm.DisplayName);
+            return true;
+        }
+    }
+
+    /// <summary>Closing a tab with unsaved edits discards them for good, so it
+    /// needs an explicit yes. Returns true when closing may go ahead.</summary>
+    private static async Task<bool> ConfirmDiscardAsync(DocumentTabViewModel vm)
+    {
+        if (!await HasUnsavedAsync(vm))
+        {
+            return true;
+        }
+
+        return MessageBox.Show(
+            UiStrings.Format("Confirm_CloseUnsaved", vm.DisplayName),
+            UiStrings.Get("Common_AppTitle"),
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning,
+            MessageBoxResult.No) == MessageBoxResult.Yes;
+    }
+
+    private bool _exitConfirmed;
+
+    /// <summary>
+    /// Quitting is the same irreversible discard as closing a tab, for every tab
+    /// at once. The check is asynchronous, so the close is cancelled first and
+    /// re-issued once the user has answered.
+    /// </summary>
+    private async void OnWindowClosing(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        if (_exitConfirmed || App.SmokeMode)
+        {
+            return;
+        }
+
+        e.Cancel = true;
+        var unsaved = new List<string>();
+        foreach (TabItem tab in DocTabs.Items.OfType<TabItem>().ToList())
+        {
+            if (tab.Tag is TabState state && await HasUnsavedAsync(state.Vm))
+            {
+                unsaved.Add($"  • {state.Vm.DisplayName}");
+            }
+        }
+
+        if (unsaved.Count > 0)
+        {
+            MessageBoxResult answer = MessageBox.Show(
+                UiStrings.Format("Confirm_ExitUnsaved", unsaved.Count, string.Join(Environment.NewLine, unsaved)),
+                UiStrings.Get("Common_AppTitle"),
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning,
+                MessageBoxResult.No);
+            if (answer != MessageBoxResult.Yes)
+            {
+                return;
+            }
+        }
+
+        _exitConfirmed = true;
+        Close();
     }
 
     private void CloseTab(TabItem tab, DocumentTabViewModel vm)
@@ -236,8 +321,20 @@ public partial class MainWindow : Controls.FluentShellWindow
             }
         }
 
-        // Cleared either way. Kept after a decline, the same documents would be
-        // offered again after every future crash.
+        if (answer != MessageBoxResult.Yes
+            && MessageBox.Show(
+                UiStrings.Get("Recovery_ConfirmDiscard"),
+                UiStrings.Get("Recovery_Title"),
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning,
+                MessageBoxResult.No) != MessageBoxResult.Yes)
+        {
+            // Kept, and offered again next launch: nothing is deleted without a yes.
+            return;
+        }
+
+        // Cleared once the user has decided. Kept after an accepted discard, the
+        // same documents would be offered again after every future crash.
         Diagnostics.RecoverySession.ClearAbandoned();
     }
 

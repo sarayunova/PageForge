@@ -924,6 +924,15 @@ public partial class DocumentView : UserControl
             return;
         }
 
+        if (MessageBox.Show(
+                UiStrings.Get("Confirm_FlattenAnnotations"),
+                UiStrings.Get("Common_AppTitle"),
+                MessageBoxButton.OKCancel,
+                MessageBoxImage.Warning) != MessageBoxResult.OK)
+        {
+            return;
+        }
+
         string? path = AskSavePath("Flattened.pdf");
         if (path is null)
         {
@@ -1342,6 +1351,15 @@ public partial class DocumentView : UserControl
     private async void OrganizeDeletePage_Click(object sender, RoutedEventArgs e)
     {
         if (_vm is null)
+        {
+            return;
+        }
+
+        if (MessageBox.Show(
+                UiStrings.Format("Confirm_DeletePage", _vm.CurrentDisplayPage),
+                UiStrings.Get("Common_AppTitle"),
+                MessageBoxButton.OKCancel,
+                MessageBoxImage.Warning) != MessageBoxResult.OK)
         {
             return;
         }

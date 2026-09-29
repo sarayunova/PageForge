@@ -101,6 +101,16 @@ version heading when the tag is pushed.
   tick, and the flag is not sufficient for a close-time "unsaved changes"
   prompt.
 
+### Safer destructive actions and clearer errors
+
+- Every failure dialog now ends with a suggested next step (WCAG 3.3.1/3.3.3).
+- Closing a tab or quitting with unsaved edits asks first and says the edits are
+  permanently discarded; the default answer is No. Declining crash recovery asks
+  again before deleting the recovered copies, and keeps them if you back out.
+- Delete page and Flatten annotations confirm before writing their new copy;
+  Snip asks before clearing marks or changing page with marks on it; the form
+  flatten prompt now says it cannot be reversed once saved (WCAG 3.3.4).
+
 ### Fixed before the first release
 
 - **The viewer froze while staging a page reorder.** Selecting a thumbnail in

@@ -164,6 +164,15 @@ internal sealed class SnipWindow : Window
         Closed += (_, _) => _cts?.Cancel();
     }
 
+    /// <summary>Marks are drawn by hand and cannot be recovered once cleared.</summary>
+    private bool ConfirmDiscardMarks(string message) => MessageBox.Show(
+        this,
+        message,
+        UiStrings.Get("Common_AppTitle"),
+        MessageBoxButton.YesNo,
+        MessageBoxImage.Warning,
+        MessageBoxResult.No) == MessageBoxResult.Yes;
+
     private async Task ShowAsync(int index)
     {
         if (index < 0 || index >= _pageCount)
@@ -172,6 +181,11 @@ internal sealed class SnipWindow : Window
         }
 
         CommitText();
+        if (index != _index && _ink.Children.Count > 0 && !ConfirmDiscardMarks(UiStrings.Get("Snip_ConfirmPageChange")))
+        {
+            return;
+        }
+
         _index = index;
         _pageLabel.Text = UiStrings.Format("Print_Preview_Page", index + 1, _pageCount);
         _prev.IsEnabled = index > 0;
@@ -346,6 +360,11 @@ internal sealed class SnipWindow : Window
         clear.Click += (_, _) =>
         {
             CommitText();
+            if (_ink.Children.Count > 0 && !ConfirmDiscardMarks(UiStrings.Get("Snip_ConfirmClear")))
+            {
+                return;
+            }
+
             _ink.Children.Clear();
         };
         row.Children.Add(undo);

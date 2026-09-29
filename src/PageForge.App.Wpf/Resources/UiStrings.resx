@@ -710,37 +710,53 @@
   <data name="Error_CouldNotOpenTheSource" xml:space="preserve">
     <value>Could not open the source repository.
 
-{0}</value>
+{0}
+
+Try again in a moment, or make sure a default web browser is set in Windows.</value>
   </data>
   <data name="Error_FailedToOpen" xml:space="preserve">
     <value>Failed to open:
 {0}
 
-{1}</value>
+{1}
+
+Check that the file still exists, is not open in another program, and is not damaged or password-protected, then try opening it again.</value>
   </data>
   <data name="Error_ReorderFailed" xml:space="preserve">
     <value>Reorder failed:
-{0}</value>
+{0}
+
+Try again, saving to a different folder or file name. Make sure the destination is not open in another program.</value>
   </data>
   <data name="Error_AddHighlightFailed" xml:space="preserve">
     <value>Add highlight failed:
-{0}</value>
+{0}
+
+Select the text again and try once more. If it keeps failing, save a copy of the document and reopen it.</value>
   </data>
   <data name="Error_AddNoteFailed" xml:space="preserve">
     <value>Add note failed:
-{0}</value>
+{0}
+
+Click the spot on the page again and try once more. If it keeps failing, save a copy of the document and reopen it.</value>
   </data>
   <data name="Error_AddInkFailed" xml:space="preserve">
     <value>Add ink failed:
-{0}</value>
+{0}
+
+Draw the stroke again inside the page. If it keeps failing, save a copy of the document and reopen it.</value>
   </data>
   <data name="Error_FlattenFailed" xml:space="preserve">
     <value>Flatten failed:
-{0}</value>
+{0}
+
+Try again, saving to a different folder or file name. If the document is protected, unlock it first.</value>
   </data>
   <data name="Error_SaveEditsFailed" xml:space="preserve">
     <value>Save failed:
-{0}</value>
+{0}
+
+Choose a different folder or file name, make sure the file is not open in another program, and check that the disk has free space.</value>
   </data>
   <data name="Print_Preview_Title" xml:space="preserve">
     <value>Print preview - {0}</value>
@@ -804,7 +820,9 @@
   </data>
   <data name="Snip_Failed" xml:space="preserve">
     <value>Snip failed:
-{0}</value>
+{0}
+
+Select the area again and try once more. If you were saving, choose a different folder or file name.</value>
   </data>
   <data name="Snip_Tool_Select" xml:space="preserve">
     <value>Select area</value>
@@ -850,67 +868,99 @@
   </data>
   <data name="Error_PrintFailed" xml:space="preserve">
     <value>Print failed:
-{0}</value>
+{0}
+
+Check that the printer is connected and online, then try again.</value>
   </data>
   <data name="Error_UndoFailed" xml:space="preserve">
     <value>Undo failed:
-{0}</value>
+{0}
+
+Try again. If it keeps failing, save a copy of the document and reopen it.</value>
   </data>
   <data name="Error_RedoFailed" xml:space="preserve">
     <value>Redo failed:
-{0}</value>
+{0}
+
+Try again. If it keeps failing, save a copy of the document and reopen it.</value>
   </data>
   <data name="Error_EditFailed" xml:space="preserve">
     <value>Edit failed:
-{0}</value>
+{0}
+
+Try a smaller change, or use characters the font supports. If it keeps failing, save a copy and reopen the document.</value>
   </data>
   <data name="Error_RotateFailed" xml:space="preserve">
     <value>Rotate failed:
-{0}</value>
+{0}
+
+Try again. If the document is protected, unlock it first.</value>
   </data>
   <data name="Error_DeleteFailed" xml:space="preserve">
     <value>Delete failed:
-{0}</value>
+{0}
+
+Try again, saving to a different folder or file name. If the document is protected, unlock it first.</value>
   </data>
   <data name="Error_ExtractFailed" xml:space="preserve">
     <value>Extract failed:
-{0}</value>
+{0}
+
+Choose a different folder or file name, make sure the destination is not open in another program, and try again.</value>
   </data>
   <data name="Error_InsertFailed" xml:space="preserve">
     <value>Insert failed:
-{0}</value>
+{0}
+
+Check that the file you are inserting is a valid PDF that is not password-protected, then try again.</value>
   </data>
   <data name="Error_OcrFailed" xml:space="preserve">
     <value>OCR failed:
-{0}</value>
+{0}
+
+Try again on a clearer scan, or on a single page.</value>
   </data>
   <data name="Error_ProtectFailed" xml:space="preserve">
     <value>Protect failed:
-{0}</value>
+{0}
+
+Check the passwords and the destination folder, then try again.</value>
   </data>
   <data name="Error_CouldNotFillField" xml:space="preserve">
     <value>Could not fill field {0}:
-{1}</value>
+{1}
+
+Check that the value suits the field (for example a date or a number) and try again.</value>
   </data>
   <data name="Error_CouldNotCreateTheField" xml:space="preserve">
     <value>Could not create the field:
-{0}</value>
+{0}
+
+Give the field a name that is not already used and draw it inside the page, then try again.</value>
   </data>
   <data name="Error_ReplaceFailed" xml:space="preserve">
     <value>Replace failed:
-{0}</value>
+{0}
+
+Choose a PNG or JPEG image that opens correctly on your computer, then try again.</value>
   </data>
   <data name="Error_CouldNotMarkTheRegion" xml:space="preserve">
     <value>Could not mark the region:
-{0}</value>
+{0}
+
+Drag the box again, inside the page.</value>
   </data>
   <data name="Error_ApplyFailed" xml:space="preserve">
     <value>Apply failed:
-{0}</value>
+{0}
+
+Try again. If it keeps failing, save a copy of the document and reopen it.</value>
   </data>
   <data name="Error_SaveFailed" xml:space="preserve">
     <value>Save failed:
-{0}</value>
+{0}
+
+Choose a different folder or file name, make sure the file is not open in another program, and check that the disk has free space.</value>
   </data>
   <data name="Status_ReorderModeDragThumbnailsOr" xml:space="preserve">
     <value>Reorder mode: drag thumbnails, or Ctrl+Up/Ctrl+Down to move the selected page, then Save order…</value>
@@ -928,7 +978,7 @@
     <value>Close {0}</value>
   </data>
   <data name="Recovery_Prompt" xml:space="preserve">
-    <value>PageForge closed unexpectedly with unsaved changes in {0} document(s):{1}{1}{2}{1}{1}Reopen the recovered copies? They open as new documents — your original files have not been changed.</value>
+    <value>PageForge closed unexpectedly with unsaved changes in {0} document(s):{1}{1}{2}{1}{1}Reopen the recovered copies? They open as new documents — your original files have not been changed. Choosing No permanently discards the recovered changes.</value>
   </data>
   <data name="Recovery_Title" xml:space="preserve">
     <value>PageForge — recover unsaved work</value>
@@ -954,7 +1004,9 @@ Apply it anyway?</value>
     <value>Edit not applied.</value>
   </data>
   <data name="Error_FontFidelityMessage" xml:space="preserve">
-    <value>The new text cannot be rendered by the run's font.</value>
+    <value>The new text cannot be rendered by the run's font.
+
+Use only characters the font supports, or shorten the change.</value>
   </data>
   <data name="Error_FontFidelity_Title" xml:space="preserve">
     <value>Font fidelity</value>
@@ -964,7 +1016,9 @@ Apply it anyway?</value>
   </data>
   <data name="Error_SigningFailed" xml:space="preserve">
     <value>Signing failed:
-{0}</value>
+{0}
+
+Check the certificate file and its password, then try again.</value>
   </data>
   <data name="Signatures_None" xml:space="preserve">
     <value>This document carries no signature fields.</value>
@@ -974,7 +1028,9 @@ Apply it anyway?</value>
   </data>
   <data name="Error_CheckingSignaturesFailed" xml:space="preserve">
     <value>Checking signatures failed:
-{0}</value>
+{0}
+
+Close and reopen the document, then try again. The signature may be damaged or use an unsupported format.</value>
   </data>
   <data name="FormFill_PageImage_Name" xml:space="preserve">
     <value>Form fill page {0}</value>
@@ -992,7 +1048,7 @@ Apply it anyway?</value>
     <value>Set field {0}.</value>
   </data>
   <data name="FormFill_ConfirmFlatten" xml:space="preserve">
-    <value>Flatten the form? Every field value is baked into static page content and the fields stop being interactive.</value>
+    <value>Flatten the form? Every field value is baked into static page content and the fields stop being interactive. This cannot be reversed once the document is saved.</value>
   </data>
   <data name="FormFill_Flattened" xml:space="preserve">
     <value>Form flattened — fields are now static page content.</value>
@@ -1019,7 +1075,9 @@ Apply it anyway?</value>
     <value>Click an object to select; drag to move; drag a handle to resize.</value>
   </data>
   <data name="Error_UnsupportedImageFormat" xml:space="preserve">
-    <value>Unsupported image format '.{0}' for object replace.</value>
+    <value>Unsupported image format '.{0}' for object replace.
+
+Choose a PNG or JPEG image instead.</value>
   </data>
   <data name="Redact_PageImage_Name" xml:space="preserve">
     <value>Redact page {0}</value>
@@ -1059,5 +1117,44 @@ Apply it anyway?</value>
   </data>
   <data name="SignPlace_SizingBox" xml:space="preserve">
     <value>Sizing a box: arrows resize, Ctrl+arrows move, Enter places it, Esc cancels.</value>
+  </data>
+  <data name="Confirm_DeletePage" xml:space="preserve">
+    <value>Delete page {0}?
+
+A new copy of the document without this page is saved and opens in a new tab. Your original file is not changed.</value>
+  </data>
+  <data name="Confirm_FlattenAnnotations" xml:space="preserve">
+    <value>Flatten annotations?
+
+Highlights are baked into the page in a new copy and can no longer be edited or removed there. Your original file is not changed.</value>
+  </data>
+  <data name="Confirm_CloseUnsaved" xml:space="preserve">
+    <value>"{0}" has unsaved changes.
+
+Closing it permanently discards them. This cannot be undone.
+
+Close without saving?</value>
+  </data>
+  <data name="Confirm_ExitUnsaved" xml:space="preserve">
+    <value>{0} document(s) have unsaved changes:
+
+{1}
+
+Quitting permanently discards them. This cannot be undone.
+
+Quit without saving?</value>
+  </data>
+  <data name="Recovery_ConfirmDiscard" xml:space="preserve">
+    <value>Discard the recovered changes?
+
+They are permanently deleted and cannot be brought back. Choose No to keep them; you will be asked again next time.</value>
+  </data>
+  <data name="Snip_ConfirmClear" xml:space="preserve">
+    <value>Clear all marks on this snip? This cannot be undone.</value>
+  </data>
+  <data name="Snip_ConfirmPageChange" xml:space="preserve">
+    <value>Changing page clears the marks you drew on this page, and they cannot be brought back.
+
+Change page anyway?</value>
   </data>
 </root>

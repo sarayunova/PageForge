@@ -74,9 +74,9 @@ status changes are announced via `LiveSetting`. Remaining gaps are structural an
 documented as PARTIAL per criterion: heading
 semantics cannot emit the native UIA `HeadingLevel` property on WPF .NET 8 (no
 server-side heading API exists there; it arrives in .NET 10 — the WinUI 3 port in
-`src/PageForge.App` should use `AutomationProperties.HeadingLevel`), and error
-dialogs offer no corrective suggestions (3.3.1/3.3.3/3.3.4 left for a product-level
-decision). The remediation log and per-criterion notes below are tracked against
+`src/PageForge.App` should use `AutomationProperties.HeadingLevel`). Error dialogs
+now carry corrective suggestions and destructive actions confirm first
+(3.3.1/3.3.3/3.3.4, completed 2026-09-29). The remediation log and per-criterion notes below are tracked against
 the Phase 6 "WCAG 2.1 AA pass on core screens" exit criterion.
 
 Legend: **PASS** — meets the criterion in scope; **PARTIAL** — some instances
@@ -250,17 +250,25 @@ complete on pointer-up (2.5.2).
 
 ### 3.1.1 Language of Page (A) — **PASS** (OS-provided; no fragment content).
 
-### 3.3.1 Error Identification (A), 3.3.3 Error Suggestion (AA) — **PARTIAL**
-Failures surface via `MessageBox` — identified, but suggestions beyond a retry
-are absent.
+### 3.3.1 Error Identification (A), 3.3.3 Error Suggestion (AA) — **PASS** (2026-09-29)
+Every failure dialog names what failed, quotes the reason, and ends with a
+concrete next step (`Resources/UiStrings.resx`, the `Error_*` and `Snip_Failed`
+entries). 29 messages were extended; `Print_Range_Invalid` already carried an
+example.
 
 ### 3.3.2 Labels or Instructions (A) — **PASS**
 Every input has an associated label or name; `ProtectDialog` groups permissions;
 the reorder/object/redact hint lines describe the keyboard path.
 
-### 3.3.4 Error Prevention (AA) — **PARTIAL**
-Destructive Apply in RedactView confirms via `MessageBox`; form/protect
-operations have no in-flow recovery.
+### 3.3.4 Error Prevention (AA) — **PASS** (2026-09-29)
+Product rule (maintainer): irreversible deletion is warned about, and every
+destructive action asks first. In force now: Redact Apply, Flatten form, Flatten
+annotations, Delete page, closing a tab with unsaved edits, quitting with unsaved
+edits, declining crash recovery (default answer No, kept for next launch), and
+Snip Clear marks / page change with marks. Actions that write a new file leave
+the original untouched and go through the Save dialog's overwrite prompt.
+Not covered by an automated test: the dialogs need a document with unsaved
+edits, which the UI suite cannot yet stage; verify by hand.
 
 ### 4.1.1 Parsing (A), 4.1.2 Name Role Value (A) — **PASS** (re-verified 2026-09-20)
 
@@ -309,10 +317,9 @@ announced.
 | 11 | Text resizing (1.4.4) | ✅ `PerMonitorV2` manifest + hardcoded FontSizes bumped to ≥12 |
 | 12 | Resize handles / non-text contrast (1.4.11) | ✅ 12 px handles (15 px hit-test), unselected/field strokes → `#1f74c6` ≈4.8:1 |
 
-Remaining deferred (tracked as PARTIAL): form-field cards and redaction-region
-rows as real list items (1.3.1/4.1.2), native `HeadingLevel` emission (requires
-WPF .NET 10 or the WinUI 3 port), and error-message suggestions / in-flow error
-prevention (3.3.1/3.3.3/3.3.4 — left for a product decision).
+Remaining deferred (tracked as PARTIAL): native `HeadingLevel` emission
+(requires WPF .NET 10 or the WinUI 3 port), and 2.4.5 Multiple Ways. Error
+suggestions and error prevention (3.3.1/3.3.3/3.3.4) were completed 2026-09-29.
 
 ## Verification
 
