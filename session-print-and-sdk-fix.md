@@ -95,4 +95,4 @@ fix (not just keep it local).
   Copy/Save, no marks); no move/resize/delete of an individual mark.
 - Verified by the user in the live app: crop is correct and annotations work.
 - Commits `198299b` (snip) and `7e6160a` (annotation), pushed to origin.
-- Still open: UI-smoke assertions for the Print and Snip buttons.
+- UI-smoke coverage added: Print opens the preview showing the page; Snip opens, and Whole page enables Copy/Save. Nothing from this thread is open.

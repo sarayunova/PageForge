@@ -1642,6 +1642,148 @@ public class UiSmokeTests
         await PageForgeApp.WaitForDialogToCloseAsync(dialog);
     }
 
+    /// <summary>
+    /// Print (FR-VIEW-05) opens PageForge's own preview, not the OS print dialog.
+    ///
+    /// The toolbar button used to be unprotected: a Click handler that threw, or
+    /// a preview that opened empty, would pass every other check. The preview is
+    /// PageForge's own window, so unlike the Windows print dialog it can be
+    /// driven; the printer hand-off after it is Windows' code and is not
+    /// exercised, the same trade as the save dialog.
+    /// </summary>
+    [Fact]
+    public async Task Print_opens_the_preview_showing_the_page()
+    {
+        await using PageForgeApp app = await PageForgeApp.LaunchAsync();
+        await app.WaitForVisibleAsync("PageIndicatorText");
+
+        await OpenModalAsync(app, "Print");
+        AutomationElement preview = await WaitForOwnedWindowAsync(app, "Print preview - ");
+        try
+        {
+            AutomationElement label = await WaitForDescendantAsync(preview, "Page 1 of 1");
+            Assert.False(label.Current.IsOffscreen);
+            Assert.NotNull(FindButton(preview, "Print..."));
+        }
+        finally
+        {
+            CloseWindow(preview);
+        }
+    }
+
+    /// <summary>
+    /// Snip (FR-VIEW-06): the window opens, Copy/Save start disabled (nothing is
+    /// chosen), and choosing the whole page - the keyboard path - enables them.
+    /// That last step is the point: it runs the selection code, so a window that
+    /// opened but could never produce a snip would fail here.
+    /// </summary>
+    [Fact]
+    public async Task Snip_opens_and_choosing_the_whole_page_enables_copy_and_save()
+    {
+        await using PageForgeApp app = await PageForgeApp.LaunchAsync();
+        await app.WaitForVisibleAsync("PageIndicatorText");
+
+        await OpenModalAsync(app, "Snip");
+        AutomationElement snip = await WaitForOwnedWindowAsync(app, "Snip - ");
+        try
+        {
+            AutomationElement copy = FindButton(snip, "Copy")
+                ?? throw new InvalidOperationException("The Copy button was not found.");
+            AutomationElement save = FindButton(snip, "Save PNG...")
+                ?? throw new InvalidOperationException("The Save PNG button was not found.");
+            Assert.False(copy.Current.IsEnabled);
+            Assert.False(save.Current.IsEnabled);
+
+            PageForgeApp.Activate(FindButton(snip, "Select the whole page")
+                ?? throw new InvalidOperationException("The Whole page button was not found."));
+            await Task.Delay(300);
+
+            Assert.True(FindButton(snip, "Copy")!.Current.IsEnabled);
+            Assert.True(FindButton(snip, "Save PNG...")!.Current.IsEnabled);
+        }
+        finally
+        {
+            CloseWindow(snip);
+        }
+    }
+
+    /// <summary>Presses a toolbar button whose handler opens a modal window. Run
+    /// off the test thread so a blocking Invoke cannot hang the test before the
+    /// window is looked for.</summary>
+    private static async Task OpenModalAsync(PageForgeApp app, string buttonName)
+    {
+        AutomationElement button = app.FindByName(buttonName)
+            ?? throw new InvalidOperationException($"The {buttonName} toolbar button was not found.");
+        Assert.True(button.Current.IsEnabled);
+        _ = Task.Run(() => PageForgeApp.Activate(button));
+        await Task.Yield();
+    }
+
+    /// <summary>A modal window is owned by the main window, and UI Automation
+    /// lists an owned window under its owner rather than under the desktop, so
+    /// both places are searched.</summary>
+    private static async Task<AutomationElement> WaitForOwnedWindowAsync(PageForgeApp app, string titlePrefix)
+    {
+        DateTime deadline = DateTime.UtcNow.AddSeconds(15);
+        while (DateTime.UtcNow < deadline)
+        {
+            foreach (AutomationElement window in AutomationElement.RootElement
+                .FindAll(TreeScope.Children, Condition.TrueCondition)
+                .Cast<AutomationElement>()
+                .Concat(app.Window.FindAll(TreeScope.Children, Condition.TrueCondition).Cast<AutomationElement>())
+                .ToList())
+            {
+                try
+                {
+                    if (window.Current.Name.StartsWith(titlePrefix, StringComparison.Ordinal))
+                    {
+                        return window;
+                    }
+                }
+                catch (ElementNotAvailableException)
+                {
+                }
+            }
+
+            await Task.Delay(200);
+        }
+
+        throw new TimeoutException($"No window titled '{titlePrefix}…' appeared.");
+    }
+
+    private static async Task<AutomationElement> WaitForDescendantAsync(AutomationElement root, string name)
+    {
+        DateTime deadline = DateTime.UtcNow.AddSeconds(15);
+        while (DateTime.UtcNow < deadline)
+        {
+            AutomationElement? found = root.FindFirst(
+                TreeScope.Descendants, new PropertyCondition(AutomationElement.NameProperty, name));
+            if (found is not null)
+            {
+                return found;
+            }
+
+            await Task.Delay(200);
+        }
+
+        throw new TimeoutException($"'{name}' never appeared.");
+    }
+
+    private static AutomationElement? FindButton(AutomationElement root, string name)
+        => root.FindFirst(
+            TreeScope.Descendants,
+            new AndCondition(
+                new PropertyCondition(AutomationElement.NameProperty, name),
+                new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button)));
+
+    private static void CloseWindow(AutomationElement window)
+    {
+        if (window.TryGetCurrentPattern(WindowPattern.Pattern, out object? pattern))
+        {
+            ((WindowPattern)pattern).Close();
+        }
+    }
+
     private static string ReorderedPath()
         => Path.Combine(Path.GetTempPath(), $"pf-ui-reordered-{Guid.NewGuid():N}.pdf");
 }

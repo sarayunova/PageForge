@@ -55,13 +55,13 @@ internal sealed class SnipWindow : Window
     // is painted over the 300 DPI crop, so marks stay crisp at print resolution.
     private enum Tool { Select, Pen, Arrow, Box, Highlight, Text }
 
-    private static readonly (string Key, Color Color)[] Palette =
+    private static readonly (string Name, Color Color)[] Palette =
     {
-        ("Snip_Color_Red", Color.FromRgb(0xd9, 0x2d, 0x20)),
-        ("Snip_Color_Blue", Color.FromRgb(0x1a, 0x56, 0xdb)),
-        ("Snip_Color_Green", Color.FromRgb(0x1e, 0x8e, 0x3e)),
-        ("Snip_Color_Yellow", Color.FromRgb(0xf5, 0xc4, 0x00)),
-        ("Snip_Color_Black", Color.FromRgb(0x20, 0x20, 0x20)),
+        (UiStrings.Get("Snip_Color_Red"), Color.FromRgb(0xd9, 0x2d, 0x20)),
+        (UiStrings.Get("Snip_Color_Blue"), Color.FromRgb(0x1a, 0x56, 0xdb)),
+        (UiStrings.Get("Snip_Color_Green"), Color.FromRgb(0x1e, 0x8e, 0x3e)),
+        (UiStrings.Get("Snip_Color_Yellow"), Color.FromRgb(0xf5, 0xc4, 0x00)),
+        (UiStrings.Get("Snip_Color_Black"), Color.FromRgb(0x20, 0x20, 0x20)),
     };
 
     private readonly Canvas _ink = new() { IsHitTestVisible = false };
@@ -276,9 +276,9 @@ internal sealed class SnipWindow : Window
         var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(12, 0, 12, 8) };
         var toggles = new List<(ToggleButton Button, Tool Tool)>();
 
-        void AddTool(string key, Tool tool)
+        void AddTool(string label, Tool tool)
         {
-            var toggle = new ToggleButton { Content = UiStrings.Get(key), Padding = new Thickness(10, 3, 10, 3), Margin = new Thickness(0, 0, 4, 0), IsChecked = tool == _tool };
+            var toggle = new ToggleButton { Content = label, Padding = new Thickness(10, 3, 10, 3), Margin = new Thickness(0, 0, 4, 0), IsChecked = tool == _tool };
             toggle.Click += (_, _) =>
             {
                 CommitText();
@@ -299,15 +299,15 @@ internal sealed class SnipWindow : Window
             row.Children.Add(toggle);
         }
 
-        AddTool("Snip_Tool_Select", Tool.Select);
-        AddTool("Snip_Tool_Pen", Tool.Pen);
-        AddTool("Snip_Tool_Arrow", Tool.Arrow);
-        AddTool("Snip_Tool_Box", Tool.Box);
-        AddTool("Snip_Tool_Highlight", Tool.Highlight);
-        AddTool("Snip_Tool_Text", Tool.Text);
+        AddTool(UiStrings.Get("Snip_Tool_Select"), Tool.Select);
+        AddTool(UiStrings.Get("Snip_Tool_Pen"), Tool.Pen);
+        AddTool(UiStrings.Get("Snip_Tool_Arrow"), Tool.Arrow);
+        AddTool(UiStrings.Get("Snip_Tool_Box"), Tool.Box);
+        AddTool(UiStrings.Get("Snip_Tool_Highlight"), Tool.Highlight);
+        AddTool(UiStrings.Get("Snip_Tool_Text"), Tool.Text);
         row.Children.Add(new Separator { Margin = new Thickness(8, 0, 8, 0) });
 
-        foreach ((string key, Color color) in Palette)
+        foreach ((string name, Color color) in Palette)
         {
             var swatch = new Button
             {
@@ -317,9 +317,9 @@ internal sealed class SnipWindow : Window
                 Background = new SolidColorBrush(color),
                 BorderBrush = Brushes.Black,
                 BorderThickness = new Thickness(color == _color ? 3 : 1),
-                ToolTip = UiStrings.Get(key),
+                ToolTip = name,
             };
-            AutomationProperties.SetName(swatch, UiStrings.Get(key));
+            AutomationProperties.SetName(swatch, name);
             swatch.Click += (_, _) =>
             {
                 _color = color;
