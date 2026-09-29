@@ -1776,6 +1776,22 @@ public class UiSmokeTests
                 new PropertyCondition(AutomationElement.NameProperty, name),
                 new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button)));
 
+    [Fact]
+    public async Task Closing_the_window_quits_cleanly_instead_of_crashing()
+    {
+        // Regression: the quit confirmation cancelled the close and re-issued it from
+        // inside the same Closing event, which WPF rejects with an unhandled
+        // InvalidOperationException. Every quit crashed, and the next start offered
+        // the leftover recovery folder as though the previous run had died.
+        await using PageForgeApp app = await PageForgeApp.LaunchAsync();
+        _ = await app.WaitForVisibleAsync("PageIndicatorText");
+
+        CloseWindow(app.Window);
+
+        Assert.True(app.Process.WaitForExit(20_000), "The app did not exit after its window was closed.");
+        Assert.Equal(0, app.Process.ExitCode);
+    }
+
     private static void CloseWindow(AutomationElement window)
     {
         if (window.TryGetCurrentPattern(WindowPattern.Pattern, out object? pattern))

@@ -124,6 +124,13 @@ version heading when the tag is pushed.
 
 ### Fixed before the first release
 
+- **Quitting crashed the app.** The quit confirmation cancelled the window close and
+  re-issued it from inside the same Closing event, which WPF rejects with an
+  unhandled `InvalidOperationException` ("Cannot ... Close ... while a Window is
+  closing"). Every quit died with exit code `0xE0434352`, and the recovery folder it
+  left behind was offered at the next start as a crash. The second close is now
+  posted after the event returns, with a UI test that requires exit code 0.
+
 - **Redaction options were silently ignored.** The native option file is one
   `key<TAB>value` record per line, but the parser split on tabs only, so every
   setting except "no black box" was dropped and a caller asking to keep images got

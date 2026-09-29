@@ -241,8 +241,13 @@ public partial class MainWindow : Controls.FluentShellWindow
             }
         }
 
+        // Posted, never called inline. When nothing is unsaved the checks above finish
+        // synchronously, so this line runs INSIDE the Closing event that is still being
+        // handled, and WPF throws "Cannot ... Close ... while a Window is closing" - an
+        // unhandled exception on the dispatcher that killed the app on every quit and
+        // left its recovery folder behind to be offered as a "crash".
         _exitConfirmed = true;
-        Close();
+        _ = Dispatcher.BeginInvoke(new Action(Close), System.Windows.Threading.DispatcherPriority.Background);
     }
 
     private void CloseTab(TabItem tab, DocumentTabViewModel vm)

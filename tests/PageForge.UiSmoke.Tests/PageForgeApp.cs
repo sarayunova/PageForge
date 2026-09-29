@@ -32,6 +32,9 @@ internal sealed class PageForgeApp : IAsyncDisposable
 
     public AutomationElement Window { get; }
 
+    /// <summary>The app process, for tests that care how it ended.</summary>
+    public Process Process => _process ?? throw new InvalidOperationException("The app process was not started.");
+
     public static string FindRepoRoot()
     {
         string? dir = AppContext.BaseDirectory;
