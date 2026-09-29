@@ -1090,36 +1090,20 @@ public sealed class DocumentTabViewModel : ObservableObject
         }
     }
 
-    /// <summary>Renders every page from <paramref name="firstPage"/> to
-    /// <paramref name="lastPage"/> (both 0-based, inclusive) at print quality
-    /// (300 DPI) for the Windows print pipeline (FR-VIEW-05). The current
+    /// <summary>Renders one page (0-based) for the Windows print pipeline or the
+    /// print preview (FR-VIEW-05) at <paramref name="dpi"/> — 300 for the printer,
+    /// far less for the on-screen preview. Pages are rendered one at a time on
+    /// demand so a very long document never sits in memory whole. The current
     /// in-memory state — including unsaved text/object edits — is what gets
-    /// printed, matching what the user sees on screen.</summary>
-    public async Task<IReadOnlyList<PrintPage>> RenderPagesForPrintAsync(
-        int firstPage, int lastPage, CancellationToken ct = default)
+    /// rendered, matching what the user sees on screen. Deliberately does not
+    /// touch <c>IsBusy</c>: the printer path calls this from a worker thread.</summary>
+    public async Task<PrintPage> RenderPageForPrintAsync(
+        int pageIndex, float dpi, CancellationToken ct = default)
     {
         GuardPageCount();
-        firstPage = Math.Max(0, firstPage);
-        lastPage = Math.Min(_doc.PageCount - 1, lastPage);
-
-        var pages = new List<PrintPage>();
-        IsBusy = true;
-        try
-        {
-            for (int i = firstPage; i <= lastPage; i++)
-            {
-                ct.ThrowIfCancellationRequested();
-                PdfPageRegion size = await _doc.Engine.GetPageSizeAsync(i, ct).ConfigureAwait(false);
-                RenderedPdfPage rendered = await _doc.Engine.RenderPageToPngAsync(i, 300f, ct).ConfigureAwait(false);
-                pages.Add(new PrintPage(size, rendered.PngBytes));
-            }
-        }
-        finally
-        {
-            IsBusy = false;
-        }
-
-        return pages;
+        PdfPageRegion size = await _doc.Engine.GetPageSizeAsync(pageIndex, ct).ConfigureAwait(false);
+        RenderedPdfPage rendered = await _doc.Engine.RenderPageToPngAsync(pageIndex, dpi, ct).ConfigureAwait(false);
+        return new PrintPage(size, rendered.PngBytes);
     }
 
     /// <summary>Runs local OCR over the whole document, fully offline, and writes

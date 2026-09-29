@@ -966,116 +966,55 @@ public partial class DocumentView : UserControl
         }
     }
 
-    /// <summary>Print (FR-VIEW-05): renders every page through the engine at
-    /// 300 DPI — the same in-memory state the user sees on screen, unsaved edits
-    /// included — and opens a print preview of exactly those pages. Printing
-    /// happens from the preview (its Print button / Ctrl+P), via
-    /// <see cref="PrintPages"/>.</summary>
-    private async void Print_Click(object sender, RoutedEventArgs e)
+    /// <summary>Print (FR-VIEW-05): opens the print preview, which shows one page
+    /// at a time (rendered on demand) and lets the user pick All / Current page /
+    /// a page range. Printing from it goes through <see cref="PrintRange"/>.</summary>
+    private void Print_Click(object sender, RoutedEventArgs e)
     {
         if (_vm is null)
         {
             return;
         }
 
-        try
+        DocumentTabViewModel vm = _vm;
+        var preview = new PrintPreviewWindow(
+            vm.PageCount,
+            vm.CurrentPageIndex,
+            vm.DisplayName,
+            async (pageIndex, ct) => await Task.Run(() => vm.RenderPageForPrintAsync(pageIndex, 100f, ct), ct),
+            (first, last) => PrintRange(vm, first, last))
         {
-            IReadOnlyList<PrintPage> pages = await _vm.RenderPagesForPrintAsync(0, _vm.PageCount - 1);
-            var preview = new PrintPreviewWindow(
-                BuildFixedDocument(pages),
-                _vm.DisplayName,
-                currentIndex => PrintPages(pages, currentIndex))
-            {
-                Owner = Window.GetWindow(this),
-            };
-            preview.ShowDialog();
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show(UiStrings.Format("Error_PrintFailed", ex.Message), UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
-        }
+            Owner = Window.GetWindow(this),
+        };
+        preview.ShowDialog();
     }
 
-    /// <summary>Shows the Windows print dialog and prints the chosen pages: all,
-    /// the page the preview is showing (<paramref name="currentIndex"/> — the
-    /// dialog has no notion of "current"), or a user-typed range, per its
-    /// All/Current page/Pages selector. The dialog still handles
-    /// printer/paper/copies exactly as for any other document.</summary>
-    private void PrintPages(IReadOnlyList<PrintPage> pages, int currentIndex)
+    /// <summary>Shows the Windows print dialog (printer, paper, copies) and prints
+    /// pages <paramref name="firstPage"/>..<paramref name="lastPage"/> (0-based,
+    /// inclusive). Pages are rendered at 300 DPI lazily, one at a time as the
+    /// spooler asks for them, so a range of hundreds of pages stays cheap.
+    /// Returns true when the user actually sent the job.</summary>
+    private bool PrintRange(DocumentTabViewModel vm, int firstPage, int lastPage)
     {
-        int pageCount = pages.Count;
-        var printDialog = new PrintDialog
-        {
-            UserPageRangeEnabled = true,
-            MinPage = 1,
-            MaxPage = (uint)pageCount,
-        };
+        var printDialog = new PrintDialog();
         if (printDialog.ShowDialog() != true)
         {
-            return;
-        }
-
-        (int firstPage, int lastPage) = printDialog.PageRangeSelection switch
-        {
-            PageRangeSelection.CurrentPage => (currentIndex, currentIndex),
-            PageRangeSelection.UserPages => (
-                Math.Clamp(printDialog.PageRange.PageFrom - 1, 0, pageCount - 1),
-                Math.Clamp(printDialog.PageRange.PageTo - 1, 0, pageCount - 1)),
-            _ => (0, pageCount - 1),
-        };
-        if (lastPage < firstPage)
-        {
-            (firstPage, lastPage) = (lastPage, firstPage);
+            return false;
         }
 
         try
         {
-            FixedDocument fixedDocument = BuildFixedDocument(pages.Skip(firstPage).Take(lastPage - firstPage + 1));
-            printDialog.PrintDocument(fixedDocument.DocumentPaginator, _vm?.DisplayName ?? string.Empty);
+            var paginator = new PdfPrintPaginator(
+                lastPage - firstPage + 1,
+                index => Task.Run(() => vm.RenderPageForPrintAsync(firstPage + index, 300f)).GetAwaiter().GetResult());
+            printDialog.PrintDocument(paginator, vm.DisplayName);
+            return true;
         }
         catch (Exception ex)
         {
             MessageBox.Show(UiStrings.Format("Error_PrintFailed", ex.Message), UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
+            return false;
         }
-    }
-
-    /// <summary>One <see cref="FixedPage"/> per rendered page, sized to the PDF
-    /// page's own dimensions (pt to DIP at 96/72).</summary>
-    private static FixedDocument BuildFixedDocument(IEnumerable<PrintPage> pages)
-    {
-        var fixedDocument = new FixedDocument();
-        foreach (PrintPage page in pages)
-        {
-            double widthDip = page.Size.WidthPt * 96.0 / 72.0;
-            double heightDip = page.Size.HeightPt * 96.0 / 72.0;
-
-            var bitmap = new BitmapImage();
-            using (var stream = new MemoryStream(page.PngBytes))
-            {
-                bitmap.BeginInit();
-                bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                bitmap.StreamSource = stream;
-                bitmap.EndInit();
-            }
-            bitmap.Freeze();
-
-            var image = new System.Windows.Controls.Image
-            {
-                Source = bitmap,
-                Width = widthDip,
-                Height = heightDip,
-                Stretch = Stretch.Fill,
-            };
-
-            var fixedPage = new FixedPage { Width = widthDip, Height = heightDip };
-            fixedPage.Children.Add(image);
-
-            var pageContent = new PageContent();
-            ((IAddChild)pageContent).AddChild(fixedPage);
-            fixedDocument.Pages.Add(pageContent);
-        }
-
-        return fixedDocument;
     }
 
     private void EditModeToggle_Changed(object sender, RoutedEventArgs e)

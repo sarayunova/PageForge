@@ -745,6 +745,24 @@
   <data name="Print_Preview_Title" xml:space="preserve">
     <value>Print preview - {0}</value>
   </data>
+  <data name="Print_Preview_Page" xml:space="preserve">
+    <value>Page {0} of {1}</value>
+  </data>
+  <data name="Print_Range_All" xml:space="preserve">
+    <value>All pages</value>
+  </data>
+  <data name="Print_Range_Current" xml:space="preserve">
+    <value>Current page</value>
+  </data>
+  <data name="Print_Range_Pages" xml:space="preserve">
+    <value>Pages:</value>
+  </data>
+  <data name="Print_Button" xml:space="preserve">
+    <value>Print...</value>
+  </data>
+  <data name="Print_Range_Invalid" xml:space="preserve">
+    <value>Enter a page or range between 1 and {0}, for example 7 or 7-10.</value>
+  </data>
   <data name="Error_PrintFailed" xml:space="preserve">
     <value>Print failed:
 {0}</value>
