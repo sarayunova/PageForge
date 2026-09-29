@@ -801,6 +801,11 @@ public partial class App : Application
             shell.DisposeRecovery();
         }
 
+        // Logged so a recovery prompt at the next start can be told apart from a
+        // crash: an exit line here means the user quit, and its absence means the
+        // process was killed (Task Manager, a stopped debugger, a closed terminal).
+        Diagnostics.AppLog.For(typeof(App)).LogInformation("PageForge exiting cleanly (exit code {Code}).", e.ApplicationExitCode);
+
         // Flush and release the log file before the process goes away.
         Diagnostics.AppLog.Shutdown();
         base.OnExit(e);
