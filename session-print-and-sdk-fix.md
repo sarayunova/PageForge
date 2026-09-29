@@ -66,3 +66,14 @@ fix (not just keep it local).
   enablement (not the OS dialog itself, matching the existing Save-dialog
   trade-off already documented in AGENTS.md for issue #6).
 - Commit `ff55843` is local only — not pushed to origin.
+
+## Update: print preview (later the same day)
+- The Windows print dialog's own preview pane says "This app doesn't support
+  print preview" for WPF `PrintDialog`, so PageForge has its own preview:
+  `Views/PrintPreviewWindow.cs` (one page at a time, rendered on demand at
+  100 DPI, All / Current / range) and `Views/PdfPrintPaginator.cs` (streams
+  300 DPI pages to the spooler lazily). A first version that rendered every
+  page up front was replaced because it cannot work for a 1,273-page PDF.
+- Verified by the user on a real document: preview works and printing works.
+- Commits `24272a5` and `642e347`, pushed to origin.
+- Still open: a UI-smoke assertion for the Print button's presence.
