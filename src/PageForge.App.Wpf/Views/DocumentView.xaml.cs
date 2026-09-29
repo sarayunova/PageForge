@@ -966,12 +966,16 @@ public partial class DocumentView : UserControl
         }
     }
 
-    /// <summary>Prints the whole open document to a Windows printer (FR-VIEW-05).
+    /// <summary>Prints the open document to a Windows printer (FR-VIEW-05), all
+    /// pages, the current page, or a user-typed range, per the Windows print
+    /// dialog's own All/Current page/Pages selector (<see cref="PrintDialog.UserPageRangeEnabled"/>
+    /// exposes it; the dialog has no notion of "current", so that choice is
+    /// resolved against <see cref="DocumentTabViewModel.CurrentPageIndex"/> here).
     /// Each page is rendered by the engine at 300 DPI — the same in-memory state
     /// the user sees on screen, unsaved edits included — and laid out as a
     /// <see cref="FixedDocument"/> page sized to the PDF page's own dimensions,
-    /// so the Windows print dialog handles printer/paper/copies selection exactly
-    /// as it would for any other document.</summary>
+    /// so the Windows print dialog still handles printer/paper/copies selection
+    /// exactly as it would for any other document.</summary>
     private async void Print_Click(object sender, RoutedEventArgs e)
     {
         if (_vm is null)
@@ -979,15 +983,34 @@ public partial class DocumentView : UserControl
             return;
         }
 
-        var printDialog = new PrintDialog();
+        int pageCount = _vm.PageCount;
+        var printDialog = new PrintDialog
+        {
+            UserPageRangeEnabled = true,
+            MinPage = 1,
+            MaxPage = (uint)pageCount,
+        };
         if (printDialog.ShowDialog() != true)
         {
             return;
         }
 
+        (int firstPage, int lastPage) = printDialog.PageRangeSelection switch
+        {
+            PageRangeSelection.CurrentPage => (_vm.CurrentPageIndex, _vm.CurrentPageIndex),
+            PageRangeSelection.UserPages => (
+                Math.Clamp(printDialog.PageRange.PageFrom - 1, 0, pageCount - 1),
+                Math.Clamp(printDialog.PageRange.PageTo - 1, 0, pageCount - 1)),
+            _ => (0, pageCount - 1),
+        };
+        if (lastPage < firstPage)
+        {
+            (firstPage, lastPage) = (lastPage, firstPage);
+        }
+
         try
         {
-            IReadOnlyList<PrintPage> pages = await _vm.RenderPagesForPrintAsync(0, _vm.PageCount - 1);
+            IReadOnlyList<PrintPage> pages = await _vm.RenderPagesForPrintAsync(firstPage, lastPage);
 
             var fixedDocument = new FixedDocument();
             foreach (PrintPage page in pages)
