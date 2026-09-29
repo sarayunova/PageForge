@@ -992,6 +992,66 @@ public sealed class MuPdfEngine : IPdfEngine
         }
     }
 
+    public ValueTask<PdfRect> CoverAndReplaceTextAsync(
+        int pageIndex, ScanTextReplacement replacement, CancellationToken cancellationToken = default)
+        => CoverAndReplaceTextCoreAsync(pageIndex, replacement, cancellationToken);
+
+    private async ValueTask<PdfRect> CoverAndReplaceTextCoreAsync(
+        int pageIndex, ScanTextReplacement r, CancellationToken ct)
+    {
+        if (pageIndex < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(pageIndex));
+        }
+
+        ArgumentNullException.ThrowIfNull(r);
+        ArgumentException.ThrowIfNullOrEmpty(r.Text);
+
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            RequireDocument();
+
+            string textPath = Path.Combine(Path.GetTempPath(), $"pageforge-scantext-{Guid.NewGuid():N}.txt");
+            try
+            {
+                await File.WriteAllTextAsync(textPath, r.Text, JobUtf8, ct).ConfigureAwait(false);
+                var box = new double[4];
+                if (MuPdfShimBindings.pf_cover_replace_text(
+                        _context, _document, pageIndex,
+                        r.Cover.X0, r.Cover.Y0, r.Cover.X1, r.Cover.Y1,
+                        r.Background.R, r.Background.G, r.Background.B,
+                        r.Ink.R, r.Ink.G, r.Ink.B,
+                        r.FontSize, r.BaselineX, r.BaselineY,
+                        Utf8Z(textPath), box)
+                    != MuPdfShimBindings.PfOk)
+                {
+                    throw new InvalidOperationException(
+                        $"Failed to replace scanned text on page {pageIndex}: {LastError()}");
+                }
+
+                return new PdfRect(box[0], box[1], box[2], box[3]);
+            }
+            finally
+            {
+                try
+                {
+                    File.Delete(textPath);
+                }
+                catch (IOException)
+                {
+                }
+                catch (UnauthorizedAccessException)
+                {
+                }
+            }
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     public ValueTask AddRedactionAsync(
         int pageIndex, PdfRect bounds, CancellationToken cancellationToken = default)
         => AddRedactionCoreAsync(pageIndex, bounds, cancellationToken);

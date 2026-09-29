@@ -6,6 +6,9 @@ using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using PageForge.App.Wpf.Resources;
 using PageForge.Core.Editing;
 using PageForge.Core.Pdf;
 using PageForge.Core.View;
@@ -892,6 +895,90 @@ public sealed class DocumentTabViewModel : ObservableObject
         {
             _editGate.Release();
         }
+    }
+
+    /// <summary>
+    /// Cover-and-replace edit of a scanned-text run (the OCR layer cannot be rewritten
+    /// in place, and rewriting it would not change what the page shows). Covers the
+    /// old words in the page's own background colour and shows the new text on top;
+    /// the scan image itself is untouched. Same outcome contract as
+    /// <see cref="EditTextRunAsync"/>: an overflow that would collide with a
+    /// neighbouring line asks for confirmation first.
+    /// </summary>
+    public async Task<TextEditOutcome> ReplaceScanTextAsync(
+        PdfTextRun run, string newText, bool allowCollision, CancellationToken ct = default)
+    {
+        await _editGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            GuardPageCount();
+            int page = Math.Min(_doc.CurrentPage, _doc.PageCount - 1);
+
+            if (!ScanTextPlanner.IsEncodable(newText))
+            {
+                return TextEditOutcome.Blocked(UiStrings.Get("Status_ScanTextCharacters"));
+            }
+
+            PreparedTextEdit prepared = await TextEditService
+                .PrepareRewriteAsync(_doc.Engine, page, run.Index, newText, options: null, cancellationToken: ct).ConfigureAwait(false);
+            if (prepared.NeedsConfirmation && !allowCollision)
+            {
+                return TextEditOutcome.Overflow(
+                    "edit would grow beyond the original box and collide with another object — confirm to proceed");
+            }
+
+            (RgbColor background, RgbColor ink, double? baselineY) = await SampleScanColoursAsync(page, run, ct).ConfigureAwait(false);
+            ScanTextReplacement plan = ScanTextPlanner.Plan(run, newText, background, ink, baselineY);
+            await _editStack
+                .PushAsync(new ScanTextEditCommand(_doc.Engine, page, plan), ct)
+                .ConfigureAwait(false);
+            DocumentStatus = "edited scanned text (undo available)";
+            await RefreshCurrentPageRenderAsync(ct).ConfigureAwait(false);
+            return TextEditOutcome.Success();
+        }
+        finally
+        {
+            _editGate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Reads the paper and ink colour around a run from a render of its page, so the
+    /// cover blends into a cream or grey scan. Falls back to black on white when the
+    /// render cannot be mapped back onto the run (rotated pages).
+    /// </summary>
+    private async Task<(RgbColor Background, RgbColor Ink, double? BaselineY)> SampleScanColoursAsync(
+        int page, PdfTextRun run, CancellationToken ct)
+    {
+        (RgbColor, RgbColor, double?) fallback = (new RgbColor(1, 1, 1), new RgbColor(0, 0, 0), null);
+        PdfPageRegion size = await _doc.Engine.GetPageSizeAsync(page, ct).ConfigureAwait(false);
+        RenderedPdfPage rendered = await _doc.Engine.RenderPageToPngAsync(page, 150f, ct).ConfigureAwait(false);
+
+        using var stream = new MemoryStream(rendered.PngBytes);
+        var decoder = new PngBitmapDecoder(stream, BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
+        var frame = new FormatConvertedBitmap(decoder.Frames[0], PixelFormats.Bgra32, null, 0);
+        int width = frame.PixelWidth;
+        int height = frame.PixelHeight;
+        double sx = width / size.WidthPt;
+        double sy = height / size.HeightPt;
+        if (Math.Abs(sx - sy) > 0.02 * sx)
+        {
+            return fallback;
+        }
+
+        int stride = width * 4;
+        var pixels = new byte[stride * height];
+        frame.CopyPixels(pixels, stride, 0);
+
+        int left = (int)Math.Floor(run.X0 * sx);
+        int top = (int)Math.Floor((size.HeightPt - run.Y1) * sy);
+        int right = (int)Math.Ceiling(run.X1 * sx);
+        int bottom = (int)Math.Ceiling((size.HeightPt - run.Y0) * sy);
+        (RgbColor background, RgbColor ink) = ScanColorSampler.Sample(pixels, width, height, stride, left, top, right, bottom);
+
+        int? row = ScanColorSampler.FindBaselineRow(pixels, width, height, stride, left, top, right, bottom, background, ink);
+        double? baselineY = row is int r ? size.HeightPt - (r / sy) : null;
+        return (background, ink, baselineY);
     }
 
     /// <summary>Lists the image/vector objects of the currently displayed page

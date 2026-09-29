@@ -29,7 +29,8 @@ public sealed record PdfTextRun(
     /// True for the invisible text layer OCR adds over a scanned page (set in a
     /// "GlyphLessFont"). It is drawn in a two-byte font and never painted, so it
     /// cannot be rewritten in place, and rewriting it would not change what the
-    /// page shows anyway.
+    /// page shows anyway. Edit it with the cover-and-replace path
+    /// (<see cref="ScanTextReplacement"/>) instead.
     /// </summary>
     public bool IsHiddenOcrText => FontName.Contains("GlyphLess", StringComparison.OrdinalIgnoreCase);
 }

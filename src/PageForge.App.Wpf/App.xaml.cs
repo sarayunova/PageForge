@@ -88,6 +88,7 @@ public partial class App : Application
             await RunHeadlessOrganizerProofAsync();
             await RunHeadlessAnnotationProofAsync();
             await RunHeadlessEditProofAsync();
+            await RunHeadlessScanTextProofAsync();
             await RunHeadlessCorpusDogfoodProofAsync();
             RunThemeTokenProof();
             RunRedactGeometryProof();
@@ -1232,6 +1233,70 @@ public partial class App : Application
     /// confirms it survives reopen. Writes the edited PDF, a summary, and a
     /// rendered page to artifacts/ for visual review.
     /// </summary>
+    /// <summary>
+    /// Cover-and-replace on scanned text through the real view-model, so the WPF
+    /// half (decode a render, sample paper and ink) runs too. OCRs the corpus scan,
+    /// replaces its last word, and checks only that word changed in the text layer.
+    /// </summary>
+    private static async Task RunHeadlessScanTextProofAsync()
+    {
+        try
+        {
+            string? corpusDir = FindCorpusDir();
+            string src = corpusDir is null
+                ? throw new InvalidOperationException("corpus dir not found")
+                : Path.Combine(corpusDir, "scan-letters.pdf");
+            if (!File.Exists(src))
+            {
+                Console.Error.WriteLine("scan-letters.pdf not found");
+                FailProof(2);
+                return;
+            }
+
+            string outDir = Path.GetFullPath(Path.Combine(FindRepoRoot() ?? string.Empty, "artifacts"));
+            Directory.CreateDirectory(outDir);
+            string ocrPdf = Path.Combine(outDir, "scan-text-ocr.pdf");
+            File.Delete(ocrPdf);
+
+            await using (MuPdfEngine ocrEngine = MuPdfEngine.Create())
+            {
+                await ocrEngine.OpenAsync(src);
+                await OcrService.OcrAsync(ocrEngine, ocrPdf);
+            }
+
+            var tab = new PageForge.App.Wpf.ViewModels.DocumentTabViewModel(new DocumentViewModel(MuPdfEngine.Create()));
+            try
+            {
+                await tab.InitializeAsync(ocrPdf);
+                IReadOnlyList<PdfTextRun> runs = await tab.Core.Engine.ListTextRunsAsync(0);
+                PdfTextRun target = runs.First(r => r.Text.Contains("ONE", StringComparison.OrdinalIgnoreCase));
+
+                var outcome = await tab.ReplaceScanTextAsync(target, "TWO", allowCollision: false);
+                string text = (await tab.Core.Engine.GetPageTextAsync(0)).Text;
+                bool ok = outcome.Succeeded
+                    && text.Contains("TWO", StringComparison.Ordinal)
+                    && !text.Contains("ONE", StringComparison.OrdinalIgnoreCase)
+                    && text.Contains("SCANNED", StringComparison.OrdinalIgnoreCase);
+
+                Console.WriteLine($"scan text proof: applied={outcome.Succeeded} newWordPresent={text.Contains("TWO")} oldWordGone={!text.Contains("ONE", StringComparison.OrdinalIgnoreCase)} otherWordsKept={text.Contains("SCANNED", StringComparison.OrdinalIgnoreCase)}");
+                if (!ok)
+                {
+                    Console.Error.WriteLine($"scan text proof: unexpected result ({outcome.Kind}: {outcome.Message})");
+                    FailProof();
+                }
+            }
+            finally
+            {
+                await tab.Core.DisposeAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"scan text proof failed: {ex.Message}");
+            FailProof();
+        }
+    }
+
     private static async Task RunHeadlessEditProofAsync()
     {
         try

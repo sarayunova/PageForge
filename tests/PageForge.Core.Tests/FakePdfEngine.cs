@@ -127,6 +127,22 @@ internal sealed class FakePdfEngine : IPdfEngine
         return ValueTask.FromResult(runs);
     }
 
+    /// <summary>When set, <see cref="CoverAndReplaceTextAsync"/> throws, to exercise rollback.</summary>
+    public bool FailCoverReplace { get; set; }
+
+    public ValueTask<PdfRect> CoverAndReplaceTextAsync(
+        int pageIndex, ScanTextReplacement replacement, CancellationToken cancellationToken = default)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (FailCoverReplace)
+        {
+            throw new InvalidOperationException("simulated cover failure");
+        }
+
+        Edited(pageIndex).Add($"cover-replace:{replacement.Text}");
+        return ValueTask.FromResult(replacement.Cover);
+    }
+
     public async ValueTask<PdfTextEditReceipt> RewriteTextRunAsync(
         int pageIndex, int runIndex, string newText, CancellationToken cancellationToken = default)
     {

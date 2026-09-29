@@ -100,6 +100,27 @@ function Find-VcVars {
 
 $VcVars = Find-VcVars
 
+# vcvars64.bat defaults to the NEWEST installed Windows SDK. A half-installed one
+# (this dev machine has 10.0.26100.0 with ucrtd.lib but no ucrt.lib) makes every
+# link fail with LNK1104 "cannot open file 'ucrt.lib'". Pick the newest SDK that
+# actually has the libraries the link needs and pass it to vcvars explicitly.
+# On a healthy machine (CI included) this resolves to the same SDK vcvars would.
+function Find-UsableWindowsSdk {
+    $libRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\Lib'
+    if (-not (Test-Path $libRoot)) { return $null }
+    Get-ChildItem $libRoot -Directory |
+        Where-Object { $_.Name -match '^10\.0\.\d+\.\d+$' } |
+        Sort-Object { [version]$_.Name } -Descending |
+        Where-Object { Test-Path (Join-Path $_.FullName 'ucrt\x64\ucrt.lib') } |
+        Select-Object -First 1 -ExpandProperty Name
+}
+$WinSdk = Find-UsableWindowsSdk
+if ($WinSdk) { Write-Host "Windows SDK for the native build: $WinSdk" }
+$VcVarsArgs = if ($WinSdk) { " $WinSdk" } else { '' }
+# MSBuild picks its OWN SDK from WindowsTargetPlatformVersion (newest installed by
+# default), independent of what vcvars put on INCLUDE/LIB, so pin it here as well.
+$SdkProp = if ($WinSdk) { " /p:WindowsTargetPlatformVersion=$WinSdk" } else { '' }
+
 function Invoke-MsBuild {
     param([string]$Project, [string]$Platform = 'x64')
     # The generated batch file MUST carry a .cmd extension. The previous version
@@ -110,8 +131,8 @@ function Invoke-MsBuild {
     $script = Join-Path $env:TEMP 'pageforge-mupdf-msbuild.cmd'
     $cmd = @"
 @echo off
-call "$VcVars" >nul 2>&1
-msbuild "$Project" /t:Build /p:Configuration=Release /p:Platform=$Platform /p:PlatformToolset=v143 /m -v:m
+call "$VcVars"$VcVarsArgs >nul 2>&1
+msbuild "$Project" /t:Build /p:Configuration=Release /p:Platform=$Platform /p:PlatformToolset=v143 /m -v:m$SdkProp
 exit /b %ERRORLEVEL%
 "@
     Set-Content -Path $script -Value $cmd -Encoding Ascii
@@ -203,8 +224,19 @@ if ($soPatched.Count) {
 $bin2coffProj = Join-Path $SourceDir 'platform\win32\bin2coff.vcxproj'
 $bin2coffExe = Join-Path $SourceDir 'platform\win32\Release\bin2coff.exe'
 if (-not (Test-Path $bin2coffExe)) {
-    Write-Host 'building bin2coff.vcxproj (Win32 host tool)'
-    Invoke-MsBuild $bin2coffProj -Platform Win32
+    # Built as x64 and copied to the Win32 path the targets expect. A true Win32
+    # build needs the x86 CRT import libraries (oldnames.lib and friends), which a
+    # Build Tools install without the 32-bit component does not have: the link
+    # died with LNK1104 on OLDNAMES.lib, and the script only ever worked while a
+    # stale Release\bin2coff.exe was lying around. The tool is a build-time file
+    # converter, so its architecture does not matter to the result.
+    Write-Host 'building bin2coff.vcxproj (host tool, x64 build placed at the Win32 path)'
+    Invoke-MsBuild $bin2coffProj -Platform x64
+    $bin2coffX64 = Join-Path $SourceDir 'platform\win32\x64\Release\bin2coff.exe'
+    if (Test-Path $bin2coffX64) {
+        New-Item -ItemType Directory -Path (Split-Path $bin2coffExe) -Force | Out-Null
+        Copy-Item $bin2coffX64 $bin2coffExe -Force
+    }
 }
 if (-not (Test-Path $bin2coffExe)) {
     throw "bin2coff.exe was not produced at $bin2coffExe; libresources cannot convert font resources without it"

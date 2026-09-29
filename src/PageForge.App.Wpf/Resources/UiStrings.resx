@@ -1157,11 +1157,16 @@ They are permanently deleted and cannot be brought back. Choose No to keep them;
 
 Change page anyway?</value>
   </data>
-  <data name="Error_EditScanText" xml:space="preserve">
-    <value>This text cannot be edited in place.
+  <data name="Confirm_ScanTextEdit" xml:space="preserve">
+    <value>This text is part of a scanned picture.
 
-It is most likely a hidden text layer that OCR added over a scanned page. The words you see are part of the scanned picture, so changing that hidden layer would not change what the page shows.
+PageForge will paint over the old words in the page's background colour and place your text on top, in a standard font that will not exactly match the scan.
 
-To change what a scanned page says, replace its image with the Object tool, or retype the page from the original document.</value>
+The scan itself is not changed. The original words are hidden underneath, not erased, and anyone who removes the cover can read them. To remove sensitive information for good, use Redact instead.
+
+Continue?</value>
+  </data>
+  <data name="Status_ScanTextCharacters" xml:space="preserve">
+    <value>Edited scan text can use only letters, digits and common punctuation from the Latin alphabet (including accents). Remove other characters and try again.</value>
   </data>
 </root>

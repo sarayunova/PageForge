@@ -3,6 +3,7 @@
 // This file is part of PageForge. See LICENSE for the full license text.
 
 using System.Security.Cryptography;
+using PageForge.Core.Editing;
 using PageForge.Core.Pdf;
 using PageForge.MuPdfInterop;
 using Xunit;
@@ -122,6 +123,131 @@ public sealed class OcrFidelityTests
         finally
         {
             TryDelete(output);
+        }
+    }
+
+    /// <summary>
+    /// Cover-and-replace on scanned text, end to end through the real engine: OCR a
+    /// scan, replace one recognised line, save, reopen. The new words must be
+    /// findable and the old ones gone from the text layer; the picture of the old
+    /// words is covered; undo restores the OCR text. Writes the edited page to
+    /// scan-edit-page1.png in the test output so the result can be inspected by eye.
+    /// </summary>
+    [Fact]
+    public async Task Scanned_text_is_replaced_by_covering_it_and_undo_restores_it()
+    {
+        string ocr = Path.Combine(AppContext.BaseDirectory, $"ocr-cover-{Guid.NewGuid():N}.pdf");
+        string edited = Path.Combine(AppContext.BaseDirectory, $"ocr-cover-edited-{Guid.NewGuid():N}.pdf");
+        try
+        {
+            await using (MuPdfEngine engine = MuPdfEngine.Create())
+            {
+                await engine.OpenAsync(Corpus("scan-letters.pdf"));
+                await OcrService.OcrAsync(engine, ocr);
+            }
+
+            await using (MuPdfEngine engine = MuPdfEngine.Create())
+            {
+                await engine.OpenAsync(ocr);
+                IReadOnlyList<PdfTextRun> runs = await engine.ListTextRunsAsync(0);
+                PdfTextRun target = runs.First(r => r.Text.Contains("SCANNED", StringComparison.OrdinalIgnoreCase));
+                Assert.True(target.IsHiddenOcrText);
+
+                string before = (await engine.GetPageTextAsync(0)).Text;
+                Assert.Contains("SCANNED", before, StringComparison.OrdinalIgnoreCase);
+                int imagesBefore = (await engine.ListObjectsAsync(0)).Count(o => o.Kind == PageObjectKind.Image);
+                Assert.True(imagesBefore > 0, "the OCR output should carry the scan as image objects");
+
+                ScanTextReplacement plan = ScanTextPlanner.Plan(
+                    target, "REVISED", new RgbColor(1, 1, 1), new RgbColor(0, 0, 0));
+                var command = new ScanTextEditCommand(engine, 0, plan);
+                await command.ExecuteAsync();
+
+                string after = (await engine.GetPageTextAsync(0)).Text;
+                Assert.Contains("REVISED", after);
+                Assert.DoesNotContain("SCANNED", after, StringComparison.OrdinalIgnoreCase);
+
+                // Only the edited word changed: its neighbours keep their text, and the scan
+                // images underneath were not touched (removing them is what the redaction
+                // defaults do, and it is the reason this edit must not use those defaults).
+                Assert.Contains("PAGE", after, StringComparison.OrdinalIgnoreCase);
+                Assert.Contains("ONE", after, StringComparison.OrdinalIgnoreCase);
+                Assert.Equal(imagesBefore, (await engine.ListObjectsAsync(0)).Count(o => o.Kind == PageObjectKind.Image));
+
+                RenderedPdfPage png = await engine.RenderPageToPngAsync(0, 150);
+                await File.WriteAllBytesAsync(Path.Combine(AppContext.BaseDirectory, "scan-edit-page1.png"), png.PngBytes);
+
+                await engine.SaveAsAsync(edited);
+
+                await command.UndoAsync();
+                string undone = (await engine.GetPageTextAsync(0)).Text;
+                Assert.Contains("SCANNED", undone, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain("REVISED", undone);
+
+                command.Dispose();
+            }
+
+            await using (MuPdfEngine reader = MuPdfEngine.Create())
+            {
+                await reader.OpenAsync(edited);
+                string saved = (await reader.GetPageTextAsync(0)).Text;
+                Assert.Contains("REVISED", saved);
+                Assert.DoesNotContain("SCANNED", saved, StringComparison.OrdinalIgnoreCase);
+                Assert.Contains("PAGE", saved, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+        finally
+        {
+            TryDelete(ocr);
+            TryDelete(edited);
+        }
+    }
+
+    /// <summary>
+    /// The redaction options file used to be parsed on TABs only, so every option but
+    /// "black box" was silently ignored and a caller asking to leave images alone got
+    /// them removed. Applies the same region with images untouched, then with the
+    /// secure defaults, and requires the two to behave differently.
+    /// </summary>
+    [Fact]
+    public async Task Redaction_options_reach_the_engine()
+    {
+        string ocr = Path.Combine(AppContext.BaseDirectory, $"ocr-redact-{Guid.NewGuid():N}.pdf");
+        try
+        {
+            await using (MuPdfEngine engine = MuPdfEngine.Create())
+            {
+                await engine.OpenAsync(Corpus("scan-letters.pdf"));
+                await OcrService.OcrAsync(engine, ocr);
+            }
+
+            async Task<(int Images, string Text)> RedactAsync(RedactionOptions? options)
+            {
+                await using MuPdfEngine engine = MuPdfEngine.Create();
+                await engine.OpenAsync(ocr);
+                PdfTextRun word = (await engine.ListTextRunsAsync(0)).First(r => r.Text.Contains("SCANNED", StringComparison.OrdinalIgnoreCase));
+                await engine.AddRedactionAsync(0, new PdfRect(word.X0, word.Y0, word.X1, word.Y1));
+                await engine.ApplyRedactionsAsync(0, options);
+                int images = (await engine.ListObjectsAsync(0)).Count(o => o.Kind == PageObjectKind.Image);
+                return (images, (await engine.GetPageTextAsync(0)).Text);
+            }
+
+            (int keptImages, string keptText) = await RedactAsync(new RedactionOptions(
+                BlackBox: false,
+                ImageMethod: RedactionImageMethod.None,
+                LineArtMethod: RedactionLineArtMethod.None,
+                TextMethod: RedactionTextMethod.Remove));
+            (int defaultImages, string defaultText) = await RedactAsync(null);
+
+            Assert.DoesNotContain("SCANNED", keptText, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("SCANNED", defaultText, StringComparison.OrdinalIgnoreCase);
+            Assert.True(
+                keptImages > defaultImages,
+                $"image method None must keep more images than the secure default removes (kept {keptImages}, default {defaultImages}).");
+        }
+        finally
+        {
+            TryDelete(ocr);
         }
     }
 

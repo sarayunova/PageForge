@@ -1233,14 +1233,25 @@ public partial class DocumentView : UserControl
     /// <summary>Prompts for replacement text and commits it through the
     /// FR-EDIT-02/03 gates and the FR-EDIT-05 command stack. Shared by the
     /// mouse hit-test path and the keyboard word-selection path (WCAG 2.1.1).</summary>
+    private bool _scanTextExplained;
+
     private async Task EditRunAsync(PdfTextRun run)
     {
-        if (run.IsHiddenOcrText)
+        // OCR text sits invisibly over a scan and cannot be rewritten, so editing it
+        // means covering the picture of the old words and drawing new ones. Say so
+        // once per document before doing it: the original stays underneath.
+        if (run.IsHiddenOcrText && !_scanTextExplained)
         {
-            // Say so before asking for new text: the attempt can only fail, and the
-            // old generic advice ("try a smaller change") sent people round in circles.
-            MessageBox.Show(UiStrings.Get("Error_EditScanText"), UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Information);
-            return;
+            if (MessageBox.Show(
+                    UiStrings.Get("Confirm_ScanTextEdit"),
+                    UiStrings.Get("Common_AppTitle"),
+                    MessageBoxButton.OKCancel,
+                    MessageBoxImage.Warning) != MessageBoxResult.OK)
+            {
+                return;
+            }
+
+            _scanTextExplained = true;
         }
 
         string? newText = AskEditText(run.Text);
@@ -1249,7 +1260,11 @@ public partial class DocumentView : UserControl
             return;
         }
 
-        TextEditOutcome outcome = await _vm!.EditTextRunAsync(run.Index, newText, allowCollision: false).ConfigureAwait(true);
+        Func<bool, Task<TextEditOutcome>> apply = run.IsHiddenOcrText
+            ? allowCollision => _vm!.ReplaceScanTextAsync(run, newText, allowCollision)
+            : allowCollision => _vm!.EditTextRunAsync(run.Index, newText, allowCollision);
+
+        TextEditOutcome outcome = await apply(false).ConfigureAwait(true);
         if (outcome.Succeeded)
         {
             return;
@@ -1266,10 +1281,10 @@ public partial class DocumentView : UserControl
                 MessageBoxImage.Warning);
             if (confirm == MessageBoxResult.Yes)
             {
-                TextEditOutcome forced = await _vm.EditTextRunAsync(run.Index, newText, allowCollision: true).ConfigureAwait(true);
+                TextEditOutcome forced = await apply(true).ConfigureAwait(true);
                 if (!forced.Succeeded)
                 {
-                    _vm.ShowStatusHint(forced.Message ?? UiStrings.Get("Status_EditNotApplied"));
+                    _vm?.ShowStatusHint(forced.Message ?? UiStrings.Get("Status_EditNotApplied"));
                 }
             }
             else

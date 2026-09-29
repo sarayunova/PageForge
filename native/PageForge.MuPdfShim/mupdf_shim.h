@@ -373,6 +373,27 @@ PF_EXPORT int pf_apply_redactions(pf_context context, pf_document document,
                                   int *out_count);
 
 // ---------------------------------------------------------------------------
+// Cover-and-replace for scanned text. Appends ONE new content stream to page
+// `page_index` (0-based) that paints a filled rectangle (x0,y0)-(x1,y1) in the
+// background colour (bg_*, components in [0,1]) and then shows the UTF-8 text in
+// the file `text_path_utf8` on top of it in Helvetica at `font_size`, in the ink
+// colour fg_*, with its baseline origin at (tx,ty). Coordinates are PDF points,
+// bottom-left origin. The rectangle grows to the right when the text is wider;
+// the final rectangle is written to out_box[4] (x0,y0,x1,y1; may be NULL).
+// No existing content stream is touched, so earlier text-edit receipts stay
+// valid. Text outside the Latin-1 range is refused (PF_ERR), never substituted.
+// Undo is the caller's job (snapshot, then pf_open of the snapshot). Returns
+// PF_OK/PF_ERR.
+// ---------------------------------------------------------------------------
+PF_EXPORT int pf_cover_replace_text(pf_context context, pf_document document,
+                                    int page_index,
+                                    double x0, double y0, double x1, double y1,
+                                    double bg_r, double bg_g, double bg_b,
+                                    double fg_r, double fg_g, double fg_b,
+                                    double font_size, double tx, double ty,
+                                    const char *text_path_utf8, double *out_box);
+
+// ---------------------------------------------------------------------------
 // FR-OCR-01 local OCR primitives. Recognition runs entirely on this machine
 // through the MuPDF-bundled Tesseract (Apache-2.0); nothing is sent to a
 // hosted service. The pdfocr band writer emits a searchable PDF whose text

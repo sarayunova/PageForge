@@ -5363,46 +5363,63 @@ int pf_apply_redactions(pf_context context, pf_document document,
 	fz_var(page);
 	fz_var(spec);
 
-	/* Parse an optional TSV options file. Missing keys keep the secure
-	 * defaults set above. */
+	/* Parse an optional options file: one "<key><TAB><integer>" record per LINE
+	 * (see mupdf_shim.h). Missing keys keep the secure defaults set above.
+	 *
+	 * This used to split the file on TABs only, so "I<TAB>0<LF>L<TAB>1" was read as
+	 * the fields "I", "0<LF>L", "1": every value came out empty or garbled, every
+	 * option except black_boxes (which parsed "" as 0 by luck) silently kept its
+	 * default, and a caller asking for "leave the images alone" got the images
+	 * removed. Records are lines; split on lines. */
 	if (opts_path_utf8 != NULL)
 	{
-		char *cursor;
-		char *field;
-		size_t flen;
+		char *line;
 
 		spec = pf_read_file(opts_path_utf8, NULL);
-		if (spec != NULL)
+		line = (char *)spec;
+		while (line != NULL && *line != '\0')
 		{
-			cursor = (char *)spec;
-			while (next_field(&cursor, &field, &flen))
+			char *nl = strchr(line, '\n');
+			size_t n;
+			if (nl != NULL)
 			{
-				if (flen >= 1)
-				{
-					char key = field[0];
-					char *val = (flen > 1) ? field + 1 : "";
-					switch (key)
-					{
-					case 'B':
-						opts.black_boxes = (int)strtol(val, NULL, 10);
-						break;
-					case 'I':
-						opts.image_method = (int)strtol(val, NULL, 10);
-						break;
-					case 'L':
-						opts.line_art = (int)strtol(val, NULL, 10);
-						break;
-					case 'T':
-						opts.text = (int)strtol(val, NULL, 10);
-						break;
-					default:
-						/* unknown record type: ignore */
-						break;
-					}
-				}
-				/* Move cursor past the value delimiter to the next
-				 * record (next_field will return 0 when done). */
+				*nl = '\0';
 			}
+			n = strlen(line);
+			if (n > 0 && line[n - 1] == '\r')
+			{
+				line[n - 1] = '\0';
+			}
+			if (line[0] != '\0')
+			{
+				char key = line[0];
+				const char *v = line + 1;
+				long val;
+				while (*v == '\t' || *v == ' ')
+				{
+					v++;
+				}
+				val = strtol(v, NULL, 10);
+				switch (key)
+				{
+				case 'B':
+					opts.black_boxes = (int)val;
+					break;
+				case 'I':
+					opts.image_method = (int)val;
+					break;
+				case 'L':
+					opts.line_art = (int)val;
+					break;
+				case 'T':
+					opts.text = (int)val;
+					break;
+				default:
+					/* unknown record type: ignore */
+					break;
+				}
+			}
+			line = (nl != NULL) ? nl + 1 : NULL;
 		}
 	}
 
@@ -5453,6 +5470,243 @@ int pf_apply_redactions(pf_context context, pf_document document,
 		}
 	}
 	free(spec);
+	return status;
+}
+
+/*
+ * Cover-and-replace for scanned text.  Paints a filled rectangle over
+ * (x0,y0)-(x1,y1) in the given background colour, then shows `text` on top in a
+ * standard Helvetica at `font_size` with its baseline origin at (tx,ty).  Both
+ * are appended to the page as one NEW content stream, so no existing stream (and
+ * therefore no earlier text-edit receipt, which pins stream indices) moves.
+ *
+ * The rectangle grows to the right when the new text is wider than the box, and
+ * the final rectangle is returned in out_box[4] so the caller can report it.
+ * Text must be encodable in WinAnsi (Latin-1 range); anything else is refused
+ * rather than substituted, matching the "never silently degrade" rule.
+ */
+static int pf_utf8_next(const unsigned char **p)
+{
+	const unsigned char *s = *p;
+	int c = s[0];
+	int n, i;
+	if (c < 0x80)
+	{
+		*p = s + 1;
+		return c;
+	}
+	if ((c & 0xE0) == 0xC0) { n = 1; c &= 0x1F; }
+	else if ((c & 0xF0) == 0xE0) { n = 2; c &= 0x0F; }
+	else if ((c & 0xF8) == 0xF0) { n = 3; c &= 0x07; }
+	else { *p = s + 1; return -1; }
+	for (i = 0; i < n; i++)
+	{
+		if ((s[1 + i] & 0xC0) != 0x80)
+		{
+			*p = s + 1;
+			return -1;
+		}
+		c = (c << 6) | (s[1 + i] & 0x3F);
+	}
+	*p = s + 1 + n;
+	return c;
+}
+
+int pf_cover_replace_text(pf_context context, pf_document document, int page_index,
+                          double x0, double y0, double x1, double y1,
+                          double bg_r, double bg_g, double bg_b,
+                          double fg_r, double fg_g, double fg_b,
+                          double font_size, double tx, double ty,
+                          const char *text_path_utf8, double *out_box)
+{
+	fz_context *ctx = (fz_context *)context;
+	fz_document *doc = (fz_document *)document;
+	pdf_document *pdf = NULL;
+	unsigned char *raw = NULL;
+	fz_font *font = NULL;
+	fz_buffer *buf = NULL;
+	pdf_obj *fontref = NULL;
+	pdf_obj *stream = NULL;
+	pf_dynbuf_s enc = { NULL, 0, 0 };
+	int status = PF_ERR;
+
+	if (out_box != NULL)
+	{
+		out_box[0] = x0; out_box[1] = y0; out_box[2] = x1; out_box[3] = y1;
+	}
+	if (ctx == NULL || doc == NULL || page_index < 0 || text_path_utf8 == NULL ||
+	    font_size <= 0.0 || x1 <= x0 || y1 <= y0)
+	{
+		record_error("pf_cover_replace_text: invalid arguments");
+		return PF_ERR;
+	}
+
+	fz_var(raw);
+	fz_var(font);
+	fz_var(buf);
+	fz_var(fontref);
+	fz_var(stream);
+
+	fz_try(ctx)
+	{
+		pdf_obj *pageobj, *res, *fonts, *contents;
+		char fname[32];
+		int k;
+		double width = 0.0;
+		const unsigned char *cur;
+
+		pdf = as_pdf_document(ctx, doc);
+		if (pdf == NULL)
+		{
+			fz_throw(ctx, FZ_ERROR_GENERIC, "pf_cover_replace_text: not a PDF document");
+		}
+		raw = pf_read_file(text_path_utf8, NULL);
+		if (raw == NULL)
+		{
+			fz_throw(ctx, FZ_ERROR_GENERIC, "pf_cover_replace_text: cannot read the text file");
+		}
+		{
+			size_t sl = strlen((const char *)raw);
+			while (sl > 0 && (raw[sl - 1] == '\n' || raw[sl - 1] == '\r'))
+			{
+				raw[--sl] = '\0';
+			}
+		}
+		if (raw[0] == '\0')
+		{
+			fz_throw(ctx, FZ_ERROR_GENERIC, "pf_cover_replace_text: the new text is empty");
+		}
+
+		font = fz_new_base14_font(ctx, "Helvetica");
+
+		/* Encode to WinAnsi bytes (escaped for a PDF string) and measure. */
+		cur = raw;
+		while (*cur != '\0')
+		{
+			int cp = pf_utf8_next(&cur);
+			int gid;
+			unsigned char ch;
+			if (cp < 0 || cp < 0x20 || (cp > 0x7E && cp < 0xA0) || cp > 0xFF)
+			{
+				fz_throw(ctx, FZ_ERROR_GENERIC,
+				         "pf_cover_replace_text: new text is not encodable by the replacement font");
+			}
+			ch = (unsigned char)cp;
+			if (ch == '(' || ch == ')' || ch == '\\')
+			{
+				if (!pf_dynbuf_push(&enc, "\\", 1))
+				{
+					fz_throw(ctx, FZ_ERROR_GENERIC, "pf_cover_replace_text: out of memory");
+				}
+			}
+			if (ch >= 0x80)
+			{
+				char oct[8];
+				int on = snprintf(oct, sizeof(oct), "\\%03o", (unsigned)ch);
+				if (!pf_dynbuf_push(&enc, oct, (size_t)on))
+				{
+					fz_throw(ctx, FZ_ERROR_GENERIC, "pf_cover_replace_text: out of memory");
+				}
+			}
+			else if (!pf_dynbuf_push(&enc, (const char *)&ch, 1))
+			{
+				fz_throw(ctx, FZ_ERROR_GENERIC, "pf_cover_replace_text: out of memory");
+			}
+			gid = fz_encode_character(ctx, font, cp);
+			width += (gid > 0) ? fz_advance_glyph(ctx, font, gid, 0) : 0.5;
+		}
+		width *= font_size;
+		if (!pf_dynbuf_push(&enc, "", 1))
+		{
+			fz_throw(ctx, FZ_ERROR_GENERIC, "pf_cover_replace_text: out of memory");
+		}
+
+		/* Grow the cover to the right if the new text overruns it. */
+		if (tx + width > x1)
+		{
+			x1 = tx + width + 1.0;
+		}
+		if (out_box != NULL)
+		{
+			out_box[0] = x0; out_box[1] = y0; out_box[2] = x1; out_box[3] = y1;
+		}
+
+		pageobj = pdf_lookup_page_obj(ctx, pdf, page_index);
+		if (pageobj == NULL)
+		{
+			fz_throw(ctx, FZ_ERROR_GENERIC, "pf_cover_replace_text: page not found");
+		}
+
+		/* The page must own its Resources: adding a font to an inherited
+		 * dictionary would change every page that shares it. */
+		res = pdf_dict_get(ctx, pageobj, PDF_NAME(Resources));
+		if (res == NULL)
+		{
+			pdf_obj *inherited = pdf_dict_get_inheritable(ctx, pageobj, PDF_NAME(Resources));
+			pdf_obj *own = (inherited != NULL) ? pdf_copy_dict(ctx, inherited)
+			                                   : pdf_new_dict(ctx, pdf, 4);
+			pdf_dict_put_drop(ctx, pageobj, PDF_NAME(Resources), own);
+			res = pdf_dict_get(ctx, pageobj, PDF_NAME(Resources));
+		}
+		fonts = pdf_dict_get(ctx, res, PDF_NAME(Font));
+		if (fonts == NULL)
+		{
+			pdf_dict_put_drop(ctx, res, PDF_NAME(Font), pdf_new_dict(ctx, pdf, 4));
+			fonts = pdf_dict_get(ctx, res, PDF_NAME(Font));
+		}
+		for (k = 0; k < 1000; k++)
+		{
+			snprintf(fname, sizeof(fname), "PFOv%d", k);
+			if (pdf_dict_gets(ctx, fonts, fname) == NULL)
+			{
+				break;
+			}
+		}
+		fontref = pdf_add_simple_font(ctx, pdf, font, PDF_SIMPLE_ENCODING_LATIN);
+		pdf_dict_puts(ctx, fonts, fname, fontref);
+
+		buf = fz_new_buffer(ctx, 256);
+		fz_append_printf(ctx, buf,
+		                 "q\n%.4f %.4f %.4f rg\n%.4f %.4f %.4f %.4f re\nf\n"
+		                 "%.4f %.4f %.4f rg\nBT\n/%s %.4f Tf\n%.4f %.4f Td\n(",
+		                 bg_r, bg_g, bg_b, x0, y0, x1 - x0, y1 - y0,
+		                 fg_r, fg_g, fg_b, fname, font_size, tx, ty);
+		fz_append_data(ctx, buf, enc.data, enc.len - 1);
+		fz_append_string(ctx, buf, ") Tj\nET\nQ\n");
+		stream = pdf_add_stream(ctx, pdf, buf, NULL, 0);
+
+		contents = pdf_dict_get(ctx, pageobj, PDF_NAME(Contents));
+		if (contents == NULL)
+		{
+			pdf_dict_put(ctx, pageobj, PDF_NAME(Contents), stream);
+		}
+		else if (pdf_is_array(ctx, contents))
+		{
+			pdf_array_push(ctx, contents, stream);
+		}
+		else
+		{
+			pdf_obj *arr = pdf_new_array(ctx, pdf, 2);
+			pdf_array_push(ctx, arr, contents);
+			pdf_array_push(ctx, arr, stream);
+			pdf_dict_put_drop(ctx, pageobj, PDF_NAME(Contents), arr);
+		}
+		status = PF_OK;
+	}
+	fz_always(ctx)
+	{
+		pdf_drop_obj(ctx, stream);
+		pdf_drop_obj(ctx, fontref);
+		fz_drop_buffer(ctx, buf);
+		fz_drop_font(ctx, font);
+	}
+	fz_catch(ctx)
+	{
+		caught_message(ctx);
+		status = PF_ERR;
+	}
+	free(raw);
+	pf_dynbuf_free(&enc);
 	return status;
 }
 

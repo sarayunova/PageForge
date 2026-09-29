@@ -101,6 +101,17 @@ version heading when the tag is pushed.
   tick, and the flag is not sufficient for a close-time "unsaved changes"
   prompt.
 
+### Editing scanned text
+
+- Clicking text on a scanned page (the hidden text layer OCR adds) no longer
+  fails. PageForge paints over the old word in the page's own paper colour and
+  places your text on top, then removes the old word from the text layer so a
+  search does not find it. Undo restores the page exactly. The replacement is a
+  standard font (Latin letters, digits and punctuation only), so it will not
+  match the typeface of the scan.
+- The scan itself is never changed: the covered words are hidden, not erased. The
+  first edit on a document says so and points to Redact for real removal.
+
 ### Safer destructive actions and clearer errors
 
 - Every failure dialog now ends with a suggested next step (WCAG 3.3.1/3.3.3).
@@ -112,6 +123,15 @@ version heading when the tag is pushed.
   flatten prompt now says it cannot be reversed once saved (WCAG 3.3.4).
 
 ### Fixed before the first release
+
+- **Redaction options were silently ignored.** The native option file is one
+  `key<TAB>value` record per line, but the parser split on tabs only, so every
+  setting except "no black box" was dropped and a caller asking to keep images got
+  them removed. Records are now parsed per line, with a real-engine regression test.
+- **The native build no longer depends on luck.** `build-mupdf.ps1` failed on a
+  machine with a half-installed Windows SDK (`LNK1104: ucrt.lib`) and could not
+  rebuild the Win32 `bin2coff` tool without the x86 CRT libraries; it worked only
+  while a stale `bin2coff.exe` happened to be on disk.
 
 - **The viewer froze while staging a page reorder.** Selecting a thumbnail in
   reorder mode did nothing, so the page on screen when the mode was entered

@@ -113,6 +113,15 @@ internal static class MuPdfShimBindings
         nint context, nint document, int pageIndex, [In] byte[] specPathUtf8);
 
     [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
+    internal static extern int pf_cover_replace_text(
+        nint context, nint document, int pageIndex,
+        double x0, double y0, double x1, double y1,
+        double bgR, double bgG, double bgB,
+        double fgR, double fgG, double fgB,
+        double fontSize, double tx, double ty,
+        [In] byte[] textPathUtf8, [Out] double[] outBox);
+
+    [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]
     internal static extern int pf_add_redact(
         nint context, nint document, int pageIndex,
         double x0, double y0, double x1, double y1);

@@ -159,6 +159,23 @@ public interface IPdfEngine : IAsyncDisposable
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Cover-and-replace for scanned text: paints <see cref="ScanTextReplacement.Cover"/>
+    /// in the page's background colour and shows the new text on top, as one new
+    /// content stream appended to the page. The scan image and every existing content
+    /// stream are left untouched (so text-edit receipts taken earlier stay valid); the
+    /// original words are hidden, not erased. Returns the rectangle actually covered,
+    /// which grows to the right when the new text is wider than the old.
+    ///
+    /// Throws when the text contains characters outside the Latin-1 range the
+    /// replacement font can draw. The open document is mutated in memory; persist it
+    /// with <see cref="SaveAsAsync"/>, and undo it by restoring a snapshot.
+    /// </summary>
+    ValueTask<PdfRect> CoverAndReplaceTextAsync(
+        int pageIndex,
+        ScanTextReplacement replacement,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Splices an earlier rewrite's operators back into the page content stream:
     /// undo (<paramref name="redo"/>=false) restores the old operator bytes,
     /// redo (<paramref name="redo"/>=true) re-applies the new ones. The document
