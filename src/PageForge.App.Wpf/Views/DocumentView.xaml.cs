@@ -966,16 +966,11 @@ public partial class DocumentView : UserControl
         }
     }
 
-    /// <summary>Prints the open document to a Windows printer (FR-VIEW-05), all
-    /// pages, the current page, or a user-typed range, per the Windows print
-    /// dialog's own All/Current page/Pages selector (<see cref="PrintDialog.UserPageRangeEnabled"/>
-    /// exposes it; the dialog has no notion of "current", so that choice is
-    /// resolved against <see cref="DocumentTabViewModel.CurrentPageIndex"/> here).
-    /// Each page is rendered by the engine at 300 DPI — the same in-memory state
-    /// the user sees on screen, unsaved edits included — and laid out as a
-    /// <see cref="FixedDocument"/> page sized to the PDF page's own dimensions,
-    /// so the Windows print dialog still handles printer/paper/copies selection
-    /// exactly as it would for any other document.</summary>
+    /// <summary>Print (FR-VIEW-05): renders every page through the engine at
+    /// 300 DPI — the same in-memory state the user sees on screen, unsaved edits
+    /// included — and opens a print preview of exactly those pages. Printing
+    /// happens from the preview (its Print button / Ctrl+P), via
+    /// <see cref="PrintPages"/>.</summary>
     private async void Print_Click(object sender, RoutedEventArgs e)
     {
         if (_vm is null)
@@ -983,7 +978,32 @@ public partial class DocumentView : UserControl
             return;
         }
 
-        int pageCount = _vm.PageCount;
+        try
+        {
+            IReadOnlyList<PrintPage> pages = await _vm.RenderPagesForPrintAsync(0, _vm.PageCount - 1);
+            var preview = new PrintPreviewWindow(
+                BuildFixedDocument(pages),
+                _vm.DisplayName,
+                currentIndex => PrintPages(pages, currentIndex))
+            {
+                Owner = Window.GetWindow(this),
+            };
+            preview.ShowDialog();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(UiStrings.Format("Error_PrintFailed", ex.Message), UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    /// <summary>Shows the Windows print dialog and prints the chosen pages: all,
+    /// the page the preview is showing (<paramref name="currentIndex"/> — the
+    /// dialog has no notion of "current"), or a user-typed range, per its
+    /// All/Current page/Pages selector. The dialog still handles
+    /// printer/paper/copies exactly as for any other document.</summary>
+    private void PrintPages(IReadOnlyList<PrintPage> pages, int currentIndex)
+    {
+        int pageCount = pages.Count;
         var printDialog = new PrintDialog
         {
             UserPageRangeEnabled = true,
@@ -997,7 +1017,7 @@ public partial class DocumentView : UserControl
 
         (int firstPage, int lastPage) = printDialog.PageRangeSelection switch
         {
-            PageRangeSelection.CurrentPage => (_vm.CurrentPageIndex, _vm.CurrentPageIndex),
+            PageRangeSelection.CurrentPage => (currentIndex, currentIndex),
             PageRangeSelection.UserPages => (
                 Math.Clamp(printDialog.PageRange.PageFrom - 1, 0, pageCount - 1),
                 Math.Clamp(printDialog.PageRange.PageTo - 1, 0, pageCount - 1)),
@@ -1010,46 +1030,52 @@ public partial class DocumentView : UserControl
 
         try
         {
-            IReadOnlyList<PrintPage> pages = await _vm.RenderPagesForPrintAsync(firstPage, lastPage);
-
-            var fixedDocument = new FixedDocument();
-            foreach (PrintPage page in pages)
-            {
-                double widthDip = page.Size.WidthPt * 96.0 / 72.0;
-                double heightDip = page.Size.HeightPt * 96.0 / 72.0;
-
-                var bitmap = new BitmapImage();
-                using (var stream = new MemoryStream(page.PngBytes))
-                {
-                    bitmap.BeginInit();
-                    bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                    bitmap.StreamSource = stream;
-                    bitmap.EndInit();
-                }
-                bitmap.Freeze();
-
-                var image = new System.Windows.Controls.Image
-                {
-                    Source = bitmap,
-                    Width = widthDip,
-                    Height = heightDip,
-                    Stretch = Stretch.Fill,
-                };
-
-                var fixedPage = new FixedPage { Width = widthDip, Height = heightDip };
-                fixedPage.Children.Add(image);
-
-                var pageContent = new PageContent();
-                ((IAddChild)pageContent).AddChild(fixedPage);
-                fixedDocument.Pages.Add(pageContent);
-            }
-
-            printDialog.PrintDocument(fixedDocument.DocumentPaginator, _vm.DisplayName);
+            FixedDocument fixedDocument = BuildFixedDocument(pages.Skip(firstPage).Take(lastPage - firstPage + 1));
+            printDialog.PrintDocument(fixedDocument.DocumentPaginator, _vm?.DisplayName ?? string.Empty);
         }
         catch (Exception ex)
         {
             MessageBox.Show(UiStrings.Format("Error_PrintFailed", ex.Message), UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
+    }
+
+    /// <summary>One <see cref="FixedPage"/> per rendered page, sized to the PDF
+    /// page's own dimensions (pt to DIP at 96/72).</summary>
+    private static FixedDocument BuildFixedDocument(IEnumerable<PrintPage> pages)
+    {
+        var fixedDocument = new FixedDocument();
+        foreach (PrintPage page in pages)
+        {
+            double widthDip = page.Size.WidthPt * 96.0 / 72.0;
+            double heightDip = page.Size.HeightPt * 96.0 / 72.0;
+
+            var bitmap = new BitmapImage();
+            using (var stream = new MemoryStream(page.PngBytes))
+            {
+                bitmap.BeginInit();
+                bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                bitmap.StreamSource = stream;
+                bitmap.EndInit();
+            }
+            bitmap.Freeze();
+
+            var image = new System.Windows.Controls.Image
+            {
+                Source = bitmap,
+                Width = widthDip,
+                Height = heightDip,
+                Stretch = Stretch.Fill,
+            };
+
+            var fixedPage = new FixedPage { Width = widthDip, Height = heightDip };
+            fixedPage.Children.Add(image);
+
+            var pageContent = new PageContent();
+            ((IAddChild)pageContent).AddChild(fixedPage);
+            fixedDocument.Pages.Add(pageContent);
+        }
+
+        return fixedDocument;
     }
 
     private void EditModeToggle_Changed(object sender, RoutedEventArgs e)
