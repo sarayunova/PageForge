@@ -54,6 +54,7 @@ edition.
 - **FR-VIEW-03**: Provide a page-thumbnail panel, an outline/bookmark panel, and full-text search with in-page result highlighting.
 - **FR-VIEW-04**: Support multiple documents open in tabs within one window.
 - **FR-VIEW-05**: Preview, then print, the open document (all pages, the current page or a chosen range) to any Windows-installed printer via the standard Windows print dialog, fully offline.
+- **FR-VIEW-06**: Snip a rectangular region of a page and copy it to the clipboard or save it as a PNG. The image is cut from a fresh 300 DPI render of the page (not a screen grab), includes unsaved edits, is reachable without a mouse (a "Whole page" action), and works fully offline.
 
 ### 5.2 Annotation (FR-ANNOT)
 - **FR-ANNOT-01**: Highlight, underline, strikethrough, free-hand ink, text notes/comments, stamps, and basic shape annotations.

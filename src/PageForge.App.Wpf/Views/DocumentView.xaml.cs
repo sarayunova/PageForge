@@ -989,6 +989,28 @@ public partial class DocumentView : UserControl
         preview.ShowDialog();
     }
 
+    /// <summary>Snip (FR-VIEW-06): opens the snip window on the current page. The
+    /// window is modal and self-contained, so it does not interact with the
+    /// Edit/Object/Form/Redact mode toggles.</summary>
+    private void Snip_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm is null)
+        {
+            return;
+        }
+
+        DocumentTabViewModel vm = _vm;
+        var snip = new SnipWindow(
+            vm.PageCount,
+            vm.CurrentPageIndex,
+            vm.DisplayName,
+            (pageIndex, dpi, ct) => Task.Run(() => vm.RenderPageForPrintAsync(pageIndex, dpi, ct), ct))
+        {
+            Owner = Window.GetWindow(this),
+        };
+        snip.ShowDialog();
+    }
+
     /// <summary>Shows the Windows print dialog (printer, paper, copies) and prints
     /// pages <paramref name="firstPage"/>..<paramref name="lastPage"/> (0-based,
     /// inclusive). Pages are rendered at 300 DPI lazily, one at a time as the

@@ -763,6 +763,49 @@
   <data name="Print_Range_Invalid" xml:space="preserve">
     <value>Enter a page or range between 1 and {0}, for example 7 or 7-10.</value>
   </data>
+  <data name="Document_Snip_Name" xml:space="preserve">
+    <value>Snip</value>
+  </data>
+  <data name="Document_Snip_Tip" xml:space="preserve">
+    <value>Snip a region of the page to the clipboard or a PNG file</value>
+  </data>
+  <data name="Snip_Title" xml:space="preserve">
+    <value>Snip - {0}</value>
+  </data>
+  <data name="Snip_Hint" xml:space="preserve">
+    <value>Drag a rectangle on the page to choose what to snip.</value>
+  </data>
+  <data name="Snip_Selected" xml:space="preserve">
+    <value>Region chosen. Copy it or save it as a PNG.</value>
+  </data>
+  <data name="Snip_WholePage" xml:space="preserve">
+    <value>Whole page</value>
+  </data>
+  <data name="Snip_WholePage_Name" xml:space="preserve">
+    <value>Select the whole page</value>
+  </data>
+  <data name="Snip_Copy" xml:space="preserve">
+    <value>Copy</value>
+  </data>
+  <data name="Snip_Save" xml:space="preserve">
+    <value>Save PNG...</value>
+  </data>
+  <data name="Snip_PageImage_Name" xml:space="preserve">
+    <value>Page to snip</value>
+  </data>
+  <data name="Snip_Surface_Name" xml:space="preserve">
+    <value>Snip selection surface</value>
+  </data>
+  <data name="Snip_Copied" xml:space="preserve">
+    <value>Copied {0} x {1} px to the clipboard.</value>
+  </data>
+  <data name="Snip_Saved" xml:space="preserve">
+    <value>Saved {0}.</value>
+  </data>
+  <data name="Snip_Failed" xml:space="preserve">
+    <value>Snip failed:
+{0}</value>
+  </data>
   <data name="Error_PrintFailed" xml:space="preserve">
     <value>Print failed:
 {0}</value>

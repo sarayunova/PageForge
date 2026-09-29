@@ -127,6 +127,10 @@
                                 Padding="8,3" ToolTip="{loc:Str Document_Print_Tip}">
                             <ui:SymbolIcon Symbol="Print24" FontSize="14" />
                         </Button>
+                        <Button AutomationProperties.Name="{loc:Str Document_Snip_Name}" Click="Snip_Click"
+                                Padding="8,3" ToolTip="{loc:Str Document_Snip_Tip}">
+                            <ui:SymbolIcon Symbol="Crop24" FontSize="14" />
+                        </Button>
                     </StackPanel>
 
                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">

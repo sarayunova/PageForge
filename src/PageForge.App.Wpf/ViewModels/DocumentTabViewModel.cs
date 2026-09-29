@@ -1090,8 +1090,8 @@ public sealed class DocumentTabViewModel : ObservableObject
         }
     }
 
-    /// <summary>Renders one page (0-based) for the Windows print pipeline or the
-    /// print preview (FR-VIEW-05) at <paramref name="dpi"/> — 300 for the printer,
+    /// <summary>Renders one page (0-based) for the Windows print pipeline, the
+    /// print preview (FR-VIEW-05) or the snip tool (FR-VIEW-06) at <paramref name="dpi"/> — 300 for the printer,
     /// far less for the on-screen preview. Pages are rendered one at a time on
     /// demand so a very long document never sits in memory whole. The current
     /// in-memory state — including unsaved text/object edits — is what gets
