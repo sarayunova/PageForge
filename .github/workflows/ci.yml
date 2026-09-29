@@ -9,7 +9,7 @@
 #   3. winui-build   : builds the WinUI 3 shell (src/PageForge.App). Needs the UWP/MSIX MSBuild
 #                      tasks that the windows-latest image provides; enforcing, so the spike
 #                      cannot rot while the port is deferred (see AGENTS.md).
-#   4. api-hosted    : the hosted API suite against real Postgres + MinIO containers.
+#   4. api-hosted    : the hosted API suite against real Postgres (service container) + MinIO.
 #   5. ui-smoke      : launches the real WPF window and drives it through UI Automation.
 #
 # The header used to say "Three lanes" while four existed. Lane 5 is new: the UiSmoke
@@ -121,7 +121,16 @@ jobs:
         shell: pwsh
         run: |
           Remove-Item artifacts -Recurse -Force -ErrorAction SilentlyContinue
-          & ./src/PageForge.App.Wpf/bin/Release/net8.0-windows/PageForge.App.Wpf.exe --smoke
+          # A WinExe returns to the shell immediately when invoked with `&`, so the
+          # existence check below raced the app's own writes (run 36517589245
+          # logged the wpfproof.png write 80ms AFTER "expected render is missing").
+          # Start-Process -Wait blocks until --smoke has finished.
+          $smoke = Start-Process -FilePath ./src/PageForge.App.Wpf/bin/Release/net8.0-windows/PageForge.App.Wpf.exe `
+            -ArgumentList '--smoke' -Wait -PassThru
+          if ($smoke.ExitCode -ne 0) {
+            Write-Error "WPF --smoke exited $($smoke.ExitCode)"
+            exit 1
+          }
           $mutool = Resolve-Path 'native/out/_work/mupdf-1.28.3-source/platform/win32/x64/Release/mutool.exe'
           dotnet run -c Release --project tests/PageForge.RenderSpike -- `
             tools/sample-pdf/sample-phase0.pdf --out artifacts --mutool-path $mutool
@@ -259,33 +268,32 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-      minio:
-        # quay.io, and a pinned release, for two separate reasons.
-        #
-        # minio/minio on Docker Hub stopped serving anonymous pulls, so this job
-        # died in Initialize containers - before checkout, so before any of our code
-        # ran - with "pull access denied for minio/minio, repository does not exist
-        # or may require 'docker login'". quay.io is MinIO's own registry and still
-        # serves the image unauthenticated.
-        #
-        # The tag is pinned because ":latest" is what let an upstream change break
-        # this lane with no way to tell a registry problem from a regression in the
-        # PR that happened to be running. A dated release also means a MinIO
-        # behaviour change arrives when someone bumps it deliberately.
-        image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
-        env:
-          MINIO_ROOT_USER: minioadmin
-          MINIO_ROOT_PASSWORD: minioadmin
-        command: server /data --console-address ":9001"
-        ports:
-          - 9000:9000
-        options: >-
-          --health-cmd "curl -f http://localhost:9000/minio/health/live"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
     steps:
       - uses: actions/checkout@v7
+      # MinIO runs as a step, not a service container, for two reasons.
+      #
+      # 1. The image. minio/minio left Docker Hub, and quay.io/minio/minio now
+      #    answers every pull with "unauthorized" (run 36517589245, three retries),
+      #    as does dl.min.io's archive (410 Gone). Chainguard's build of MinIO is
+      #    anonymously pullable; it is pinned by digest so an upstream change
+      #    arrives when someone bumps it deliberately.
+      # 2. `command:` is not a valid key for a job service container, so the old
+      #    `server /data` arguments were never delivered, and the distroless image
+      #    has no curl for a --health-cmd. Starting it here lets us pass the
+      #    arguments and probe health from the runner.
+      - name: Start MinIO
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin \
+            cgr.dev/chainguard/minio@sha256:71674988a1c7ddd5724928633199152b11e4ddefd6c6ce2d60772ff4a8f22ca9 \
+            server /data --console-address ":9001"
+          for i in $(seq 1 30); do
+            if curl -fs http://localhost:9000/minio/health/live; then echo "MinIO up"; exit 0; fi
+            sleep 2
+          done
+          docker logs minio
+          echo "MinIO did not become healthy" >&2
+          exit 1
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 8.0.x
