@@ -1235,6 +1235,14 @@ public partial class DocumentView : UserControl
     /// mouse hit-test path and the keyboard word-selection path (WCAG 2.1.1).</summary>
     private async Task EditRunAsync(PdfTextRun run)
     {
+        if (run.IsHiddenOcrText)
+        {
+            // Say so before asking for new text: the attempt can only fail, and the
+            // old generic advice ("try a smaller change") sent people round in circles.
+            MessageBox.Show(UiStrings.Get("Error_EditScanText"), UiStrings.Get("Common_AppTitle"), MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
         string? newText = AskEditText(run.Text);
         if (newText is null)
         {

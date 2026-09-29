@@ -24,6 +24,14 @@ public sealed record PdfTextRun(
 {
     /// <summary>True when the click point falls inside the run's bounding box.</summary>
     public bool Contains(double x, double y) => x >= X0 && x <= X1 && y >= Y0 && y <= Y1;
+
+    /// <summary>
+    /// True for the invisible text layer OCR adds over a scanned page (set in a
+    /// "GlyphLessFont"). It is drawn in a two-byte font and never painted, so it
+    /// cannot be rewritten in place, and rewriting it would not change what the
+    /// page shows anyway.
+    /// </summary>
+    public bool IsHiddenOcrText => FontName.Contains("GlyphLess", StringComparison.OrdinalIgnoreCase);
 }
 
 /// <summary>

@@ -1157,4 +1157,11 @@ They are permanently deleted and cannot be brought back. Choose No to keep them;
 
 Change page anyway?</value>
   </data>
+  <data name="Error_EditScanText" xml:space="preserve">
+    <value>This text cannot be edited in place.
+
+It is most likely a hidden text layer that OCR added over a scanned page. The words you see are part of the scanned picture, so changing that hidden layer would not change what the page shows.
+
+To change what a scanned page says, replace its image with the Object tool, or retype the page from the original document.</value>
+  </data>
 </root>

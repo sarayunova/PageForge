@@ -87,6 +87,44 @@ public sealed class OcrFidelityTests
         }
     }
 
+    /// <summary>
+    /// The text layer OCR adds is invisible and set in a two-byte font, so the
+    /// in-place rewriter cannot handle it (a real OCR'd book scan failed with "no
+    /// content operator paints the run at its origin"; the corpus scan fails with
+    /// "not encodable" - different symptoms, one cause). The editor must recognise
+    /// it up front and explain, instead of offering advice that can never work.
+    /// </summary>
+    [Fact]
+    public async Task Ocr_text_runs_are_flagged_as_hidden_and_cannot_be_rewritten()
+    {
+        string output = Path.Combine(AppContext.BaseDirectory, $"ocr-edit-{Guid.NewGuid():N}.pdf");
+        try
+        {
+            await using (MuPdfEngine engine = MuPdfEngine.Create())
+            {
+                await engine.OpenAsync(Corpus("scan-letters.pdf"));
+                await OcrService.OcrAsync(engine, output);
+            }
+
+            await using (MuPdfEngine reader = MuPdfEngine.Create())
+            {
+                await reader.OpenAsync(output);
+                IReadOnlyList<PdfTextRun> runs = await reader.ListTextRunsAsync(0);
+                Assert.NotEmpty(runs);
+                Assert.All(runs, r => Assert.True(r.IsHiddenOcrText, $"Run '{r.Text}' in font '{r.FontName}' was not flagged."));
+
+                // The flag exists because this genuinely fails; if the engine ever learns
+                // to rewrite OCR text, this line is the cue to drop the flag.
+                await Assert.ThrowsAsync<InvalidOperationException>(
+                    () => reader.RewriteTextRunAsync(0, runs[0].Index, "changed").AsTask());
+            }
+        }
+        finally
+        {
+            TryDelete(output);
+        }
+    }
+
     private static string Sha256(string path)
     {
         using var sha = SHA256.Create();
