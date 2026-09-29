@@ -77,3 +77,22 @@ fix (not just keep it local).
 - Verified by the user on a real document: preview works and printing works.
 - Commits `24272a5` and `642e347`, pushed to origin.
 - Still open: a UI-smoke assertion for the Print button's presence.
+
+## Update: Snip tool with annotation (FR-VIEW-06)
+- New toolbar **Snip** button (next to Print) opens `Views/SnipWindow.cs`, a
+  modal, self-contained window, so it does not touch the Edit/Object/Form/
+  Redact mode toggles. Scope chosen with the user: snip a region of a PDF page
+  to clipboard and/or PNG. Not a screen capture (Windows has Win+Shift+S) and
+  not paste-into-PDF.
+- The page is shown at 144 DPI for choosing; the snip is cut from a fresh
+  300 DPI render (`DocumentTabViewModel.RenderPageForPrintAsync`, shared with
+  print), so it is sharp and includes unsaved edits. The region is stored as
+  fractions of the page so it applies at any DPI.
+- Annotation: Pen, Arrow, Box, Highlight, Text in five colors, with Undo mark
+  and Clear marks. Marks are vector shapes on their own layer, painted over the
+  crop at export (`Annotate`). Marks clear when the page changes.
+- Known limits: annotating is mouse-only (keyboard path is Whole page ->
+  Copy/Save, no marks); no move/resize/delete of an individual mark.
+- Verified by the user in the live app: crop is correct and annotations work.
+- Commits `198299b` (snip) and `7e6160a` (annotation), pushed to origin.
+- Still open: UI-smoke assertions for the Print and Snip buttons.
