@@ -1,4 +1,4 @@
-# PageForge — Artifact-Layer Verification Playbook
+# LiVi's PageForge — Artifact-Layer Verification Playbook
 
 **Purpose:** How the coding agent (opencode, "big-pickle") verifies PageForge
 visually without being able to operate the WinUI 3 window directly.

@@ -978,10 +978,10 @@ Choose a different folder or file name, make sure the file is not open in anothe
     <value>Close {0}</value>
   </data>
   <data name="Recovery_Prompt" xml:space="preserve">
-    <value>PageForge closed unexpectedly with unsaved changes in {0} document(s):{1}{1}{2}{1}{1}Reopen the recovered copies? They open as new documents — your original files have not been changed. Choosing No permanently discards the recovered changes.</value>
+    <value>LiVi's PageForge closed unexpectedly with unsaved changes in {0} document(s):{1}{1}{2}{1}{1}Reopen the recovered copies? They open as new documents — your original files have not been changed. Choosing No permanently discards the recovered changes.</value>
   </data>
   <data name="Recovery_Title" xml:space="preserve">
-    <value>PageForge — recover unsaved work</value>
+    <value>LiVi's PageForge — recover unsaved work</value>
   </data>
   <data name="Document_HideTheSidebar_Name" xml:space="preserve">
     <value>Hide the sidebar</value>
@@ -1024,7 +1024,7 @@ Check the certificate file and its password, then try again.</value>
     <value>This document carries no signature fields.</value>
   </data>
   <data name="Signatures_Title" xml:space="preserve">
-    <value>PageForge — signatures</value>
+    <value>LiVi's PageForge — signatures</value>
   </data>
   <data name="Error_CheckingSignaturesFailed" xml:space="preserve">
     <value>Checking signatures failed:
@@ -1160,7 +1160,7 @@ Change page anyway?</value>
   <data name="Confirm_ScanTextEdit" xml:space="preserve">
     <value>This text is part of a scanned picture.
 
-PageForge will paint over the old words in the page's background colour and place your text on top, in a standard font that will not exactly match the scan.
+LiVi's PageForge will paint over the old words in the page's background colour and place your text on top, in a standard font that will not exactly match the scan.
 
 The scan itself is not changed. The original words are hidden underneath, not erased, and anyone who removes the cover can read them. To remove sensitive information for good, use Redact instead.
 

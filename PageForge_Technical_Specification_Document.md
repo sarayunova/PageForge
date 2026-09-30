@@ -1,6 +1,6 @@
-# PageForge — Technical Specification Document (TSD)
+# LiVi's PageForge — Technical Specification Document (TSD)
 
-**Product:** PageForge — open-source PDF viewer, editor & document platform for Windows
+**Product:** LiVi's PageForge — open-source PDF viewer, editor & document platform for Windows
 **Company:** LiVi Software Company (sibling product: FrameForge)
 **Document version:** 1.0
 **Companion document:** PageForge_Technical_Requirements_Document.md (the "what")

@@ -1,6 +1,6 @@
 # THIRD-PARTY NOTICES
 
-PageForge is AGPLv3.0 (see `LICENSE`). This file documents the third-party components bundled,
+LiVi's PageForge is AGPLv3.0 (see `LICENSE`). This file documents the third-party components bundled,
 linked, or used as build/verification tooling, and the license terms that govern their use.
 
 ## Bundled / linked components
@@ -15,7 +15,7 @@ linked, or used as build/verification tooling, and the license terms that govern
   under `native/PageForge.MuPdfShim`. `mutool` binaries built from the same tree are used for
   structural verification and as the fidelity reference renderer.
 
-AGPL notice: MuPDF and PageForge are both AGPLv3. Modifications to MuPDF made for the PageForge
+AGPL notice: MuPDF and LiVi's PageForge are both AGPLv3. Modifications to MuPDF made for the PageForge
 build (see `native/build-mupdf.ps1`) are limited to build-system configuration and are
 distributed in source form via this repository. The built native output is excluded from the
 repository (`.gitignore`) and is not redistributed as a binary-only artifact.

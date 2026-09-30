@@ -15,7 +15,7 @@
         </Grid.RowDefinitions>
 
         <StackPanel Orientation="Horizontal" Spacing="8">
-            <TextBlock Text="PageForge" Style="{StaticResource TitleTextBlockStyle}" VerticalAlignment="Center" />
+            <TextBlock Text="LiVi's PageForge" Style="{StaticResource TitleTextBlockStyle}" VerticalAlignment="Center" />
             <TextBlock x:Name="StatusText" VerticalAlignment="Center" Text="loading sample document..." />
         </StackPanel>
 

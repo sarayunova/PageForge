@@ -1,7 +1,7 @@
-# PageForge — Installation
+# LiVi's PageForge — Installation
 
 > **SPDX-License-Identifier: AGPL-3.0-only**
-> PageForge is an open-source (AGPLv3) PDF viewer, editor and document platform
+> LiVi's PageForge is an open-source (AGPLv3) PDF viewer, editor and document platform
 > for Windows. This file is install-only guidance; build authority lives in
 > `AGENTS.md` and the source-of-truth TRD/TSD artifacts.
 
@@ -115,7 +115,7 @@ This is idempotent and ends with a `mutool info` smoke check voice.
 
 ## 7. AGPL + source offer
 
-PageForge is **AGPLv3**. Running a hosted deployment of the API makes you the
+LiVi's PageForge is **AGPLv3**. Running a hosted deployment of the API makes you the
 operator of a network service; a public source-offer / AGPL-compliance factsheet
 lives with the `agpl-compliance` skill. See `LICENSE`, `CONTRIBUTING.md`,
 `SECURITY.md`.

@@ -19,6 +19,11 @@
     <!-- Stamps the icon into the executable itself, so Explorer, the taskbar and
          the installer all show it without the app having to be running. -->
     <ApplicationIcon>Assets\pageforge.ico</ApplicationIcon>
+    <!-- What Explorer shows under Properties > Details. -->
+    <Product>LiVi's PageForge</Product>
+    <AssemblyTitle>LiVi's PageForge</AssemblyTitle>
+    <Company>LiVi Software Company</Company>
+    <Copyright>Copyright (c) 2026 LiVi Software Company</Copyright>
   </PropertyGroup>
 
   <!-- Brand assets. The .ico is what Windows chrome uses; the 256px PNG is for

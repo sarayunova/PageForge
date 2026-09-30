@@ -1,8 +1,8 @@
-# PageForge
+# LiVi's PageForge
 
 Open-source (AGPLv3) PDF viewer, editor, and document platform for Windows.
 
-PageForge renders and edits PDFs through a real MuPDF engine, with offline
+LiVi's PageForge renders and edits PDFs through a real MuPDF engine, with offline
 local OCR (Tesseract), form filling, redaction, encryption, page organization, and
 a set of hosted services (account sync, billing, e-sign, team review, batch OCR and
 conversion). Every desktop feature works fully offline — hosted services are
@@ -10,7 +10,7 @@ optional and never gate core editing.
 
 ## License
 
-PageForge is licensed under the **GNU Affero General Public License v3.0**
+LiVi's PageForge is licensed under the **GNU Affero General Public License v3.0**
 (`LICENSE`). Because the hosted services are network-accessible AGPLv3 code,
 AGPL §13 applies to them; the `/source` endpoint on the hosted API and the
 in-app "View source" link in the desktop app both point to this repository and

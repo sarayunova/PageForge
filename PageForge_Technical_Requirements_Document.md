@@ -1,6 +1,6 @@
-# PageForge — Technical Requirements Document (TRD)
+# LiVi's PageForge — Technical Requirements Document (TRD)
 
-**Product:** PageForge — open-source PDF viewer, editor & document platform for Windows
+**Product:** LiVi's PageForge — open-source PDF viewer, editor & document platform for Windows
 **Company:** LiVi Software Company (sibling product: FrameForge)
 **Document version:** 1.0
 **Status:** Draft for development kickoff

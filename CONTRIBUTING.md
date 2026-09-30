@@ -1,6 +1,6 @@
-# Contributing to PageForge
+# Contributing to LiVi's PageForge
 
-Thanks for your interest. PageForge is open source under the GNU Affero General
+Thanks for your interest. LiVi's PageForge is open source under the GNU Affero General
 Public License v3.0 (`LICENSE`). By contributing you agree that your
 contributions are licensed that way.
 

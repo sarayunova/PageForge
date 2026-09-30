@@ -1,6 +1,9 @@
-# PageForge
+# LiVi's PageForge
 
 Open-source (AGPLv3) PDF viewer, editor and document platform for Windows.
+
+## Naming
+- The product name a person reads is **LiVi's PageForge** (window title, dialogs, UI strings, release names, document headings). Identifiers, namespaces, folders, file names (`pageforge_mupdf.dll`), the `%LOCALAPPDATA%\PageForge` data folder, the repository URL and the AGPL licence headers keep plain `PageForge`: renaming them would orphan users' logs, settings and recovery data. The UI tests find the main window by its title (`PageForgeApp.WindowTitle`).
 
 ## Source of truth
 - What: `PageForge_Technical_Requirements_Document.md`
