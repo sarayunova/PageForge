@@ -495,9 +495,16 @@ public sealed class DocumentTabViewModel : ObservableObject
                 OutlineTree.Add(node);
             }
 
+            string pages = _doc.PageCount == 1
+                ? UiStrings.Get("Status_Pages_One")
+                : UiStrings.Format("Status_Pages_Other", _doc.PageCount);
+            int bookmarks = _doc.Outline.Items.Count;
             DocumentStatus = _doc.Outline.HasItems
-                ? $"{_doc.PageCount} pages · {_doc.Outline.Items.Count} bookmarks"
-                : $"{_doc.PageCount} pages";
+                ? UiStrings.Format(
+                    "Status_PagesAndBookmarks",
+                    pages,
+                    bookmarks == 1 ? UiStrings.Get("Status_Bookmarks_One") : UiStrings.Format("Status_Bookmarks_Other", bookmarks))
+                : pages;
         }
         finally
         {

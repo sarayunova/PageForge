@@ -1169,4 +1169,22 @@ Continue?</value>
   <data name="Status_ScanTextCharacters" xml:space="preserve">
     <value>Edited scan text can use only letters, digits and common punctuation from the Latin alphabet (including accents). Remove other characters and try again.</value>
   </data>
+  <data name="Status_Pages_One" xml:space="preserve">
+    <value>1 page</value>
+  </data>
+  <data name="Status_Pages_Other" xml:space="preserve">
+    <value>{0} pages</value>
+  </data>
+  <data name="Status_Bookmarks_One" xml:space="preserve">
+    <value>1 bookmark</value>
+  </data>
+  <data name="Status_Bookmarks_Other" xml:space="preserve">
+    <value>{0} bookmarks</value>
+  </data>
+  <data name="Status_PagesAndBookmarks" xml:space="preserve">
+    <value>{0} · {1}</value>
+  </data>
+  <data name="Document_SearchPlaceholder" xml:space="preserve">
+    <value>Search this document</value>
+  </data>
 </root>

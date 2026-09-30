@@ -101,6 +101,13 @@ version heading when the tag is pushed.
   tick, and the flag is not sufficient for a close-time "unsaved changes"
   prompt.
 
+### Interface polish
+
+- Document tabs and the sidebar tabs (Pages, Bookmarks, Search, Annotations) share
+  one flat style with an accent underline on the selected tab, matching the tool
+  tabs. The selected tab is also brighter and heavier, so colour is not the only cue.
+- The search box shows a "Search this document" hint.
+- The status line says "1 page" and "1 bookmark" instead of "1 pages".
 ### Editing scanned text
 
 - Clicking text on a scanned page (the hidden text layer OCR adds) no longer
