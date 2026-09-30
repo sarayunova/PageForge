@@ -1792,6 +1792,73 @@ public class UiSmokeTests
         Assert.Equal(0, app.Process.ExitCode);
     }
 
+    [Fact]
+    public async Task The_theme_menu_offers_three_choices_and_remembers_the_pick()
+    {
+        // The settings folder is redirected so this exercises the real save path
+        // without overwriting the theme the person actually chose.
+        string dir = Path.Combine(Path.GetTempPath(), "pf-ui-settings-" + Guid.NewGuid().ToString("N"));
+        string settings = Path.Combine(dir, "settings.json");
+        try
+        {
+            await using PageForgeApp app = await PageForgeApp.LaunchAsync(
+                environment: new Dictionary<string, string> { ["PAGEFORGE_SETTINGS_DIR"] = dir });
+            _ = await app.WaitForVisibleAsync("PageIndicatorText");
+
+            Assert.Equal("LiVi's PageForge", app.Window.Current.Name);
+
+            PageForgeApp.Activate(app.FindById("ThemeButton")
+                ?? throw new InvalidOperationException("Theme button not found."));
+
+            // The menu is a popup, a separate top-level window, so search from the desktop.
+            AutomationElement light = await FindMenuItemAsync("Light");
+            _ = await FindMenuItemAsync("Follow Windows");
+            _ = await FindMenuItemAsync("Dark");
+
+            PageForgeApp.Activate(light);
+
+            DateTime deadline = DateTime.UtcNow.AddSeconds(10);
+            while (!File.Exists(settings) && DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(200);
+            }
+
+            Assert.True(File.Exists(settings), "Choosing a theme did not save it.");
+            Assert.Contains("light", File.ReadAllText(settings), StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(dir, recursive: true);
+            }
+            catch (IOException)
+            {
+            }
+        }
+    }
+
+    private static async Task<AutomationElement> FindMenuItemAsync(string name)
+    {
+        DateTime deadline = DateTime.UtcNow.AddSeconds(10);
+        while (DateTime.UtcNow < deadline)
+        {
+            AutomationElement? item = AutomationElement.RootElement.FindFirst(
+                TreeScope.Descendants,
+                new AndCondition(
+                    new PropertyCondition(AutomationElement.NameProperty, name),
+                    new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.MenuItem)));
+            if (item is not null)
+            {
+                return item;
+            }
+
+            await Task.Delay(200);
+        }
+
+        throw new TimeoutException($"Menu item '{name}' never appeared.");
+    }
+
     private static void CloseWindow(AutomationElement window)
     {
         if (window.TryGetCurrentPattern(WindowPattern.Pattern, out object? pattern))

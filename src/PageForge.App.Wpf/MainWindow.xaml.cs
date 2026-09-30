@@ -83,6 +83,27 @@ public partial class MainWindow : Controls.FluentShellWindow
         }
     }
 
+    /// <summary>Opens the theme menu under its button, ticking the current choice.</summary>
+    private void ThemeButton_Click(object sender, RoutedEventArgs e)
+    {
+        ThemeSystemItem.IsChecked = Themes.ThemeManager.Requested == Themes.AppTheme.System;
+        ThemeLightItem.IsChecked = Themes.ThemeManager.Requested == Themes.AppTheme.Light;
+        ThemeDarkItem.IsChecked = Themes.ThemeManager.Requested == Themes.AppTheme.Dark;
+        ThemeMenu.PlacementTarget = ThemeButton;
+        ThemeMenu.IsOpen = true;
+    }
+
+    /// <summary>Applies the chosen theme now and remembers it for the next start.</summary>
+    private void ThemeItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem { Tag: string tag })
+        {
+            Themes.AppTheme theme = Themes.ThemeSettings.Parse(tag);
+            Themes.ThemeManager.Apply(theme);
+            Themes.ThemeSettings.Save(theme);
+        }
+    }
+
     /// <summary>Opens the public source repository in the default browser, satisfying
     /// the AGPL §13 source-availability obligation for the desktop client (TSD §7).
     /// Reads the same PAGEFORGE_REPO_URL used by the hosted /source endpoint so the

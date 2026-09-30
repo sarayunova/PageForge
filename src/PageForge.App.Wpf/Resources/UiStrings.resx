@@ -42,10 +42,10 @@
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
   <data name="MainWindow_PageforgeTitleBar_Name" xml:space="preserve">
-    <value>PageForge title bar</value>
+    <value>LiVi's PageForge title bar</value>
   </data>
   <data name="MainWindow_Pageforge_Name" xml:space="preserve">
-    <value>PageForge</value>
+    <value>LiVi's PageForge</value>
   </data>
   <data name="MainWindow_OpenPdf_Name" xml:space="preserve">
     <value>Open PDF…</value>
@@ -63,10 +63,10 @@
     <value>Choose a PDF to open</value>
   </data>
   <data name="MainWindow_Pageforge_Title" xml:space="preserve">
-    <value>PageForge</value>
+    <value>LiVi's PageForge</value>
   </data>
   <data name="MainWindow_Pageforge_Text" xml:space="preserve">
-    <value>PageForge</value>
+    <value>LiVi's PageForge</value>
   </data>
   <data name="MainWindow_OpenPdf_Text" xml:space="preserve">
     <value>Open PDF…</value>
@@ -705,7 +705,7 @@
     <value>Drag a box where the signature should appear, or use the keyboard: Enter begins a box, arrows size it, Ctrl+arrows move it, Enter places it, Esc cancels.</value>
   </data>
   <data name="Common_AppTitle" xml:space="preserve">
-    <value>PageForge</value>
+    <value>LiVi's PageForge</value>
   </data>
   <data name="Error_CouldNotOpenTheSource" xml:space="preserve">
     <value>Could not open the source repository.
@@ -1186,5 +1186,20 @@ Continue?</value>
   </data>
   <data name="Document_SearchPlaceholder" xml:space="preserve">
     <value>Search this document</value>
+  </data>
+  <data name="MainWindow_Theme_Name" xml:space="preserve">
+    <value>Change theme</value>
+  </data>
+  <data name="MainWindow_Theme_Tip" xml:space="preserve">
+    <value>Choose light, dark, or follow the Windows setting</value>
+  </data>
+  <data name="MainWindow_ThemeSystem_Text" xml:space="preserve">
+    <value>Follow Windows</value>
+  </data>
+  <data name="MainWindow_ThemeLight_Text" xml:space="preserve">
+    <value>Light</value>
+  </data>
+  <data name="MainWindow_ThemeDark_Text" xml:space="preserve">
+    <value>Dark</value>
   </data>
 </root>

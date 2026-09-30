@@ -1,4 +1,4 @@
-// Copyright (c) 2026 LiVi Software Company
+﻿// Copyright (c) 2026 LiVi Software Company
 // SPDX-License-Identifier: AGPL-3.0-only
 // This file is part of PageForge. See LICENSE for the full license text.
 
@@ -119,6 +119,8 @@ public static class ThemeManager
                 ? global::Wpf.Ui.Appearance.ApplicationTheme.Light
                 : global::Wpf.Ui.Appearance.ApplicationTheme.Dark,
             updateAccent: false);
+
+        Diagnostics.AppLog.For(typeof(ThemeManager)).LogInformation("Theme applied: requested {Requested}, showing {Effective}.", requested, effective);
 
         ThemeChanged?.Invoke(null, EventArgs.Empty);
     }

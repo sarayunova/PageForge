@@ -103,6 +103,8 @@ version heading when the tag is pushed.
 
 ### Interface polish
 
+- **Theme menu.** A button in the title bar opens Follow Windows / Light / Dark, applies it at once and remembers it in `%LOCALAPPDATA%\PageForge\settings.json`. A damaged or missing file simply means Follow Windows. `--theme` still overrides for one run.
+- The product is now called **LiVi's PageForge** in the title bar, the taskbar and dialog titles.
 - Document tabs and the sidebar tabs (Pages, Bookmarks, Search, Annotations) share
   one flat style with an accent underline on the selected tab, matching the tool
   tabs. The selected tab is also brighter and heavier, so colour is not the only cue.

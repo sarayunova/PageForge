@@ -43,7 +43,7 @@
         <!-- Title is rendered in Header rather than via TitleBar.Title: setting
              Header takes over the title's slot, so relying on Title alone leaves
              the window with no product name showing at all. Window.Title is still
-             "PageForge" for the taskbar and for UIA (the smoke suite finds the
+             "LiVi's PageForge" for the taskbar and for UIA (the smoke suite finds the
              window by that name). -->
         <ui:TitleBar DockPanel.Dock="Top"
                      AutomationProperties.Name="{loc:Str MainWindow_PageforgeTitleBar_Name}">
@@ -79,6 +79,28 @@
                 <!-- AGPL §13 source availability: point users at the public
                      repository (TSD §7). It belongs in the chrome, not the
                      document surface, so the title bar is the right home. -->
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <!-- Theme picker. A button that opens its own menu rather than a
+                     ContextMenu-on-right-click, so it is discoverable and works from
+                     the keyboard. Named items (not a generated list) because there
+                     are exactly three choices and each carries a checked state. -->
+                <Button x:Name="ThemeButton" Click="ThemeButton_Click" Padding="8,3" Margin="0,0,10,0"
+                        VerticalAlignment="Center"
+                        AutomationProperties.Name="{loc:Str MainWindow_Theme_Name}"
+                        ToolTip="{loc:Str MainWindow_Theme_Tip}">
+                    <ui:SymbolIcon Symbol="WeatherMoon24" FontSize="14" />
+                    <Button.ContextMenu>
+                        <ContextMenu x:Name="ThemeMenu" Placement="Bottom"
+                                     AutomationProperties.Name="{loc:Str MainWindow_Theme_Name}">
+                            <MenuItem x:Name="ThemeSystemItem" Header="{loc:Str MainWindow_ThemeSystem_Text}"
+                                      Click="ThemeItem_Click" Tag="System" />
+                            <MenuItem x:Name="ThemeLightItem" Header="{loc:Str MainWindow_ThemeLight_Text}"
+                                      Click="ThemeItem_Click" Tag="Light" />
+                            <MenuItem x:Name="ThemeDarkItem" Header="{loc:Str MainWindow_ThemeDark_Text}"
+                                      Click="ThemeItem_Click" Tag="Dark" />
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
                 <TextBlock VerticalAlignment="Center" Margin="0,0,12,0"
                            Foreground="{DynamicResource ContentMutedBrush}">
                     <Hyperlink Click="ViewSource_Click"
@@ -87,6 +109,7 @@
                         View source
                     </Hyperlink>
                 </TextBlock>
+                </StackPanel>
             </ui:TitleBar.TrailingContent>
         </ui:TitleBar>
 

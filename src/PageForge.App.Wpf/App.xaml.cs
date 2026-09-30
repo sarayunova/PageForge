@@ -40,12 +40,9 @@ public partial class App : Application
 
             string? value = index >= 0 && index + 1 < args.Length ? args[index + 1] : null;
 
-            return value?.ToLowerInvariant() switch
-            {
-                "light" => Themes.AppTheme.Light,
-                "dark" => Themes.AppTheme.Dark,
-                _ => Themes.AppTheme.System,
-            };
+            // An explicit --theme wins for this run only; otherwise the choice the
+            // person made in the title-bar menu last time.
+            return value is not null ? Themes.ThemeSettings.Parse(value) : Themes.ThemeSettings.Load();
         }
     }
 

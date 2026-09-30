@@ -19,7 +19,7 @@ namespace PageForge.UiSmoke.Tests;
 /// </summary>
 internal sealed class PageForgeApp : IAsyncDisposable
 {
-    public const string WindowTitle = "PageForge";
+    public const string WindowTitle = "LiVi's PageForge";
 
     private readonly Process? _process;
     private bool _disposed;
