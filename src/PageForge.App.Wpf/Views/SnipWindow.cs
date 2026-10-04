@@ -90,6 +90,10 @@ internal sealed class SnipWindow : Window
     private bool _dragging;
     private Point _keyCursor;
     private Point? _keyAnchor;
+    // A mark started from the keyboard: Enter starts it at the crosshair, the arrow
+    // keys extend it, and Enter finishes it.
+    private bool _keyMarking;
+    private ScrollViewer? _pageScroll;
     // The chosen region as fractions of the page (0..1), so it applies to a
     // render at any DPI.
     private Rect _fraction = Rect.Empty;
@@ -126,7 +130,9 @@ internal sealed class SnipWindow : Window
         _overlay.MouseLeftButtonUp += Overlay_Up;
         PreviewKeyDown += (_, e) =>
         {
-            if (e.Key == Key.Escape)
+            // Escape closes the window, except while a text box is open: then it
+            // cancels that box.
+            if (e.Key == Key.Escape && _textEditor is null)
             {
                 Close();
                 e.Handled = true;
@@ -168,6 +174,7 @@ internal sealed class SnipWindow : Window
         };
         AutomationProperties.SetName(scroll, UiStrings.Get("Snip_Surface_Name"));
         AutomationProperties.SetHelpText(scroll, UiStrings.Get("Snip_Surface_Help"));
+        _pageScroll = scroll;
         scroll.PreviewKeyDown += Page_KeyDown;
         scroll.GotKeyboardFocus += (_, _) => _keyCursorMark.Visibility = Visibility.Visible;
         scroll.LostKeyboardFocus += (_, _) => _keyCursorMark.Visibility = Visibility.Collapsed;
@@ -242,6 +249,7 @@ internal sealed class SnipWindow : Window
     private void Overlay_Down(object sender, MouseButtonEventArgs e)
     {
         CommitText();
+        EndKeyboardMark();
         _keyAnchor = null;
         if (_tool != Tool.Select)
         {
@@ -319,6 +327,7 @@ internal sealed class SnipWindow : Window
             toggle.Click += (_, _) =>
             {
                 CommitText();
+                EndKeyboardMark();
                 _tool = tool;
                 foreach ((ToggleButton b, Tool t) in toggles)
                 {
@@ -418,19 +427,26 @@ internal sealed class SnipWindow : Window
                 if (e.Key == Key.Enter)
                 {
                     CommitText();
+                    _hint.Text = UiStrings.Get("Snip_Hint");
+                    _pageScroll?.Focus();
                     e.Handled = true;
                 }
                 else if (e.Key == Key.Escape)
                 {
                     editor.Text = string.Empty;
                     CommitText();
+                    _hint.Text = UiStrings.Get("Snip_Hint");
+                    _pageScroll?.Focus();
                     e.Handled = true;
                 }
             };
             editor.LostKeyboardFocus += (_, _) => CommitText();
             _textEditor = editor;
             _overlay.Children.Add(editor);
-            Dispatcher.BeginInvoke(new Action(() => editor.Focus()), System.Windows.Threading.DispatcherPriority.Input);
+            // Focus once the box is in the visual tree. A focus call made before that
+            // is dropped, and the keys typed next then go to the page instead.
+            editor.Loaded += (_, _) => Keyboard.Focus(editor);
+            Dispatcher.BeginInvoke(new Action(() => Keyboard.Focus(editor)), System.Windows.Threading.DispatcherPriority.Input);
             return;
         }
 
@@ -608,7 +624,8 @@ internal sealed class SnipWindow : Window
     /// starts a selection at it and a second press finishes the selection.</summary>
     private void Page_KeyDown(object sender, KeyEventArgs e)
     {
-        if (_tool != Tool.Select)
+        // While a text box is open its keys belong to the box, not the page.
+        if (_textEditor is not null)
         {
             return;
         }
@@ -630,7 +647,15 @@ internal sealed class SnipWindow : Window
                 break;
             case Key.Enter:
             case Key.Space:
-                ToggleKeyboardSelection();
+                if (_tool == Tool.Select)
+                {
+                    ToggleKeyboardSelection();
+                }
+                else
+                {
+                    ToggleKeyboardMark();
+                }
+
                 break;
             default:
                 return;
@@ -651,6 +676,52 @@ internal sealed class SnipWindow : Window
         {
             ShowSelectionRect(Clamp(new Rect(anchor, _keyCursor)));
         }
+
+        if (_keyMarking && _dragging)
+        {
+            ExtendMark(_keyCursor);
+        }
+    }
+
+    /// <summary>Enter starts a mark at the crosshair (or opens a text box for the
+    /// Text tool); a second Enter finishes it.</summary>
+    private void ToggleKeyboardMark()
+    {
+        if (_keyMarking)
+        {
+            EndKeyboardMark();
+            return;
+        }
+
+        _keyMarking = true;
+        BeginMark(_keyCursor);
+        if (_tool == Tool.Text)
+        {
+            // A text box takes over the keys until it is committed.
+            _keyMarking = false;
+            _hint.Text = UiStrings.Get("Snip_TypeText");
+        }
+        else
+        {
+            _hint.Text = UiStrings.Get("Snip_Marking");
+        }
+    }
+
+    /// <summary>Finishes a keyboard mark, if one is in progress.</summary>
+    private void EndKeyboardMark()
+    {
+        if (!_keyMarking)
+        {
+            return;
+        }
+
+        _keyMarking = false;
+        if (_dragging)
+        {
+            EndMark(_keyCursor);
+        }
+
+        _hint.Text = UiStrings.Get("Snip_Hint");
     }
 
     private void ToggleKeyboardSelection()
