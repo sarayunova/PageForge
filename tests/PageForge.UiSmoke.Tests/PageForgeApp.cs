@@ -22,15 +22,47 @@ internal sealed class PageForgeApp : IAsyncDisposable
     public const string WindowTitle = "LiVi's PageForge";
 
     private readonly Process? _process;
+    private readonly AutomationElement _launchedWindow;
     private bool _disposed;
 
     private PageForgeApp(Process? process, AutomationElement window)
     {
         _process = process;
-        Window = window;
+        _launchedWindow = window;
     }
 
-    public AutomationElement Window { get; }
+    /// <summary>The main window as UI Automation sees it now.
+    ///
+    /// The element found at launch can go stale. When it was taken before the
+    /// window's content was built, every search inside it came back empty for the
+    /// rest of the test - about one launch in four, as "Timed out waiting for
+    /// PageIndicatorText". A fresh lookup from the desktop, matched to this process
+    /// so another PageForge window is never picked up, sees the live tree.</summary>
+    public AutomationElement Window => FindOwnWindow() ?? _launchedWindow;
+
+    private AutomationElement? FindOwnWindow()
+    {
+        try
+        {
+            int processId = _process?.Id ?? -1;
+            AutomationElementCollection matches = AutomationElement.RootElement.FindAll(
+                TreeScope.Children,
+                new PropertyCondition(AutomationElement.NameProperty, WindowTitle));
+            foreach (AutomationElement candidate in matches)
+            {
+                if (processId < 0 || candidate.Current.ProcessId == processId)
+                {
+                    return candidate;
+                }
+            }
+
+            return null;
+        }
+        catch (ElementNotAvailableException)
+        {
+            return null;
+        }
+    }
 
     /// <summary>The app process, for tests that care how it ended.</summary>
     public Process Process => _process ?? throw new InvalidOperationException("The app process was not started.");
