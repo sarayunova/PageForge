@@ -55,10 +55,25 @@
                                       ToolTip="{loc:Str Document_HideOrShowTheThumbnails_Tip}">
                             <ui:SymbolIcon Symbol="PanelLeft24" FontSize="14" />
                         </ToggleButton>
+                        <!-- A keyboard bypass, so it stays focusable and in the accessibility
+                             tree, but it is drawn only while it has keyboard focus. Hidden
+                             controls take no clicks either. -->
                         <Button x:Name="SkipToPageButton"
                                 AutomationProperties.Name="{loc:Str Document_SkipToTheDocument_Name}"
                                 Click="SkipToPage_Click" Padding="10,3"
                                 ToolTip="{loc:Str Document_MoveKeyboardFocusToThe_Tip}">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                    <Setter Property="Opacity" Value="0" />
+                                    <Setter Property="IsHitTestVisible" Value="False" />
+                                    <Style.Triggers>
+                                        <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                            <Setter Property="Opacity" Value="1" />
+                                            <Setter Property="IsHitTestVisible" Value="True" />
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
                             <StackPanel Orientation="Horizontal">
                                 <ui:SymbolIcon Symbol="ArrowExportUp24" FontSize="14" Margin="0,0,6,0" />
                                 <TextBlock Text="{loc:Str Document_SkipToPage_Text}" VerticalAlignment="Center" />

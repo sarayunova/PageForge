@@ -48,6 +48,9 @@ public partial class MainWindow : Controls.FluentShellWindow
     {
         InitializeComponent();
         Closing += OnWindowClosing;
+        Themes.ThemeManager.ThemeChanged += OnThemeChanged;
+        Closed += (_, _) => Themes.ThemeManager.ThemeChanged -= OnThemeChanged;
+        UpdateThemeIcon();
         Loaded += async (_, _) =>
         {
             await OfferRecoveredDocumentsAsync();
@@ -80,6 +83,20 @@ public partial class MainWindow : Controls.FluentShellWindow
             {
                 _ = OpenDocumentAsync(file);
             }
+        }
+    }
+
+    private void OnThemeChanged(object? sender, EventArgs e) => UpdateThemeIcon();
+
+    /// <summary>Shows the theme the button will switch to: a sun while the dark theme
+    /// is on screen, a moon while the light theme is.</summary>
+    private void UpdateThemeIcon()
+    {
+        if (ThemeButton.Content is global::Wpf.Ui.Controls.SymbolIcon icon)
+        {
+            icon.Symbol = Themes.ThemeManager.Effective == Themes.AppTheme.Dark
+                ? global::Wpf.Ui.Controls.SymbolRegular.WeatherSunny24
+                : global::Wpf.Ui.Controls.SymbolRegular.WeatherMoon24;
         }
     }
 
