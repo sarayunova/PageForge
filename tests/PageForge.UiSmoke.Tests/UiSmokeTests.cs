@@ -1150,9 +1150,27 @@ public class UiSmokeTests
         AutomationElement strip = app.FindInSelectedTabById("ThumbList")
             ?? throw new InvalidOperationException("The thumbnail strip was not found.");
 
+        // With a window capped to the screen the strip can be shorter than its
+        // thumbnails, so bring the target into the viewport first.
+        if (thumbs[index].TryGetCurrentPattern(ScrollItemPattern.Pattern, out object? scrollItem))
+        {
+            ((ScrollItemPattern)scrollItem).ScrollIntoView();
+            await Task.Delay(300);
+        }
+
         System.Windows.Rect bounds = thumbs[index].Current.BoundingRectangle;
         bounds.Intersect(strip.Current.BoundingRectangle);
         bounds.Intersect(app.Window.Current.BoundingRectangle);
+
+        // And to the monitor's usable area: under display scaling the window can
+        // be taller than the screen, so the lower thumbnails are partly under the
+        // taskbar or off the edge, where a click lands on the taskbar or nothing.
+        System.Windows.Rect workArea = app.MonitorWorkArea();
+        if (!workArea.IsEmpty)
+        {
+            bounds.Intersect(workArea);
+        }
+
         Assert.False(
             bounds.IsEmpty || bounds.Height < 8,
             $"Thumbnail {index} is not visibly on screen: {bounds}.");

@@ -348,6 +348,15 @@ internal sealed class PageForgeApp : IAsyncDisposable
         double physicalWidth = width * scale;
         double physicalHeight = height * scale;
 
+        // Never ask for a window taller than the screen's usable area: the part
+        // hanging over the edge is out of reach of a mouse and under the taskbar.
+        // At 125% a 1040-DIP request is 1300 px on a 1080 px screen.
+        System.Windows.Rect workArea = MonitorWorkArea();
+        if (!workArea.IsEmpty)
+        {
+            physicalHeight = Math.Min(physicalHeight, workArea.Height);
+        }
+
         var transform = (TransformPattern)Window.GetCurrentPattern(TransformPattern.Pattern);
         transform.Resize(physicalWidth, physicalHeight);
 
@@ -375,6 +384,46 @@ internal sealed class PageForgeApp : IAsyncDisposable
 
     [DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(IntPtr window);
+
+    /// <summary>
+    /// The usable area (screen minus taskbar) of the monitor the window is on, in
+    /// physical pixels. A window can be taller than that, and anything it hangs
+    /// over the edge is unreachable by a mouse click or sits under the taskbar.
+    /// </summary>
+    public System.Windows.Rect MonitorWorkArea()
+    {
+        IntPtr monitor = MonitorFromWindow(new IntPtr(Window.Current.NativeWindowHandle), 2 /* MONITOR_DEFAULTTONEAREST */);
+        var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+        if (monitor == IntPtr.Zero || !GetMonitorInfo(monitor, ref info))
+        {
+            return System.Windows.Rect.Empty;
+        }
+
+        return new System.Windows.Rect(
+            info.Work.Left, info.Work.Top,
+            info.Work.Right - info.Work.Left, info.Work.Bottom - info.Work.Top);
+    }
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromWindow(IntPtr window, uint flags);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetMonitorInfo(IntPtr monitor, ref MonitorInfo info);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MonitorRect
+    {
+        public int Left, Top, Right, Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MonitorInfo
+    {
+        public int Size;
+        public MonitorRect Monitor;
+        public MonitorRect Work;
+        public uint Flags;
+    }
 
     /// <summary>Invokes any element that supports Invoke, Toggle, or SelectionItem
     /// (WPF buttons/toggle-buttons/list items).</summary>
