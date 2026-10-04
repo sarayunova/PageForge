@@ -217,7 +217,7 @@
                     Padding="8,5" MinHeight="38">
                 <Grid>
                     <StackPanel x:Name="OrganizeGroup" Orientation="Horizontal" VerticalAlignment="Center">
-                        <controls:HeadingTextBlock Text="{loc:Str Document_Organize_Text}" HeadingLevel="2"
+                        <controls:HeadingTextBlock HeadingLevel="2"
                                                    Foreground="{DynamicResource ContentMutedBrush}"
                                                    VerticalAlignment="Center" Margin="0,0,10,0"
                                                    AutomationProperties.Name="{loc:Str Document_OrganizeTools_Name}" />
@@ -275,7 +275,7 @@
 
                     <StackPanel x:Name="AnnotateGroup" Orientation="Horizontal" VerticalAlignment="Center"
                                 Visibility="Collapsed">
-                        <controls:HeadingTextBlock Text="{loc:Str Document_Annotate_Text}" HeadingLevel="2"
+                        <controls:HeadingTextBlock HeadingLevel="2"
                                                    Foreground="{DynamicResource ContentMutedBrush}"
                                                    VerticalAlignment="Center" Margin="0,0,10,0"
                                                    AutomationProperties.Name="{loc:Str Document_AnnotateTools_Name}" />
@@ -319,7 +319,7 @@
 
                     <StackPanel x:Name="EditGroup" Orientation="Horizontal" VerticalAlignment="Center"
                                 Visibility="Collapsed">
-                        <controls:HeadingTextBlock Text="{loc:Str Document_Edit_Text}" HeadingLevel="2"
+                        <controls:HeadingTextBlock HeadingLevel="2"
                                                    Foreground="{DynamicResource ContentMutedBrush}"
                                                    VerticalAlignment="Center" Margin="0,0,10,0"
                                                    AutomationProperties.Name="{loc:Str Document_EditTools_Name}" />
@@ -354,7 +354,7 @@
 
                     <StackPanel x:Name="FormsGroup" Orientation="Horizontal" VerticalAlignment="Center"
                                 Visibility="Collapsed">
-                        <controls:HeadingTextBlock Text="{loc:Str Document_Forms_Text}" HeadingLevel="2"
+                        <controls:HeadingTextBlock HeadingLevel="2"
                                                    Foreground="{DynamicResource ContentMutedBrush}"
                                                    VerticalAlignment="Center" Margin="0,0,10,0"
                                                    AutomationProperties.Name="{loc:Str Document_FormTools_Name}" />
@@ -371,7 +371,7 @@
 
                     <StackPanel x:Name="RedactGroup" Orientation="Horizontal" VerticalAlignment="Center"
                                 Visibility="Collapsed">
-                        <controls:HeadingTextBlock Text="{loc:Str Document_Redact_Text}" HeadingLevel="2"
+                        <controls:HeadingTextBlock HeadingLevel="2"
                                                    Foreground="{DynamicResource ContentMutedBrush}"
                                                    VerticalAlignment="Center" Margin="0,0,10,0"
                                                    AutomationProperties.Name="{loc:Str Document_RedactTools_Name}" />
@@ -389,7 +389,7 @@
 
                     <StackPanel x:Name="DocumentGroup" Orientation="Horizontal" VerticalAlignment="Center"
                                 Visibility="Collapsed">
-                        <controls:HeadingTextBlock Text="{loc:Str Document_Document_Text}" HeadingLevel="2"
+                        <controls:HeadingTextBlock HeadingLevel="2"
                                                    Foreground="{DynamicResource ContentMutedBrush}"
                                                    VerticalAlignment="Center" Margin="0,0,10,0"
                                                    AutomationProperties.Name="{loc:Str Document_DocumentTools_Name}" />

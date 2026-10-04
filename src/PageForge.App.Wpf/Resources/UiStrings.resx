@@ -368,9 +368,6 @@
   <data name="Document_SkipToPage_Text" xml:space="preserve">
     <value>Skip to page</value>
   </data>
-  <data name="Document_Organize_Text" xml:space="preserve">
-    <value>Organize</value>
-  </data>
   <data name="Document_RotatePage_Text" xml:space="preserve">
     <value>Rotate page</value>
   </data>
@@ -392,9 +389,6 @@
   <data name="Document_SaveEdits_Text" xml:space="preserve">
     <value>Save…</value>
   </data>
-  <data name="Document_Annotate_Text" xml:space="preserve">
-    <value>Annotate</value>
-  </data>
   <data name="Document_Highlight_Text" xml:space="preserve">
     <value>Highlight</value>
   </data>
@@ -407,26 +401,17 @@
   <data name="Document_Flatten_Text" xml:space="preserve">
     <value>Flatten…</value>
   </data>
-  <data name="Document_Edit_Text" xml:space="preserve">
-    <value>Edit</value>
-  </data>
   <data name="Document_EditText_Text" xml:space="preserve">
     <value>Edit text</value>
   </data>
   <data name="Document_EditObjects_Text" xml:space="preserve">
     <value>Edit objects</value>
   </data>
-  <data name="Document_Forms_Text" xml:space="preserve">
-    <value>Forms</value>
-  </data>
   <data name="Document_FillForm_Text" xml:space="preserve">
     <value>Fill form</value>
   </data>
   <data name="Document_Redact_Text" xml:space="preserve">
     <value>Redact</value>
-  </data>
-  <data name="Document_Document_Text" xml:space="preserve">
-    <value>Document</value>
   </data>
   <data name="Document_Ocr_Text" xml:space="preserve">
     <value>OCR…</value>
