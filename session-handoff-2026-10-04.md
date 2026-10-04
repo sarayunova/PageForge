@@ -6,8 +6,17 @@ Read this first, then `session-handoff-2026-09-30.md` (state, decisions, traps; 
 - `main` is pushed and level with `origin/main`. Last code commit: `cb07d12`
   "Fix UI smoke waits and resize under DPI scaling" (fast-forward merge of
   `uitest/visible-page-indicator`; only `tests/PageForge.UiSmoke.Tests/PageForgeApp.cs` changed).
-- Verified on this machine in Debug: UiSmoke 32/32 pass. Core, Fidelity and Api suites and a
+- Verified on this machine in Debug: UiSmoke 32/32 pass (see DPI follow-up below). Core, Fidelity and Api suites and a
   Release build were NOT re-run for this change (it touches only the UI test helper).
+- **DPI follow-up (`7c5fe58`).** `cb07d12` alone failed
+  `Clicking_a_thumbnail_with_the_mouse_navigates_in_reorder_mode` at 125% scaling on a 1920x1080
+  display: the 1040-DIP resize became a window taller than the screen, so the lower thumbnail sat
+  under the taskbar and the click missed. Fixed in the test code only: `ResizeAsync` caps the height
+  to the monitor work area (`PageForgeApp.MonitorWorkArea`), and `ClickThumbnailAsync` scrolls the
+  thumbnail into view and clips the click to the work area. UiSmoke 32/32 at 100%, 125% and 150%
+  (Debug, this 1080p machine); Release build clean with warnings as errors. Not tested at 1440p.
+  To change display scale without signing out, `DisplayConfigSetDeviceInfo` (type -4) works;
+  restore it afterwards.
 - `wip/crash-recovery-buffer` had one local-only commit, `71002d9` "Stop the smoke run ending
   itself halfway through"; pushed so the other computer can see it. It is WIP, NOT verified.
 
