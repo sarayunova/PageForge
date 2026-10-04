@@ -162,6 +162,32 @@ internal sealed class PageForgeApp : IAsyncDisposable
     public AutomationElement? FindById(string automationId, TreeScope scope = TreeScope.Descendants)
         => FindOne(() => Window.FindFirst(scope, new PropertyCondition(AutomationElement.AutomationIdProperty, automationId)));
 
+    /// <summary>
+    /// Returns the first on-screen element with this AutomationId, looking at every
+    /// match in the document tabs (or the whole window when no tab control exists).
+    /// </summary>
+    private AutomationElement? FindVisibleById(string automationId)
+    {
+        AutomationElement scope = FindById("DocTabs") ?? Window;
+        var condition = new PropertyCondition(AutomationElement.AutomationIdProperty, automationId);
+        try
+        {
+            foreach (AutomationElement match in scope.FindAll(TreeScope.Descendants, condition))
+            {
+                if (!match.Current.IsOffscreen)
+                {
+                    return match;
+                }
+            }
+        }
+        catch (ElementNotAvailableException)
+        {
+            // The window changed under the search; the caller polls again.
+        }
+
+        return null;
+    }
+
     public AutomationElement? FindByName(string name, TreeScope scope = TreeScope.Descendants)
         => FindOne(() => Window.FindFirst(scope, new PropertyCondition(AutomationElement.NameProperty, name)));
 
@@ -183,8 +209,11 @@ internal sealed class PageForgeApp : IAsyncDisposable
         DateTime deadline = DateTime.UtcNow + timeout;
         while (DateTime.UtcNow < deadline)
         {
-            AutomationElement? el = FindById(automationId);
-            if (el is not null && !el.Current.IsOffscreen)
+            // Every open document has its own copy of this element, and a background
+            // tab's copy can come first in the tree. Check all of them, not just the
+            // first, so the visible one is found whatever the tab order.
+            AutomationElement? el = FindVisibleById(automationId);
+            if (el is not null)
             {
                 return el;
             }
@@ -311,8 +340,16 @@ internal sealed class PageForgeApp : IAsyncDisposable
     /// </summary>
     public async Task ResizeAsync(double width, double height)
     {
+        // The sizes passed in are device-independent (what the app lays out in and
+        // what MinWidth is written in). The test process is per-monitor DPI aware,
+        // so UI Automation reports and accepts physical pixels: scale first, or a
+        // 1200 request on a 200% display becomes 600 DIPs and is clamped to MinWidth.
+        double scale = WindowDpiScale();
+        double physicalWidth = width * scale;
+        double physicalHeight = height * scale;
+
         var transform = (TransformPattern)Window.GetCurrentPattern(TransformPattern.Pattern);
-        transform.Resize(width, height);
+        transform.Resize(physicalWidth, physicalHeight);
 
         // WPF lays out on the dispatcher after the resize call returns.
         await Task.Delay(600);
@@ -320,14 +357,24 @@ internal sealed class PageForgeApp : IAsyncDisposable
         // A resize that silently did nothing would make every width-dependent
         // assertion vacuous - the test would keep passing at the default size while
         // claiming to have checked a narrow one. The tolerance covers window chrome
-        // and DPI scaling, not a no-op.
+        // and rounding, not a no-op.
         double actual = Window.Current.BoundingRectangle.Width;
-        if (Math.Abs(actual - width) > 40)
+        if (Math.Abs(actual - physicalWidth) > 40)
         {
             throw new InvalidOperationException(
-                $"Resize to {width:F0} did not take effect; the window is {actual:F0} wide.");
+                $"Resize to {width:F0} did not take effect; the window is {actual / scale:F0} wide.");
         }
     }
+
+    /// <summary>The window's DPI scale (1.0 at 96 DPI, 2.0 at 200%).</summary>
+    private double WindowDpiScale()
+    {
+        uint dpi = GetDpiForWindow(new IntPtr(Window.Current.NativeWindowHandle));
+        return dpi == 0 ? 1.0 : dpi / 96.0;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern uint GetDpiForWindow(IntPtr window);
 
     /// <summary>Invokes any element that supports Invoke, Toggle, or SelectionItem
     /// (WPF buttons/toggle-buttons/list items).</summary>
