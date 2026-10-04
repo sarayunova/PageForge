@@ -29,16 +29,38 @@ Read this first, then `session-handoff-2026-09-30.md` (state, decisions, traps; 
 4. Native DLL: `PF_MUPDF_SKIP_DOWNLOAD=1 powershell -ExecutionPolicy Bypass -File native/build-mupdf.ps1`
    if `pageforge_mupdf.dll` is missing (it is built, not tracked).
 
-## Unmerged remote branches (none inspected this session)
-ci/pixel-blank-check, ci/ui-smoke-lane, docs/truthful-beta-scope, feat/crash-recovery-buffer,
-feat/unsaved-changes-flag, fix/a11y-list-item-names, fix/dialog-postcondition,
-proof/form-overlay-geometry, refactor/form-field-cards, refactor/u4-child-views,
-test/organizer-page-order, wip/local-signing (all dated 2026-09-16..20).
-Local `master` is stale (behind `main`); ignore it.
+## Branch review (2026-10-04)
+
+All 13 formerly "unmerged" remote branches were reviewed: none holds work that is missing from `main`.
+The work was rebased/cherry-picked into `main` under new commit IDs, which is why git calls them
+unmerged and why 9 show merge conflicts. Do NOT merge them. Verified by matching commit subjects
+against `main` and checking the files exist there; the two `wip/*` branches (no matching subjects)
+were compared by code: the signer-certificate fix (`cb_info` allocation, `CERT_FIND_SUBJECT_CERT`)
+and `ShutdownMode.OnExplicitShutdown` are both in `main`. Only key changes were compared for those two.
+
+**Status: NOT yet deleted.** The cleanup was blocked by the permission classifier and is left to the
+user. Safe to delete (remote and local), plus the stale local `master`. Tips, to restore one with
+`git branch <name> <sha>` if ever needed:
+
+- `ci/pixel-blank-check` de20c32
+- `ci/ui-smoke-lane` 493783d
+- `docs/truthful-beta-scope` e51b0d5
+- `feat/crash-recovery-buffer` 1043d71
+- `feat/unsaved-changes-flag` 7689482
+- `fix/a11y-list-item-names` ba576b0
+- `fix/dialog-postcondition` 6e6bb33
+- `proof/form-overlay-geometry` 87096b3
+- `refactor/form-field-cards` 3701af2
+- `refactor/u4-child-views` 60d88ef
+- `test/organizer-page-order` b08d45f
+- `uitest/visible-page-indicator` cb07d12
+- `wip/crash-recovery-buffer` 71002d9
+- `wip/local-signing` 3b622a3
+
+`uitest/visible-page-indicator` (`cb07d12`) was merged by fast-forward earlier and is also safe to delete.
 
 ## Open items
-Unchanged from `session-handoff-2026-09-30.md`. Unanswered: whether the unmerged branches above
-should be reviewed and merged or are superseded.
+Unchanged from `session-handoff-2026-09-30.md`. Answered: the unmerged branches were superseded (see Branch review); only their deletion is pending.
 
 ## Next session starts here
-Decide what to do with the unmerged branches (review/merge/delete), then pick the next UI batch.
+Delete the superseded branches (user action), then pick the next UI batch (see the 2026-09-30 note).
