@@ -812,6 +812,12 @@ Choose a different folder or file name, make sure the file is not open in anothe
   <data name="Snip_Surface_Name" xml:space="preserve">
     <value>Snip selection surface</value>
   </data>
+  <data name="Snip_Surface_Help" xml:space="preserve">
+    <value>Keyboard: move with the arrow keys (hold Ctrl for bigger steps). Press Enter to start a selection and Enter again to finish it.</value>
+  </data>
+  <data name="Snip_Selecting" xml:space="preserve">
+    <value>Selecting. Move with the arrow keys, then press Enter to finish.</value>
+  </data>
   <data name="Snip_Copied" xml:space="preserve">
     <value>Copied {0} x {1} px to the clipboard.</value>
   </data>
