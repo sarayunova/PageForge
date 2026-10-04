@@ -42,6 +42,18 @@ internal sealed class SnipWindow : Window
         Visibility = Visibility.Collapsed,
         IsHitTestVisible = false,
     };
+    // Keyboard selection: a crosshair the arrow keys move over the page. Enter
+    // starts a selection at the crosshair and a second Enter finishes it.
+    private readonly Ellipse _keyCursorMark = new()
+    {
+        Width = 10,
+        Height = 10,
+        Stroke = Brushes.Black,
+        StrokeThickness = 1.5,
+        Fill = Brushes.White,
+        Visibility = Visibility.Collapsed,
+        IsHitTestVisible = false,
+    };
     private readonly TextBlock _pageLabel = new() { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 8, 0), MinWidth = 90, TextAlignment = TextAlignment.Center };
     private readonly TextBlock _hint = new() { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 12, 0), Foreground = Brushes.DimGray, TextTrimming = TextTrimming.CharacterEllipsis };
     private readonly Button _prev = new() { Content = "◀", Padding = new Thickness(10, 3, 10, 3) };
@@ -76,6 +88,8 @@ internal sealed class SnipWindow : Window
     private int _index;
     private Point _dragStart;
     private bool _dragging;
+    private Point _keyCursor;
+    private Point? _keyAnchor;
     // The chosen region as fractions of the page (0..1), so it applies to a
     // render at any DPI.
     private Rect _fraction = Rect.Empty;
@@ -99,7 +113,6 @@ internal sealed class SnipWindow : Window
 
         _hint.Text = UiStrings.Get("Snip_Hint");
         AutomationProperties.SetName(_image, UiStrings.Get("Snip_PageImage_Name"));
-        AutomationProperties.SetName(_overlay, UiStrings.Get("Snip_Surface_Name"));
         AutomationProperties.SetName(_wholePage, UiStrings.Get("Snip_WholePage_Name"));
 
         _prev.Click += async (_, _) => await ShowAsync(_index - 1);
@@ -121,6 +134,7 @@ internal sealed class SnipWindow : Window
         };
 
         _overlay.Children.Add(_selection);
+        _overlay.Children.Add(_keyCursorMark);
         _pageHost.Children.Add(_image);
         _pageHost.Children.Add(_ink);
         _pageHost.Children.Add(_overlay);
@@ -142,6 +156,9 @@ internal sealed class SnipWindow : Window
         bar.Children.Add(actions);
         bar.Children.Add(_hint);
 
+        // The page sits in a ScrollViewer, which is the element that takes keyboard
+        // focus and is exposed to screen readers (a Canvas is neither). The keys are
+        // read here, before the ScrollViewer would use the arrows to scroll.
         var scroll = new ScrollViewer
         {
             Background = Brushes.Gainsboro,
@@ -149,6 +166,11 @@ internal sealed class SnipWindow : Window
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             Content = _pageHost,
         };
+        AutomationProperties.SetName(scroll, UiStrings.Get("Snip_Surface_Name"));
+        AutomationProperties.SetHelpText(scroll, UiStrings.Get("Snip_Surface_Help"));
+        scroll.PreviewKeyDown += Page_KeyDown;
+        scroll.GotKeyboardFocus += (_, _) => _keyCursorMark.Visibility = Visibility.Visible;
+        scroll.LostKeyboardFocus += (_, _) => _keyCursorMark.Visibility = Visibility.Collapsed;
 
         var tools = BuildToolRow();
 
@@ -220,6 +242,7 @@ internal sealed class SnipWindow : Window
     private void Overlay_Down(object sender, MouseButtonEventArgs e)
     {
         CommitText();
+        _keyAnchor = null;
         if (_tool != Tool.Select)
         {
             BeginMark(e.GetPosition(_overlay));
@@ -579,6 +602,85 @@ internal sealed class SnipWindow : Window
         rendered.Render(visual);
         rendered.Freeze();
         return rendered;
+    }
+
+    /// <summary>Arrow keys move the crosshair (Ctrl for bigger steps); Enter or Space
+    /// starts a selection at it and a second press finishes the selection.</summary>
+    private void Page_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (_tool != Tool.Select)
+        {
+            return;
+        }
+
+        double step = Keyboard.Modifiers.HasFlag(ModifierKeys.Control) ? 16 : 2;
+        switch (e.Key)
+        {
+            case Key.Left:
+                MoveKeyCursor(-step, 0);
+                break;
+            case Key.Right:
+                MoveKeyCursor(step, 0);
+                break;
+            case Key.Up:
+                MoveKeyCursor(0, -step);
+                break;
+            case Key.Down:
+                MoveKeyCursor(0, step);
+                break;
+            case Key.Enter:
+            case Key.Space:
+                ToggleKeyboardSelection();
+                break;
+            default:
+                return;
+        }
+
+        e.Handled = true;
+    }
+
+    private void MoveKeyCursor(double dx, double dy)
+    {
+        _keyCursor = new Point(
+            Math.Clamp(_keyCursor.X + dx, 0, _overlay.Width),
+            Math.Clamp(_keyCursor.Y + dy, 0, _overlay.Height));
+        Canvas.SetLeft(_keyCursorMark, _keyCursor.X - _keyCursorMark.Width / 2);
+        Canvas.SetTop(_keyCursorMark, _keyCursor.Y - _keyCursorMark.Height / 2);
+
+        if (_keyAnchor is Point anchor)
+        {
+            ShowSelectionRect(Clamp(new Rect(anchor, _keyCursor)));
+        }
+    }
+
+    private void ToggleKeyboardSelection()
+    {
+        if (_keyAnchor is not Point anchor)
+        {
+            _keyAnchor = _keyCursor;
+            ShowSelectionRect(new Rect(_keyCursor, new Size(0, 0)));
+            _hint.Text = UiStrings.Get("Snip_Selecting");
+            return;
+        }
+
+        _keyAnchor = null;
+        Rect r = Clamp(new Rect(anchor, _keyCursor));
+        if (r.Width < MinSelectionDip || r.Height < MinSelectionDip)
+        {
+            ClearSelection();
+            return;
+        }
+
+        SetSelection(new Rect(r.X / _overlay.Width, r.Y / _overlay.Height, r.Width / _overlay.Width, r.Height / _overlay.Height));
+    }
+
+    private void ShowSelectionRect(Rect r)
+    {
+        Canvas.SetLeft(_selection, r.X);
+        Canvas.SetTop(_selection, r.Y);
+        _selection.Width = r.Width;
+        _selection.Height = r.Height;
+        _selection.Visibility = Visibility.Visible;
     }
 
     private Rect Clamp(Rect r) => Rect.Intersect(r, new Rect(0, 0, _overlay.Width, _overlay.Height)) is { IsEmpty: false } c ? c : new Rect(0, 0, 0, 0);
