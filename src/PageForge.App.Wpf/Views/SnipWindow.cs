@@ -93,6 +93,7 @@ internal sealed class SnipWindow : Window
     // A mark started from the keyboard: Enter starts it at the crosshair, the arrow
     // keys extend it, and Enter finishes it.
     private bool _keyMarking;
+    private int _marksBeforeKeyMark;
     private ScrollViewer? _pageScroll;
     // The chosen region as fractions of the page (0..1), so it applies to a
     // render at any DPI.
@@ -130,11 +131,24 @@ internal sealed class SnipWindow : Window
         _overlay.MouseLeftButtonUp += Overlay_Up;
         PreviewKeyDown += (_, e) =>
         {
-            // Escape closes the window, except while a text box is open: then it
-            // cancels that box.
-            if (e.Key == Key.Escape && _textEditor is null)
+            // Escape cancels whatever is in progress first: an open text box, then a
+            // keyboard mark. It closes the window only when neither is open.
+            if (e.Key == Key.Escape)
             {
-                Close();
+                if (_textEditor is not null)
+                {
+                    return;
+                }
+
+                if (_keyMarking)
+                {
+                    CancelKeyboardMark();
+                }
+                else
+                {
+                    Close();
+                }
+
                 e.Handled = true;
             }
         };
@@ -694,6 +708,7 @@ internal sealed class SnipWindow : Window
         }
 
         _keyMarking = true;
+        _marksBeforeKeyMark = _ink.Children.Count;
         BeginMark(_keyCursor);
         if (_tool == Tool.Text)
         {
@@ -705,6 +720,29 @@ internal sealed class SnipWindow : Window
         {
             _hint.Text = UiStrings.Get("Snip_Marking");
         }
+    }
+
+    /// <summary>Escape during a keyboard mark: removes the mark being drawn, leaving
+    /// the marks made before it.</summary>
+    private void CancelKeyboardMark()
+    {
+        if (!_keyMarking)
+        {
+            return;
+        }
+
+        _keyMarking = false;
+        if (_dragging)
+        {
+            EndMark(_keyCursor);
+        }
+
+        while (_ink.Children.Count > _marksBeforeKeyMark)
+        {
+            _ink.Children.RemoveAt(_ink.Children.Count - 1);
+        }
+
+        _hint.Text = UiStrings.Get("Snip_Hint");
     }
 
     /// <summary>Finishes a keyboard mark, if one is in progress.</summary>
