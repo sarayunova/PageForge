@@ -54,7 +54,11 @@ public sealed class OcrJobsApiTests : IDisposable
         Assert.Equal(HttpStatusCode.Created, submitResponse.StatusCode);
         var submitted = JsonDocument.Parse(await submitResponse.Content.ReadAsStringAsync()).RootElement;
         Guid jobId = submitted.GetProperty("id").GetGuid();
-        Assert.Equal("Queued", submitted.GetProperty("status").GetString());
+        // The worker runs in the same host and can finish the job before this response
+        // is read (it did on the hosted runner), so either state is a valid answer to
+        // "was the job accepted". Completion is checked by the poll below.
+        string submittedStatus = submitted.GetProperty("status").GetString()!;
+        Assert.Contains(submittedStatus, new[] { "Queued", "Completed" });
 
         // The queue worker advances the job asynchronously; poll until complete.
         JsonElement completed = await WaitForStatusAsync(token, jobId, "Completed");
