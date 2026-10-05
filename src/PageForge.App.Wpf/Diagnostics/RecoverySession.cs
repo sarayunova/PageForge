@@ -249,6 +249,57 @@ internal sealed class RecoverySession : IDisposable
     }
 
     /// <summary>
+    /// Removes abandoned folders that hold nothing to recover: a process that was
+    /// killed or crashed leaves its folder behind even when it had no unsaved work,
+    /// and nothing else removes it. Folders with a document in them are kept for
+    /// <see cref="FindRecoverable"/> to offer, and live instances are never touched.
+    /// </summary>
+    public static void ClearEmptyAbandoned()
+    {
+        try
+        {
+            if (!Directory.Exists(Root))
+            {
+                return;
+            }
+
+            foreach (string folder in Directory.GetDirectories(Root))
+            {
+                if (!IsAbandoned(folder) || HasRecoverableDocument(folder))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    Directory.Delete(folder, recursive: true);
+                }
+                catch (IOException ex)
+                {
+                    Log.LogWarning(ex, "Could not remove empty recovery folder {Folder}.", folder);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.LogError(ex, "Could not clear empty recovery folders.");
+        }
+    }
+
+    private static bool HasRecoverableDocument(string folder)
+    {
+        foreach (string sidecar in Directory.GetFiles(folder, "*" + SidecarExtension))
+        {
+            if (File.Exists(Path.ChangeExtension(sidecar, ".pdf")))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Whether a folder belongs to a process that is no longer running.
     ///
     /// A folder with no lock file counts as abandoned: it predates this scheme or
