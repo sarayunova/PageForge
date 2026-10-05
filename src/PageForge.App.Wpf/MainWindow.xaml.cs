@@ -48,6 +48,11 @@ public partial class MainWindow : Controls.FluentShellWindow
     {
         InitializeComponent();
         Closing += OnWindowClosing;
+        // Release the recovery folder when the window closes. Application.OnExit also
+        // does this, but by then Application.MainWindow may no longer point at this
+        // window, and the folder was left behind on every clean exit. Disposing twice
+        // is harmless.
+        Closed += (_, _) => DisposeRecovery();
         Themes.ThemeManager.ThemeChanged += OnThemeChanged;
         Closed += (_, _) => Themes.ThemeManager.ThemeChanged -= OnThemeChanged;
         UpdateThemeIcon();
@@ -328,6 +333,9 @@ public partial class MainWindow : Controls.FluentShellWindow
             Diagnostics.RecoverySession.FindRecoverable();
         if (found.Count == 0)
         {
+            // Nothing to offer, so drop the folders left by runs that were killed
+            // with no unsaved work in them.
+            Diagnostics.RecoverySession.ClearEmptyAbandoned();
             return;
         }
 
