@@ -1725,6 +1725,124 @@ public class UiSmokeTests
         }
     }
 
+    /// <summary>
+    /// Snip with the keyboard only (WCAG 2.1.1): Enter starts a selection at the
+    /// crosshair, the arrow keys stretch it, and a second Enter finishes it, which
+    /// enables Copy.
+    /// </summary>
+    [Fact]
+    public async Task Snip_keyboard_selects_a_region()
+    {
+        const ushort VkReturn = 0x0D, VkRight = 0x27, VkDown = 0x28;
+
+        await using PageForgeApp app = await PageForgeApp.LaunchAsync();
+        await app.WaitForVisibleAsync("PageIndicatorText");
+
+        await OpenModalAsync(app, "Snip");
+        AutomationElement snip = await WaitForOwnedWindowAsync(app, "Snip - ");
+        try
+        {
+            AutomationElement copy = FindButton(snip, "Copy")
+                ?? throw new InvalidOperationException("The Copy button was not found.");
+            Assert.False(copy.Current.IsEnabled);
+
+            AutomationElement surface = FindNamed(snip, "Snip selection surface")
+                ?? throw new InvalidOperationException("The page surface was not found.");
+            SyntheticMouse.EnsureForeground(new IntPtr(snip.Current.NativeWindowHandle));
+            surface.SetFocus();
+            await Task.Delay(300);
+
+            SyntheticMouse.PressKey(VkReturn);
+            await Task.Delay(200);
+            for (int i = 0; i < 20; i++)
+            {
+                SyntheticMouse.PressKey(VkRight);
+                SyntheticMouse.PressKey(VkDown);
+                await Task.Delay(30);
+            }
+
+            SyntheticMouse.PressKey(VkReturn);
+            await Task.Delay(400);
+
+            Assert.True(FindButton(snip, "Copy")!.Current.IsEnabled);
+        }
+        finally
+        {
+            CloseWindow(snip);
+        }
+    }
+
+    /// <summary>
+    /// Escape cancels a keyboard mark in progress and leaves the window open; a
+    /// second Escape, with nothing in progress, closes it.
+    /// </summary>
+    [Fact]
+    public async Task Escape_cancels_a_keyboard_mark_before_closing_snip()
+    {
+        const ushort VkReturn = 0x0D, VkDown = 0x28, VkEscape = 0x1B;
+
+        await using PageForgeApp app = await PageForgeApp.LaunchAsync();
+        await app.WaitForVisibleAsync("PageIndicatorText");
+
+        await OpenModalAsync(app, "Snip");
+        AutomationElement snip = await WaitForOwnedWindowAsync(app, "Snip - ");
+
+        AutomationElement pen = FindButton(snip, "Pen")
+            ?? throw new InvalidOperationException("The Pen tool was not found.");
+        System.Windows.Rect penRect = pen.Current.BoundingRectangle;
+        SyntheticMouse.EnsureForeground(new IntPtr(snip.Current.NativeWindowHandle));
+        SyntheticMouse.Click((penRect.X + penRect.Width / 2, penRect.Y + penRect.Height / 2));
+        await Task.Delay(300);
+
+        AutomationElement surface = FindNamed(snip, "Snip selection surface")
+            ?? throw new InvalidOperationException("The page surface was not found.");
+        surface.SetFocus();
+        await Task.Delay(300);
+
+        SyntheticMouse.PressKey(VkReturn);
+        await Task.Delay(200);
+        for (int i = 0; i < 10; i++)
+        {
+            SyntheticMouse.PressKey(VkDown);
+            await Task.Delay(30);
+        }
+
+        SyntheticMouse.PressKey(VkEscape);
+        await Task.Delay(400);
+        Assert.True(IsSnipOpen(app), "The first Escape closed the Snip window instead of cancelling the mark.");
+
+        SyntheticMouse.PressKey(VkEscape);
+        await Task.Delay(400);
+        Assert.False(IsSnipOpen(app), "The second Escape did not close the Snip window.");
+    }
+
+    private static AutomationElement? FindNamed(AutomationElement parent, string name)
+        => parent.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.NameProperty, name));
+
+    /// <summary>Whether a Snip window is open now. Looked up afresh: an element from
+    /// before the window closed can keep reporting its last properties.</summary>
+    private static bool IsSnipOpen(PageForgeApp app)
+    {
+        IEnumerable<AutomationElement> windows = AutomationElement.RootElement
+            .FindAll(TreeScope.Children, Condition.TrueCondition).Cast<AutomationElement>()
+            .Concat(app.Window.FindAll(TreeScope.Children, Condition.TrueCondition).Cast<AutomationElement>());
+        foreach (AutomationElement window in windows)
+        {
+            try
+            {
+                if (window.Current.Name.StartsWith("Snip - ", StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+            catch (ElementNotAvailableException)
+            {
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>Presses a toolbar button whose handler opens a modal window. Run
     /// off the test thread so a blocking Invoke cannot hang the test before the
     /// window is looked for.</summary>
