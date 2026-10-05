@@ -67,7 +67,15 @@ public sealed class OcrJobsApiTests : IDisposable
         Assert.Equal(JsonValueKind.String, completed.GetProperty("completedAt").ValueKind);
         Assert.Equal(1, completed.GetProperty("items").GetArrayLength());
 
-        // Completion notification email reached the owner.
+        // Completion notification email reached the owner. It is sent after the job
+        // is marked complete, so it can land a moment after the poll sees Completed.
+        var emailDeadline = DateTime.UtcNow.AddSeconds(5);
+        while (!_factory.Email.Messages.Any(m => m.Subject.Contains("complete", StringComparison.OrdinalIgnoreCase))
+               && DateTime.UtcNow < emailDeadline)
+        {
+            await Task.Delay(50);
+        }
+
         Assert.Contains(_factory.Email.Messages, m =>
             m.Subject.Contains("complete", StringComparison.OrdinalIgnoreCase));
     }
