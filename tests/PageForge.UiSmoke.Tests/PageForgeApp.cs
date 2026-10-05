@@ -380,12 +380,15 @@ internal sealed class PageForgeApp : IAsyncDisposable
         double physicalWidth = width * scale;
         double physicalHeight = height * scale;
 
-        // Never ask for a window taller than the screen's usable area: the part
+        // Never ask for a window larger than the screen's usable area: the part
         // hanging over the edge is out of reach of a mouse and under the taskbar.
-        // At 125% a 1040-DIP request is 1300 px on a 1080 px screen.
+        // At 125% a 1040-DIP request is 1300 px on a 1080 px screen. A 1400-DIP
+        // width does not fit a 1248-DIP-wide display at 200%, and asking for it made
+        // the resize look like it had failed.
         System.Windows.Rect workArea = MonitorWorkArea();
         if (!workArea.IsEmpty)
         {
+            physicalWidth = Math.Min(physicalWidth, workArea.Width);
             physicalHeight = Math.Min(physicalHeight, workArea.Height);
         }
 
