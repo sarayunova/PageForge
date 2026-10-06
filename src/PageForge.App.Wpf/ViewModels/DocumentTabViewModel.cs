@@ -594,6 +594,9 @@ public sealed class DocumentTabViewModel : ObservableObject
         RaiseStateChanged();
     }
 
+    /// <summary>Goes to a one-based page number typed by the person, clamped to the document.</summary>
+    public void GoToPageNumber(int pageNumber) => GoToPage(Math.Clamp(pageNumber, 1, Math.Max(1, _doc.PageCount)) - 1);
+
     public void NextPage() => GoToPage(_doc.CurrentPage + 1);
 
     public void PreviousPage() => GoToPage(_doc.CurrentPage - 1);

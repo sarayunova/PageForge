@@ -86,6 +86,12 @@
   <data name="Document_PreviousPage_Name" xml:space="preserve">
     <value>Previous page</value>
   </data>
+  <data name="Document_GoToPage_Name" xml:space="preserve">
+    <value>Page number</value>
+  </data>
+  <data name="Document_GoToPage_Tip" xml:space="preserve">
+    <value>Type a page number and press Enter to go to it</value>
+  </data>
   <data name="Document_NextPage_Name" xml:space="preserve">
     <value>Next page</value>
   </data>
