@@ -1856,6 +1856,134 @@ public class UiSmokeTests
         Assert.False(IsSnipOpen(app), "The second Escape did not close the Snip window.");
     }
 
+    /// <summary>
+    /// A keyboard mark is placed and finished with the keyboard alone (WCAG 2.1.1).
+    /// Enter starts a Pen mark at the crosshair, the arrow keys draw it, and a
+    /// second Enter finishes it. The hint text shows each state. The mark itself is
+    /// then proven by Clear marks: it asks for confirmation only when a mark exists.
+    /// </summary>
+    [Fact]
+    public async Task Snip_keyboard_places_a_mark()
+    {
+        const ushort VkReturn = 0x0D, VkRight = 0x27, VkDown = 0x28;
+        const string MarkingHint = "Marking. Move with the arrow keys, then press Enter to finish.";
+        const string ClearPrompt = "Clear all marks on this snip? This cannot be undone.";
+
+        await using PageForgeApp app = await PageForgeApp.LaunchAsync();
+        await app.WaitForVisibleAsync("PageIndicatorText");
+
+        await OpenModalAsync(app, "Snip");
+        AutomationElement snip = await WaitForOwnedWindowAsync(app, "Snip - ");
+        try
+        {
+            // Pen is chosen with the mouse, as in the Escape test: a tool button's
+            // TogglePattern does not raise the Click the tool listens for.
+            AutomationElement pen = FindButton(snip, "Pen")
+                ?? throw new InvalidOperationException("The Pen tool was not found.");
+            System.Windows.Rect penRect = pen.Current.BoundingRectangle;
+            SyntheticMouse.EnsureForeground(new IntPtr(snip.Current.NativeWindowHandle));
+            SyntheticMouse.Click((penRect.X + penRect.Width / 2, penRect.Y + penRect.Height / 2));
+            await Task.Delay(300);
+
+            AutomationElement surface = FindNamed(snip, "Snip selection surface")
+                ?? throw new InvalidOperationException("The page surface was not found.");
+            SyntheticMouse.EnsureForeground(new IntPtr(snip.Current.NativeWindowHandle));
+            surface.SetFocus();
+            await Task.Delay(300);
+
+            SyntheticMouse.PressKey(VkReturn);
+            Assert.True(await WaitForNamedAsync(snip, MarkingHint),
+                "Enter did not start a keyboard mark: the hint never said Marking.");
+
+            for (int i = 0; i < 10; i++)
+            {
+                SyntheticMouse.PressKey(VkRight);
+                SyntheticMouse.PressKey(VkDown);
+                await Task.Delay(30);
+            }
+
+            SyntheticMouse.PressKey(VkReturn);
+            Assert.True(await WaitForNamedAsync(snip, "Drag a rectangle to choose what to snip. Use Pen, Arrow, Box, Highlight or Text to mark it up first."),
+                "The second Enter did not finish the mark: the hint never returned to its normal text.");
+
+            // Clear marks asks before it discards anything, and only when a mark
+            // exists. Its prompt is the proof that the keyboard mark was placed.
+            AutomationElement clear = FindButton(snip, "Clear marks")
+                ?? throw new InvalidOperationException("The Clear marks button was not found.");
+            _ = Task.Run(() => PageForgeApp.Activate(clear));
+
+            AutomationElement? prompt = await WaitForNamedAnywhereAsync(ClearPrompt);
+            Assert.NotNull(prompt);
+
+            // Answer No, so the mark is kept. The prompt is a MessageBox owned by Snip.
+            AutomationElement dialog = TopLevelWindowOf(prompt!);
+            AutomationElement no = FindButton(dialog, "No")
+                ?? throw new InvalidOperationException("The No button of the Clear marks prompt was not found.");
+            PageForgeApp.Activate(no);
+            await Task.Delay(300);
+            Assert.Null(AutomationElement.RootElement.FindFirst(TreeScope.Descendants,
+                new PropertyCondition(AutomationElement.NameProperty, ClearPrompt)));
+        }
+        finally
+        {
+            CloseWindow(snip);
+        }
+    }
+
+    /// <summary>Waits until an element with this name exists inside a window.</summary>
+    private static async Task<bool> WaitForNamedAsync(AutomationElement window, string name)
+    {
+        DateTime deadline = DateTime.UtcNow.AddSeconds(10);
+        while (DateTime.UtcNow < deadline)
+        {
+            if (FindNamed(window, name) is not null)
+            {
+                return true;
+            }
+
+            await Task.Delay(150);
+        }
+
+        return false;
+    }
+
+    /// <summary>Waits until an element with this name exists anywhere on the desktop.
+    /// A MessageBox owned by a window is not always listed under that window.</summary>
+    private static async Task<AutomationElement?> WaitForNamedAnywhereAsync(string name)
+    {
+        DateTime deadline = DateTime.UtcNow.AddSeconds(10);
+        while (DateTime.UtcNow < deadline)
+        {
+            AutomationElement? found = FindNamed(AutomationElement.RootElement, name);
+            if (found is not null)
+            {
+                return found;
+            }
+
+            await Task.Delay(150);
+        }
+
+        return null;
+    }
+
+    /// <summary>The window that contains an element, found by walking up the tree.</summary>
+    private static AutomationElement TopLevelWindowOf(AutomationElement element)
+    {
+        AutomationElement current = element;
+        while (current.Current.ControlType != ControlType.Window)
+        {
+            AutomationElement? parent = TreeWalker.RawViewWalker.GetParent(current);
+            if (parent is null)
+            {
+                throw new InvalidOperationException("The element is not inside a window.");
+            }
+
+            current = parent;
+        }
+
+        return current;
+    }
+
     private static AutomationElement? FindNamed(AutomationElement parent, string name)
         => parent.FindFirst(TreeScope.Descendants, new PropertyCondition(AutomationElement.NameProperty, name));
 
