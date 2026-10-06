@@ -290,7 +290,7 @@ public sealed class NativeEngineIsolatedFactory : WebApplicationFactory<Program>
             if (db is not null) services.Remove(db);
 
             services.AddDbContext<AppDbContext>(options =>
-                options.UseInMemoryDatabase(_dbName, _root)
+                options.UseInMemoryDatabase(_dbName, _root).UseInternalServiceProvider(PageForgeApiFactory.InMemoryServices)
                     .ConfigureWarnings(w =>
                         w.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning)));
 

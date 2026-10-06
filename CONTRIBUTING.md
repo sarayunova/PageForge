@@ -37,7 +37,7 @@ FR-BATCH) so reviewers can reason about scope.
   fails without UWP/MSIX MSBuild tasks — build/test the individual managed
   projects instead. `TreatWarningsAsErrors` and `nullable` warnings are
   enforced via `Directory.Build.props`; emit no warnings.
-- Test suites must be run **separately** (SDK 8.0.424 errors MSB1008 if several
+- Test suites must be run **separately** (the .NET SDK errors MSB1008 if several
   are bundled into one `dotnet test`):
   - `dotnet test tests/PageForge.Core.Tests`
   - `dotnet test tests/PageForge.Fidelity.Tests` — must pass before merge; a
@@ -62,7 +62,7 @@ FR-BATCH) so reviewers can reason about scope.
 ## Releases & code signing
 
 A release is a signed, self-contained desktop payload staged and zipped by
-`tools/publish-release.ps1` (net8.0-windows, win-x64; folder layout so the
+`tools/publish-release.ps1` (net10.0-windows, win-x64; folder layout so the
 native `pageforge_mupdf.dll` and `tessdata` stay on disk exactly as CI's `--smoke`
 runs them — offline OCR must not rely on single-file extraction).
 
