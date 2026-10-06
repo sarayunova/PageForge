@@ -1853,11 +1853,8 @@ public class UiSmokeTests
                 ?? throw new InvalidOperationException("The Copy button was not found.");
             Assert.False(copy.Current.IsEnabled);
 
-            AutomationElement surface = FindNamed(snip, "Snip selection surface")
-                ?? throw new InvalidOperationException("The page surface was not found.");
             SyntheticMouse.EnsureForeground(new IntPtr(snip.Current.NativeWindowHandle));
-            surface.SetFocus();
-            await Task.Delay(300);
+            await FocusSnipSurfaceAsync(snip);
 
             SyntheticMouse.PressKey(VkReturn);
             await Task.Delay(200);
@@ -1901,10 +1898,7 @@ public class UiSmokeTests
         SyntheticMouse.Click((penRect.X + penRect.Width / 2, penRect.Y + penRect.Height / 2));
         await Task.Delay(300);
 
-        AutomationElement surface = FindNamed(snip, "Snip selection surface")
-            ?? throw new InvalidOperationException("The page surface was not found.");
-        surface.SetFocus();
-        await Task.Delay(300);
+        await FocusSnipSurfaceAsync(snip);
 
         SyntheticMouse.PressKey(VkReturn);
         await Task.Delay(200);
@@ -1952,11 +1946,8 @@ public class UiSmokeTests
             SyntheticMouse.Click((penRect.X + penRect.Width / 2, penRect.Y + penRect.Height / 2));
             await Task.Delay(300);
 
-            AutomationElement surface = FindNamed(snip, "Snip selection surface")
-                ?? throw new InvalidOperationException("The page surface was not found.");
             SyntheticMouse.EnsureForeground(new IntPtr(snip.Current.NativeWindowHandle));
-            surface.SetFocus();
-            await Task.Delay(300);
+            await FocusSnipSurfaceAsync(snip);
 
             SyntheticMouse.PressKey(VkReturn);
             Assert.True(await WaitForNamedAsync(snip, MarkingHint),
@@ -2049,6 +2040,36 @@ public class UiSmokeTests
         }
 
         return current;
+    }
+
+    /// <summary>
+    /// Gives the Snip page surface keyboard focus and waits until it has it. Focus
+    /// lands asynchronously after SetFocus, and a key pressed before it lands goes
+    /// to the wrong element; the fixed delay this replaces was not always long
+    /// enough under load. Each try looks the surface up again, because a cached
+    /// element can report stale properties.
+    /// </summary>
+    private static async Task FocusSnipSurfaceAsync(AutomationElement snip)
+    {
+        DateTime deadline = DateTime.UtcNow.AddSeconds(10);
+        while (DateTime.UtcNow < deadline)
+        {
+            AutomationElement? surface = FindNamed(snip, "Snip selection surface");
+            if (surface is not null)
+            {
+                surface.SetFocus();
+                await Task.Delay(150);
+
+                if (FindNamed(snip, "Snip selection surface")?.Current.HasKeyboardFocus == true)
+                {
+                    return;
+                }
+            }
+
+            await Task.Delay(150);
+        }
+
+        throw new InvalidOperationException("The Snip page surface never took keyboard focus.");
     }
 
     private static AutomationElement? FindNamed(AutomationElement parent, string name)
