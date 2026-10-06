@@ -1559,6 +1559,67 @@ public class UiSmokeTests
     /// UpdateEmptyState call from CloseTab would leave the user staring at a blank
     /// window with no failing test anywhere.
     /// </summary>
+    /// <summary>
+    /// The "Skip to the document" link is the keyboard bypass for the toolbar (WCAG
+    /// 2.4.1). It is drawn only while it has keyboard focus, so this checks what a
+    /// keyboard user gets: the link takes focus, and Enter moves focus out of it
+    /// into the page list. Its visibility while focused is not exposed to UI
+    /// Automation, so that part is still a manual check.
+    /// </summary>
+    [Fact]
+    public async Task Skip_link_moves_keyboard_focus_into_the_document()
+    {
+        const ushort VkReturn = 0x0D;
+
+        await using PageForgeApp app = await PageForgeApp.LaunchAsync();
+        await app.WaitForVisibleAsync("PageIndicatorText");
+
+        PageForgeApp.Activate(app.FindById("OpenPdfButton")
+            ?? throw new InvalidOperationException("Open PDF… button not found."));
+        await OpenFileViaDialog(app, Sample3);
+        await WaitForIndicator(app, "/ 3");
+
+        AutomationElement skip = app.FindInSelectedTabById("SkipToPageButton")
+            ?? throw new InvalidOperationException("Skip-to-document button not found.");
+        SyntheticMouse.EnsureForeground(new IntPtr(app.Window.Current.NativeWindowHandle));
+        skip.SetFocus();
+        await Task.Delay(300);
+        Assert.True(skip.Current.HasKeyboardFocus, "The Skip link did not take keyboard focus.");
+
+        SyntheticMouse.PressKey(VkReturn);
+        await Task.Delay(500);
+
+        AutomationElement? focused = AutomationElement.FocusedElement;
+        Assert.NotNull(focused);
+        Assert.False(skip.Current.HasKeyboardFocus, "Enter on the Skip link left focus on the link.");
+        Assert.True(IsInsideAutomationId(focused!, "PageList"),
+            "Enter on the Skip link did not move focus into the page list.");
+    }
+
+    /// <summary>Whether an element sits inside the element with this AutomationId.</summary>
+    private static bool IsInsideAutomationId(AutomationElement element, string automationId)
+    {
+        AutomationElement? current = element;
+        while (current is not null)
+        {
+            try
+            {
+                if (current.Current.AutomationId == automationId)
+                {
+                    return true;
+                }
+
+                current = TreeWalker.RawViewWalker.GetParent(current);
+            }
+            catch (ElementNotAvailableException)
+            {
+                return false;
+            }
+        }
+
+        return false;
+    }
+
     [Fact]
     public async Task Closing_the_last_document_shows_the_empty_state()
     {
