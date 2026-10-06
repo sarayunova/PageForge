@@ -180,4 +180,75 @@
         <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
 
+    <!--
+        Context menus (the theme picker, and any others the shell adds). WPF's
+        defaults use the system font at regular weight and the system colours, so
+        the menu text looked thin and did not follow the app's type scale or theme.
+        These two implicit styles give menu items the app font, the base size, a
+        Medium weight and the theme's text and surface colours.
+    -->
+    <!-- Both templates are replaced rather than restyled. WPF's default MenuItem
+         draws an icon column in system colours, which in dark mode showed as a light
+         strip over the first letters of every item. The check mark for IsChecked
+         (the current theme) is kept, since the theme picker relies on it. -->
+    <ControlTemplate x:Key="AppContextMenuTemplate" TargetType="ContextMenu">
+        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6"
+                Padding="{TemplateBinding Padding}">
+            <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle" />
+        </Border>
+    </ControlTemplate>
+
+    <ControlTemplate x:Key="AppMenuItemTemplate" TargetType="MenuItem">
+        <Border x:Name="Root" Background="Transparent" CornerRadius="4" Padding="{TemplateBinding Padding}"
+                SnapsToDevicePixels="True">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="22" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Path x:Name="Check" Visibility="Collapsed" Stroke="{TemplateBinding Foreground}"
+                      StrokeThickness="1.8" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                      Data="M 0,5 L 3.5,8.5 L 10,1.5" Width="10" Height="10" Stretch="Uniform"
+                      HorizontalAlignment="Center" VerticalAlignment="Center" />
+                <ContentPresenter Grid.Column="1" ContentSource="Header" RecognizesAccessKey="True"
+                                  VerticalAlignment="Center" TextElement.Foreground="{TemplateBinding Foreground}" />
+                <TextBlock Grid.Column="2" Text="{TemplateBinding InputGestureText}" Margin="16,0,0,0"
+                           VerticalAlignment="Center" Foreground="{DynamicResource ContentMutedBrush}" />
+            </Grid>
+        </Border>
+        <ControlTemplate.Triggers>
+            <Trigger Property="IsHighlighted" Value="True">
+                <Setter TargetName="Root" Property="Background" Value="{DynamicResource SurfaceHoverBrush}" />
+            </Trigger>
+            <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="Check" Property="Visibility" Value="Visible" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.5" />
+            </Trigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
+
+    <Style TargetType="ContextMenu">
+        <Setter Property="FontFamily" Value="{StaticResource AppFontFamily}" />
+        <Setter Property="FontSize" Value="{StaticResource FontSizeBase}" />
+        <Setter Property="Foreground" Value="{DynamicResource ContentBrush}" />
+        <Setter Property="Background" Value="{DynamicResource SurfacePanelBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource EdgeBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="4" />
+        <Setter Property="Template" Value="{StaticResource AppContextMenuTemplate}" />
+    </Style>
+
+    <Style TargetType="MenuItem">
+        <Setter Property="FontFamily" Value="{StaticResource AppFontFamily}" />
+        <Setter Property="FontSize" Value="{StaticResource FontSizeBase}" />
+        <Setter Property="FontWeight" Value="Medium" />
+        <Setter Property="Foreground" Value="{DynamicResource ContentBrush}" />
+        <Setter Property="Padding" Value="8,6,12,6" />
+        <Setter Property="Template" Value="{StaticResource AppMenuItemTemplate}" />
+    </Style>
+
 </ResourceDictionary>

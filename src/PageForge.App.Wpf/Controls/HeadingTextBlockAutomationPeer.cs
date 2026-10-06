@@ -9,13 +9,10 @@ namespace PageForge.App.Wpf.Controls;
 /// <summary>
 /// Automation peer for <see cref="HeadingTextBlock"/>: promotes the caption to a
 /// real control element (so UIA clients can enumerate it and screen readers
-/// announce its role) with the class name "Heading". WPF (.NET 8) exposes no
-/// override hook for the UIA HeadingLevel property and ships no heading attached
-/// property, so level information travels via the "Heading" control class and the
-/// caption's accessible name — the strongest semantics the platform can emit.
-/// The WinUI 3 port (src/PageForge.App) uses the native
-/// <c>AutomationProperties.HeadingLevel</c> instead; keep that in mind when the
-/// shell is ported (TSD §12.1).
+/// announce its role) with the class name "Heading". The level itself is set by
+/// the owner through <c>AutomationProperties.HeadingLevel</c>, which WPF on .NET
+/// 10 publishes as the native UIA HeadingLevel. The WinUI 3 port (src/PageForge.App)
+/// uses the same attached property (TSD §12.1).
 /// </summary>
 internal sealed class HeadingTextBlockAutomationPeer : TextBlockAutomationPeer
 {
