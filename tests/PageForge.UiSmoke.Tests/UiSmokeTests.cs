@@ -1555,6 +1555,134 @@ public class UiSmokeTests
     }
 
     /// <summary>
+    /// Deleting a page asks first ("Delete page 1?"). Cancel must keep all three
+    /// pages, and OK must remove one. The prompt is the only guard on this edit, so
+    /// both answers are checked.
+    /// </summary>
+    [Fact]
+    public async Task Delete_page_asks_first_and_cancel_keeps_the_page()
+    {
+        // OK asks where to save the result. The app takes that destination from this
+        // variable rather than opening the native save dialog, which the suite cannot
+        // drive reliably (see the Wpf_app test).
+        string deletedFile = Path.Combine(Path.GetTempPath(), "pageforge-uitest-deleted.pdf");
+        File.Delete(deletedFile);
+        await using PageForgeApp app = await PageForgeApp.LaunchAsync(
+            environment: new Dictionary<string, string> { ["PAGEFORGE_UITEST_SAVE_PATH"] = deletedFile });
+        await app.WaitForVisibleAsync("PageIndicatorText");
+
+        PageForgeApp.Activate(app.FindById("OpenPdfButton")
+            ?? throw new InvalidOperationException("Open PDF… button not found."));
+        await OpenFileViaDialog(app, Sample3);
+        await WaitForIndicator(app, "/ 3");
+        SelectToolGroup(app, "OrganizeModeTab");
+
+        AutomationElement deletePage = FindButton(app.Window, "Delete page")
+            ?? throw new InvalidOperationException("The Delete page button was not found.");
+
+        _ = Task.Run(() => PageForgeApp.Activate(deletePage));
+        AutomationElement? prompt = await WaitForPromptAsync("Delete page 1?");
+        Assert.NotNull(prompt);
+        AnswerDialog(prompt!, "Cancel");
+        await Task.Delay(400);
+        Assert.False(PromptShowing("Delete page 1?"));
+        await WaitForIndicator(app, "/ 3");
+
+        _ = Task.Run(() => PageForgeApp.Activate(deletePage));
+        prompt = await WaitForPromptAsync("Delete page 1?");
+        Assert.NotNull(prompt);
+        AnswerDialog(prompt!, "OK");
+        await WaitForIndicator(app, "/ 2");
+    }
+
+    /// <summary>
+    /// Flatten annotations asks first. Cancel must leave the document as it was.
+    /// </summary>
+    [Fact]
+    public async Task Flatten_asks_first_and_cancel_changes_nothing()
+    {
+        await using PageForgeApp app = await PageForgeApp.LaunchAsync();
+        await app.WaitForVisibleAsync("PageIndicatorText");
+
+        PageForgeApp.Activate(app.FindById("OpenPdfButton")
+            ?? throw new InvalidOperationException("Open PDF… button not found."));
+        await OpenFileViaDialog(app, Sample3);
+        await WaitForIndicator(app, "/ 3");
+        SelectToolGroup(app, "AnnotateModeTab");
+
+        AutomationElement flatten = FindButton(app.Window, "Flatten annotations")
+            ?? throw new InvalidOperationException("The Flatten annotations button was not found.");
+
+        _ = Task.Run(() => PageForgeApp.Activate(flatten));
+        AutomationElement? prompt = await WaitForPromptAsync("Flatten annotations?");
+        Assert.NotNull(prompt);
+        AnswerDialog(prompt!, "Cancel");
+        await Task.Delay(400);
+
+        Assert.False(PromptShowing("Flatten annotations?"));
+        await WaitForIndicator(app, "/ 3");
+    }
+
+    /// <summary>
+    /// The text element that carries a prompt's message, if it is on the desktop.
+    /// Looked up by enumerating text elements and comparing names. An exact-name
+    /// FindFirst over all descendants missed prompts that were plainly present.
+    /// </summary>
+    private static AutomationElement? FindPromptText(string message)
+    {
+        AutomationElementCollection texts = AutomationElement.RootElement.FindAll(
+            TreeScope.Descendants,
+            new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Text));
+        foreach (AutomationElement text in texts)
+        {
+            try
+            {
+                if (text.Current.Name.Contains(message, StringComparison.Ordinal))
+                {
+                    return text;
+                }
+            }
+            catch (ElementNotAvailableException)
+            {
+            }
+        }
+
+        return null;
+    }
+
+    private static bool PromptShowing(string message) => FindPromptText(message) is not null;
+
+    /// <summary>Waits for a prompt's message to appear, up to 10 seconds.</summary>
+    private static async Task<AutomationElement?> WaitForPromptAsync(string message)
+    {
+        DateTime deadline = DateTime.UtcNow.AddSeconds(10);
+        while (DateTime.UtcNow < deadline)
+        {
+            AutomationElement? found = FindPromptText(message);
+            if (found is not null)
+            {
+                return found;
+            }
+
+            await Task.Delay(150);
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Answers a MessageBox that shows the given message, by pressing one of its buttons.
+    /// The box is a top-level window owned by the app, so its buttons are found inside it.
+    /// </summary>
+    private static void AnswerDialog(AutomationElement message, string button)
+    {
+        AutomationElement dialog = TopLevelWindowOf(message);
+        AutomationElement answer = FindButton(dialog, button)
+            ?? throw new InvalidOperationException($"The {button} button of the prompt was not found.");
+        PageForgeApp.Activate(answer);
+    }
+
+    /// <summary>
     /// Closing the last document must leave something useful on screen.
     ///
     /// Every other fact here runs with the sample document open, so the zero-tab
