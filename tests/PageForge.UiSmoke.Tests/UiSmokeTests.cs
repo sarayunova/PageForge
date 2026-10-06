@@ -1508,6 +1508,46 @@ public class UiSmokeTests
         }
     }
 
+    [Fact]
+    public async Task Typing_a_page_number_goes_to_that_page()
+    {
+        await using PageForgeApp app = await PageForgeApp.LaunchAsync();
+        await app.WaitForVisibleAsync("PageIndicatorText");
+
+        PageForgeApp.Activate(app.FindById("OpenPdfButton")
+            ?? throw new InvalidOperationException("Open PDF… button not found."));
+        await OpenFileViaDialog(app, Sample3);
+        await WaitForIndicator(app, "/ 3");
+
+        // A typed page number is a second way to reach a page (WCAG 2.4.5), so it
+        // is driven with real key presses, not by calling the view model.
+        const ushort VkReturn = 0x0D, VkEscape = 0x1B;
+
+        void TypeAndPress(string page, ushort key)
+        {
+            // Looked up fresh each time: a cached element can go stale (see the
+            // window lookup notes in PageForgeApp).
+            AutomationElement box = app.FindInSelectedTabById("PageIndicatorText")
+                ?? throw new InvalidOperationException("Page number box not found.");
+            box.SetFocus();
+            ((ValuePattern)box.GetCurrentPattern(ValuePattern.Pattern)).SetValue(page);
+            SyntheticMouse.PressKey(key);
+        }
+
+        TypeAndPress("3", VkReturn);
+        await WaitForIndicator(app, "3 / 3");
+
+        // A number past the end clamps to the last page rather than failing.
+        TypeAndPress("1", VkReturn);
+        await WaitForIndicator(app, "1 / 3");
+        TypeAndPress("99", VkReturn);
+        await WaitForIndicator(app, "3 / 3");
+
+        // Escape puts the current position back without moving the document.
+        TypeAndPress("2", VkEscape);
+        await WaitForIndicator(app, "3 / 3");
+    }
+
     /// <summary>
     /// Closing the last document must leave something useful on screen.
     ///

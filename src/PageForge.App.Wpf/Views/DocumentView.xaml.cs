@@ -349,6 +349,40 @@ public partial class DocumentView : UserControl
         }
     }
 
+    private void PageIndicatorText_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (sender is not TextBox box || _vm is null)
+        {
+            return;
+        }
+
+        if (e.Key == Key.Escape)
+        {
+            box.Text = _vm.PageIndicator;
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Enter)
+        {
+            // Read the leading digits, so "7" and "7 / 12" both mean page 7.
+            string digits = new string(box.Text.Trim().TakeWhile(char.IsDigit).ToArray());
+            if (int.TryParse(digits, out int pageNumber))
+            {
+                _vm.GoToPageNumber(pageNumber);
+            }
+
+            box.Text = _vm.PageIndicator;
+            e.Handled = true;
+        }
+    }
+
+    private void PageIndicatorText_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is TextBox box && _vm is not null)
+        {
+            box.Text = _vm.PageIndicator;
+        }
+    }
+
     private void SearchBox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
         if (e.Key == System.Windows.Input.Key.Enter)

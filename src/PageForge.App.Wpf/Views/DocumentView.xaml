@@ -85,8 +85,13 @@
                                 Padding="8,3" ToolTip="{loc:Str Document_PreviousPage_Tip}">
                             <ui:SymbolIcon Symbol="ArrowLeft24" FontSize="14" />
                         </Button>
-                        <TextBlock x:Name="PageIndicatorText" Text="{Binding PageIndicator}" Foreground="{DynamicResource ContentBrush}"
-                                   VerticalAlignment="Center" Margin="10,0" MinWidth="70" TextAlignment="Center" />
+                        <!-- Typing a number and pressing Enter goes to that page. Escape or leaving
+                             the box puts the current "n / N" back. -->
+                        <TextBox x:Name="PageIndicatorText" Text="{Binding PageIndicator, Mode=OneWay}"
+                                 AutomationProperties.Name="{loc:Str Document_GoToPage_Name}"
+                                 ToolTip="{loc:Str Document_GoToPage_Tip}"
+                                 KeyDown="PageIndicatorText_KeyDown" LostFocus="PageIndicatorText_LostFocus"
+                                 VerticalAlignment="Center" Margin="10,0" Width="80" TextAlignment="Center" />
                         <Button x:Name="NextButton" AutomationProperties.Name="{loc:Str Document_NextPage_Name}" Command="{Binding NextPageCommand}"
                                 Padding="8,3" ToolTip="{loc:Str Document_NextPage_Tip}">
                             <ui:SymbolIcon Symbol="ArrowRight24" FontSize="14" />
