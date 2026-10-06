@@ -199,7 +199,7 @@ public sealed class ObjectReplaceFidelityTests
     /// <summary>
     /// Writes a solid-colour 8-bit RGB PNG.
     ///
-    /// Hand-rolled rather than taken from a library: this suite targets net8.0 and
+    /// Hand-rolled rather than taken from a library: this suite targets net10.0 and
     /// has no imaging dependency, and adding one to draw a coloured square would
     /// mean an AGPL compatibility check and a THIRD-PARTY-NOTICES entry for a
     /// rectangle. The pieces needed are all in the BCL - ZLibStream for the IDAT

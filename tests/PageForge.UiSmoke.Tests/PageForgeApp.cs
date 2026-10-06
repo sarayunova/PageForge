@@ -107,7 +107,7 @@ internal sealed class PageForgeApp : IAsyncDisposable
         {
             string exe = Path.Combine(
                 root, "src", "PageForge.App.Wpf", "bin", configuration,
-                "net8.0-windows", "PageForge.App.Wpf.exe");
+                "net10.0-windows", "PageForge.App.Wpf.exe");
             if (File.Exists(exe))
             {
                 return exe;
