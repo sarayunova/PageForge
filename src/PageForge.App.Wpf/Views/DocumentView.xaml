@@ -178,8 +178,9 @@
                 </DockPanel>
             </Border>
 
-            <!-- Row 2: tool-group selector. -->
-            <Border Background="{DynamicResource SurfacePanelBrush}"
+            <!-- Row 2: tool-group selector. Same shade as rows 1 and 3 so the ribbon reads
+                 as one band; a panel-shade strip looked like a separate, lighter bar. -->
+            <Border Background="{DynamicResource SurfaceRaisedBrush}"
                     BorderBrush="{DynamicResource EdgeBrush}" BorderThickness="0,0,0,1"
                     Padding="8,0">
                 <StackPanel Orientation="Horizontal" AutomationProperties.Name="{loc:Str Document_ToolGroups_Name}">
