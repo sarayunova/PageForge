@@ -7,7 +7,7 @@ Run the headless render proof through the real engine AND the Phase 1 viewer-cor
 through `DocumentViewModel` (outline + full-text search), then the full managed test suite,
 and report the result.
 
-1. `& src/PageForge.App.Wpf/bin/Debug/net8.0-windows/PageForge.App.Wpf.exe --smoke` — must print
+1. `& src/PageForge.App.Wpf/bin/Debug/net10.0-windows/PageForge.App.Wpf.exe --smoke` — must print
    `rendered ... -> artifacts/sample-phase0-p1-wpfproof.png` (794x1123 px at 96 DPI) and
    `viewer proof: pages=... outline=... searchHits=...`, then exit 0.
 2. `dotnet test tests/PageForge.Core.Tests` and `dotnet test tests/PageForge.Fidelity.Tests`

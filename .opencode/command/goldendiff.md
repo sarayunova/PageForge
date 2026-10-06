@@ -8,7 +8,7 @@ Phase 0 has no committed `golden/` corpus yet (that arrives with real-world PDFs
 the same MuPDF build must produce byte-identical output across all render paths.
 
 1. Ensure `artifacts/sample-phase0-p1-*.png` exist (run `/rendercheck` then WPF smoke:
-   `src/PageForge.App.Wpf/bin/Debug/net8.0-windows/PageForge.App.Wpf.exe --smoke`).
+   `src/PageForge.App.Wpf/bin/Debug/net10.0-windows/PageForge.App.Wpf.exe --smoke`).
 2. Compute the SHA-256 of every PNG under `artifacts/`; all must be equal (spike == mutool ==
    wpfproof). Report the shared hash, or the per-file hashes plus a first-diverging-byte offset
    if any differ, and the likely cause (engine change, corpus change, toolchain change).

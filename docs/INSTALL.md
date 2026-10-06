@@ -10,7 +10,7 @@
 ```
 PageForge.sln                            — .NET 8 solution (root)
 services/PageForge.Api                   — API service (Npgsql + MinIO, hosted)
-src/PageForge.App.Wpf                    — SHIPPING desktop shell, x64, net8.0-windows
+src/PageForge.App.Wpf                    — SHIPPING desktop shell, x64, net10.0-windows
 src/PageForge.App                        — retained WinUI 3 spike (page-one render only;
                                            NOT buildable on this dev machine)
 src/PageForge.Core                       — core library
@@ -23,7 +23,7 @@ LICENSE, THIRD-PARTY-NOTICES.md          — AGPL + third-party notices
 
 ## 2. Prerequisites
 
-- **Windows 10/11 x64** — the shipping shell is `net8.0-windows`, x64.
+- **Windows 10/11 x64** — the shipping shell is `net10.0-windows`, x64.
 - **.NET 8 SDK.** This machine's SDK is user-scope with `-NoPath`, so invoke it
   via the full local path (aliases like `dotnet` fail in non-path shells):
 

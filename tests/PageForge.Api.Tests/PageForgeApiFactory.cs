@@ -38,6 +38,12 @@ public sealed class PageForgeApiFactory : WebApplicationFactory<Program>
     private static readonly InMemoryDatabaseRoot _root = new();
     private static readonly string _dbName = "pageforge-tests";
 
+    // EF Core 10 refuses a service provider that holds two database providers. The
+    // hermetic tests swap Npgsql for in-memory, and the Npgsql registration survives
+    // that swap, so each in-memory context gets its own internal provider.
+    internal static readonly IServiceProvider InMemoryServices =
+        new ServiceCollection().AddEntityFrameworkInMemoryDatabase().BuildServiceProvider();
+
     /// <summary>Captured outbound email for this factory instance (e-sign reminders/certificates).</summary>
     public RecordingEmailSender Email { get; } = new();
 
@@ -100,7 +106,7 @@ public sealed class PageForgeApiFactory : WebApplicationFactory<Program>
                 if (db is not null) services.Remove(db);
 
                 services.AddDbContext<AppDbContext>(options =>
-                    options.UseInMemoryDatabase(_dbName, _root)
+                    options.UseInMemoryDatabase(_dbName, _root).UseInternalServiceProvider(InMemoryServices)
                         .ConfigureWarnings(w =>
                             w.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning)));
 

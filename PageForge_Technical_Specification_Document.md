@@ -41,7 +41,7 @@ layer is strictly additive — it must never gate core viewing or editing.
 
 | Layer | Technology | Rationale |
 |---|---|---|
-| Desktop UI | **WPF, C#/.NET 8, MVVM** for the v0.1 beta; WinUI 3 (Windows App SDK) remains the post-beta target | The §12 Phase 0 spike gate was resolved in favour of the WPF fallback — see §12.1. `src/PageForge.App.Wpf` is the shipping shell; `src/PageForge.App` is the retained WinUI spike |
+| Desktop UI | **WPF, C#/.NET 10, MVVM** for the v0.1 beta; WinUI 3 (Windows App SDK) remains the post-beta target | The §12 Phase 0 spike gate was resolved in favour of the WPF fallback — see §12.1. `src/PageForge.App.Wpf` is the shipping shell; `src/PageForge.App` is the retained WinUI spike |
 | PDF engine | MuPDF (AGPLv3) via a custom C# binding layer | Only free engine with genuine content-editing primitives |
 | Local OCR | Tesseract OCR (Apache 2.0), bundled | Keeps FR-OCR fully offline |
 | Local persistence | SQLite (metadata, recents, edit journal) + plain filesystem for documents | Documents are never locked into a proprietary container |
@@ -237,6 +237,15 @@ via OIDC — but the policy is unchanged: signing is gated on
 `SIGNPATH_API_TOKEN` existing, an unsigned beta still ships when it does not,
 and `signtool verify /pa` still runs before a signed payload can be published.
 See CONTRIBUTING.md for the SignPath setup walkthrough.
+
+**Amendment (2026-10-06): target framework moved to .NET 10.** Every project
+targets `net10.0` (the shell `net10.0-windows`), and `global.json` pins the SDK
+to 10.0.401. The WPF shell can now expose the native UIA heading level through
+`AutomationProperties.HeadingLevel`, which .NET 8 could not. Using it in the
+shell is a separate change, tracked against the 1.3.1 rating in the
+WCAG self-assessment. The WinUI 3 spike (`src/PageForge.App`) moves with the
+rest so it can reference Core; its build is verified only in the `winui-build`
+lane.
 
 ## 13. Risk register
 
