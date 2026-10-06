@@ -219,8 +219,17 @@ the object/redact/form overlays are all keyboard-reachable and never trap focus.
 
 ### 2.4.4 Link Purpose (A) — **PASS** («View source» says what it is).
 
-### 2.4.5 Multiple Ways (AA) — **PARTIAL**
-Page navigation via toolbar, thumbnails, and next/prev — reasonable.
+### 2.4.5 Multiple Ways (AA) — **PASS** (within the document)
+A reader can locate a page of the document in four ways: the page-number box in the
+toolbar (type a page, Enter; `PageIndicatorText`, added in PR #28), the thumbnail panel
+(`ThumbList`, each thumbnail named "Thumbnail page N"), the Bookmarks outline
+(`OutlineTreeView`), and full-text Search (`SearchList`), with next/previous buttons on
+top. The sidebar's Annotations list (`AnnotationList`) is a fifth way to reach annotated
+pages. The sidebar tabs (Pages, Bookmarks, Search, Annotations) label these panels.
+Scope note: this criterion is applied to the document's pages. The tool-group tabs
+(Organize, Annotate, ...) are not "pages", so they are outside it. Rated by static
+review and the UI smoke suite (`Typing_a_page_number_goes_to_that_page`); no live
+screen-reader session was run.
 
 ### 2.4.6 Headings and Labels (AA) — **PASS**
 
@@ -315,7 +324,7 @@ announced.
 | 12 | Resize handles / non-text contrast (1.4.11) | ✅ 12 px handles (15 px hit-test), unselected/field strokes → `#1f74c6` ≈4.8:1 |
 
 Native `HeadingLevel` emission was completed with the move to .NET 10 (1.3.1 is
-PASS). 2.4.5 Multiple Ways is PASS in its own PR, still open at the time of writing.
+PASS). 2.4.5 Multiple Ways is PASS (see its section above).
 Error suggestions and error prevention (3.3.1/3.3.3/3.3.4) were completed 2026-09-29.
 
 ## Verification
