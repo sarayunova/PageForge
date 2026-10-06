@@ -3,6 +3,7 @@
 // This file is part of PageForge. See LICENSE for the full license text.
 
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 
@@ -10,13 +11,12 @@ namespace PageForge.App.Wpf.Controls;
 
 /// <summary>
 /// A section heading rendered like bold caption text but exposed to assistive
-/// technology with real heading semantics (WCAG 1.3.1 / 2.4.6). WPF (.NET 8)
-/// ships no declarative heading pattern and no override hook for the UIA
-/// HeadingLevel property, so <see cref="HeadingTextBlock"/> pairs a
-/// <see cref="HeadingLevel"/> property with a custom automation peer that
-/// promotes the caption to a real "Heading" control element in the automation
-/// tree — screen readers can enumerate it, announce its role, and read its name
-/// ("Organize tools", "Annotate tools", "Edit tools").
+/// technology with real heading semantics (WCAG 1.3.1 / 2.4.6). The caption is a
+/// real "Heading" control element in the automation tree (see
+/// <see cref="HeadingTextBlockAutomationPeer"/>), and its level is published as
+/// the native UIA HeadingLevel through <c>AutomationProperties.HeadingLevel</c>,
+/// which WPF exposes from .NET 10. Screen readers can enumerate it, announce its
+/// role and level, and read its name ("Organize tools", "Annotate tools", ...).
 /// </summary>
 public sealed class HeadingTextBlock : TextBlock
 {
@@ -26,7 +26,12 @@ public sealed class HeadingTextBlock : TextBlock
             nameof(HeadingLevel),
             typeof(int),
             typeof(HeadingTextBlock),
-            new FrameworkPropertyMetadata(2));
+            new FrameworkPropertyMetadata(2, OnHeadingLevelChanged));
+
+    public HeadingTextBlock()
+    {
+        AutomationProperties.SetHeadingLevel(this, ToAutomationLevel(HeadingLevel));
+    }
 
     /// <summary>Gets or sets the 1-based heading level exposed through automation
     /// (WCAG heading levels 1–9, no UI effect).</summary>
@@ -37,4 +42,16 @@ public sealed class HeadingTextBlock : TextBlock
     }
 
     protected override AutomationPeer OnCreateAutomationPeer() => new HeadingTextBlockAutomationPeer(this);
+
+    private static void OnHeadingLevelChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is HeadingTextBlock heading)
+        {
+            AutomationProperties.SetHeadingLevel(heading, ToAutomationLevel((int)e.NewValue));
+        }
+    }
+
+    /// <summary>Maps the 1-based level to the platform enum, clamped to the WCAG range.</summary>
+    private static AutomationHeadingLevel ToAutomationLevel(int level) =>
+        (AutomationHeadingLevel)Math.Clamp(level, 1, 9);
 }

@@ -141,6 +141,12 @@ public class UiSmokeTests
         AutomationElement? caption = app.FindHeadingInSelectedTab(captionName)
             ?? throw new InvalidOperationException($"Heading caption '{captionName}' not found.");
         Assert.Equal("Heading", caption.Current.ClassName);
+
+        // The native level (WCAG 1.3.1), published from .NET 10 WPF. The toolbar
+        // captions are all level 2. Compared by name, so the test does not depend on
+        // which enum the UIA client returns.
+        object? level = caption.GetCurrentPropertyValue(AutomationElementIdentifiers.HeadingLevelProperty);
+        Assert.Equal("Level2", level?.ToString());
     }
 
     /// <summary>

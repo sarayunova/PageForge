@@ -102,7 +102,7 @@ a desktop application.
 - Icon-only tab-close "✕" buttons carry `AutomationProperties.Name`
   ("Close <document>") and a `ToolTip` (`MainWindow.xaml.cs`).
 
-### 1.3.1 Info and Relationships (A) — **PARTIAL**
+### 1.3.1 Info and Relationships (A) — **PASS**
 
 - Outline is now a real `TreeView` (`OutlineTreeView`, `DocumentView.xaml:112-124`)
   fed by a parent/child `OutlineTree` built from outline depth — hierarchy is no
@@ -119,12 +119,10 @@ a desktop application.
 - Form-field cards and redaction-region rows ARE real list items as of
   2026-09-20: both are bound collections, and the UIA tree reports each as a
   DataItem inside a List carrying its own name. Asserted in UiSmoke.
-- Remaining: as WPF .NET 8 ships no
-  server-side heading API (no override hook for the UIA `HeadingLevel`
-  property; `AutomationProperties.HeadingLevel` is .NET 10+), the heading level
-  of the toolbar captions cannot be emitted natively — assistive tech sees them
-  as "Heading" controls with their names, but heading-level jump lists depend on
-  the platform catching up or the WinUI 3 port (TSD §12.1).
+- The native heading level is now published. The shell moved to .NET 10, where
+  `AutomationProperties.HeadingLevel` is available to WPF, and `HeadingTextBlock`
+  sets it from its `HeadingLevel` value. The UIA tree reports the toolbar captions
+  as "Heading" controls at `Level2`, asserted in UiSmoke (`AssertHeading`).
 
 ### 1.3.2 Meaningful Sequence (A), 1.3.3 Sensory Characteristics (A) — **PASS**
 
@@ -232,10 +230,9 @@ Page navigation via toolbar, thumbnails, and next/prev — reasonable.
 - `ProtectDialog` permission CheckBoxes are grouped in a labeled `GroupBox`.
 - Headings are real "Heading" control elements via the custom
   `HeadingTextBlock`/`HeadingTextBlockAutomationPeer` (`Controls/`, `DocumentView.xaml`).
-  Platform note: WPF .NET 8 cannot emit the native UIA `HeadingLevel` property
-  (no server-side heading API before .NET 10), so level info rides on the
-  "Heading" control class plus the caption name; the WinUI 3 port should use
-  `AutomationProperties.HeadingLevel`.
+  Platform note: the native UIA `HeadingLevel` is published from .NET 10 WPF
+  through `AutomationProperties.HeadingLevel` (see 1.3.1). The "Heading" control
+  class and the caption name remain alongside it.
 
 ### 2.4.7 Focus Visible (AA) — **PASS** (system focus visuals).
 
@@ -317,9 +314,9 @@ announced.
 | 11 | Text resizing (1.4.4) | ✅ `PerMonitorV2` manifest + hardcoded FontSizes bumped to ≥12 |
 | 12 | Resize handles / non-text contrast (1.4.11) | ✅ 12 px handles (15 px hit-test), unselected/field strokes → `#1f74c6` ≈4.8:1 |
 
-Remaining deferred (tracked as PARTIAL): native `HeadingLevel` emission
-(requires WPF .NET 10 or the WinUI 3 port), and 2.4.5 Multiple Ways. Error
-suggestions and error prevention (3.3.1/3.3.3/3.3.4) were completed 2026-09-29.
+Native `HeadingLevel` emission was completed with the move to .NET 10 (1.3.1 is
+PASS). 2.4.5 Multiple Ways is PASS in its own PR, still open at the time of writing.
+Error suggestions and error prevention (3.3.1/3.3.3/3.3.4) were completed 2026-09-29.
 
 ## Verification
 
