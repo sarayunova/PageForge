@@ -12,7 +12,19 @@ public sealed class RecordingEmailSender : IEmailSender
 {
     private readonly List<EmailMessage> _messages = new();
 
-    public IReadOnlyList<EmailMessage> Messages => _messages;
+    /// <summary>A snapshot of what has been sent so far. The queue worker sends from its
+    /// own thread, so handing out the live list let a test enumerate it while the worker
+    /// appended (InvalidOperationException, or a torn read).</summary>
+    public IReadOnlyList<EmailMessage> Messages
+    {
+        get
+        {
+            lock (_messages)
+            {
+                return _messages.ToArray();
+            }
+        }
+    }
 
     public Task SendAsync(EmailMessage message, CancellationToken ct)
     {

@@ -21,6 +21,12 @@ public sealed class OcrJobsApiTests : IDisposable
     private readonly PageForgeApiFactory _factory;
     private readonly HttpClient _client;
 
+    // A poll returns as soon as its condition holds, so a generous ceiling costs nothing
+    // when the job is quick and only matters when the runner is slow (real Postgres,
+    // contended CPU). 5s was the first thing to give on a loaded hosted runner;
+    // OcrNativeEngineTests already allows 30s for the same wait.
+    private static readonly TimeSpan PollTimeout = TimeSpan.FromSeconds(30);
+
     public OcrJobsApiTests()
     {
         _factory = new PageForgeApiFactory();
@@ -69,7 +75,7 @@ public sealed class OcrJobsApiTests : IDisposable
 
         // Completion notification email reached the owner. It is sent after the job
         // is marked complete, so it can land a moment after the poll sees Completed.
-        var emailDeadline = DateTime.UtcNow.AddSeconds(5);
+        var emailDeadline = DateTime.UtcNow.Add(PollTimeout);
         while (!_factory.Email.Messages.Any(m => m.Subject.Contains("complete", StringComparison.OrdinalIgnoreCase))
                && DateTime.UtcNow < emailDeadline)
         {
@@ -135,7 +141,7 @@ public sealed class OcrJobsApiTests : IDisposable
 
     private async Task<JsonElement> WaitForStatusAsync(string token, Guid jobId, string expected)
     {
-        var deadline = DateTime.UtcNow.AddSeconds(5);
+        var deadline = DateTime.UtcNow.Add(PollTimeout);
         while (DateTime.UtcNow < deadline)
         {
             using JsonDocument job = await SendAsync("GET", $"/api/v1/ocr-jobs/{jobId}", token);
