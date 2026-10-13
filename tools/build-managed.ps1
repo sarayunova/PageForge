@@ -45,7 +45,7 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 # %LOCALAPPDATA%\Microsoft\dotnet, but as of 2026-09-29 that install (8.0.424)
 # is broken (MSB4022: $(MicrosoftNETBuildTasksAssembly) resolves empty) and its
 # host does not multi-level-lookup the machine-wide install to route around it.
-# global.json now pins 8.0.425, which only the machine-wide, on-PATH `dotnet`
+# global.json pins 10.0.401, which only the machine-wide, on-PATH `dotnet`
 # has, so that is preferred; the user-scope one is a fallback only for a
 # machine where it is the sole install and actually works.
 $dotnet = 'dotnet'
