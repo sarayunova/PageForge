@@ -1,0 +1,9 @@
+LiVi's PageForge installs for your Windows account by default, into your local Programs folder, and does not ask for administrator rights.
+
+The next page can switch to a per-machine install (Program Files) if you want the program available to every account on this PC. That choice does ask for administrator rights.
+
+A Start menu shortcut is always created. A desktop shortcut is optional, and it stays off unless you tick it.
+
+PageForge is registered as a program that can open .pdf files, so it appears under Open with and under Settings > Apps > Default apps. Your current default PDF program is not changed.
+
+Uninstalling removes the program and those shortcuts. Settings, logs and crash-recovery files in %LOCALAPPDATA%\PageForge stay unless you confirm their deletion.

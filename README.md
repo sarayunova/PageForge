@@ -45,7 +45,8 @@ their licenses are documented in `THIRD-PARTY-NOTICES.md`.
 | `services/PageForge.Api` | Hosted API (accounts, sync, billing, e-sign, team review, batch OCR) |
 | `tests/` | Core, Fidelity, Api, and UiSmoke suites (`PageForge.*.Tests`) |
 | `docs/sessions/` | Curated agent session notes and handoffs (moved off the repo root) |
-| `tools/` | Fidelity corpus/manifest, sample PDFs, verification scripts |
+| `tools/` | Fidelity corpus/manifest, sample PDFs, verification scripts, release publish and installer build |
+| `installer/` | Inno Setup script for the per-user Windows installer |
 | *repo root* | Source-of-truth docs: `PageForge_Technical_Requirements_Document.md` (what), `PageForge_Technical_Specification_Document.md` (how), `PageForge_Artifact_Verification_Playbook.md` (agent verification) |
 
 ## Prerequisites
@@ -129,20 +130,33 @@ license, the public repository URL, and the exact commit SHA in production
 
 ## Downloads & beta releases
 
-Beta builds are published as draft GitHub Releases from `v*` tags. Until code
-signing is configured they ship **unsigned** (decision recorded in TSD §12.1),
-so Windows SmartScreen may show "Windows protected your PC / Unknown publisher",
-Microsoft Defender may quarantine the binary until you choose "More info → Run
-anyway", and Edge/Chrome may warn on download — this is expected for an unsigned
-open-source beta and does not mean the file is malicious. For extra assurance,
-cross-check the zip's SHA-256 against the release run's build artifact.
+Beta builds are published as draft GitHub Releases from `v*` tags. Each release
+carries two desktop assets. Both are self-contained, so no .NET runtime install
+is required:
 
-Signed installers (via SignPath) become the distribution path once the signing
-setup in `CONTRIBUTING.md` is in place.
+- `pageforge-<version>-win-x64-setup.exe` — per-user installer (no administrator
+  rights). Adds a Start menu shortcut, an optional desktop shortcut, and
+  registers LiVi's PageForge as a program that can open `.pdf` files without
+  changing the current default. See `docs/INSTALL.md`.
+- `pageforge-<version>-win-x64.zip` — the same build as a portable folder.
+  Unpack it and run `PageForge.App.Wpf.exe`.
+
+Until code signing is configured they ship **unsigned** (decision recorded in
+TSD §12.1), so Windows SmartScreen may show "Windows protected your PC /
+Unknown publisher", Microsoft Defender may quarantine the binary until you
+choose "More info → Run anyway", and Edge/Chrome may warn on download — this
+is expected for an unsigned open-source beta and does not mean the file is
+malicious. For extra assurance, cross-check the file's SHA-256 against the
+release run's build artifact.
+
+SignPath signing, once configured, covers the application binaries and the
+setup executable (see `CONTRIBUTING.md`). A manual run of the `release`
+workflow builds both artifacts and does not create a release. Pull requests
+compile and install-test the installer in the `installer` CI lane.
 
 Release payloads deliberately exclude the hosted API (`-SkipApi`): hosted
-services deploy separately from desktop releases, so installers never bundle a
-dead API server and nothing is omitted by accident.
+services deploy separately from desktop releases, so the zip and the installer
+never bundle a dead API server and nothing is omitted by accident.
 
 ## Contributing
 

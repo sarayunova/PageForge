@@ -3,9 +3,13 @@
 # This file is part of PageForge. See LICENSE for the full license text.
 #
 # Phase 7 release lane: produce the self-contained desktop payload via
-# tools/publish-release.ps1, code-sign it via SignPath (SignPath Foundation's
-# free code signing for open-source projects), and attach it to a draft GitHub
-# Release on a v* tag.
+# tools/publish-release.ps1 and the per-user installer via
+# tools/build-installer.ps1, code-sign both via SignPath (SignPath Foundation's
+# free code signing for open-source projects), and attach both to a draft
+# GitHub Release on a v* tag.
+#
+# workflow_dispatch builds the zip and the setup.exe and uploads them as
+# artifacts. It does not create a release; only a v* tag does.
 #
 # Signing backend: SignPath, not Azure Artifact Signing. Azure Artifact
 # Signing's identity validation is not available for an India-based
@@ -19,7 +23,22 @@
 #   secrets:   SIGNPATH_API_TOKEN
 #   variables: SIGNPATH_ORG_ID, SIGNPATH_PROJECT_SLUG,
 #              SIGNPATH_SIGNING_POLICY_SLUG, SIGNPATH_CONNECTOR_URL
+#   optional:  SIGNPATH_INSTALLER_SIGNING_POLICY_SLUG
+#              (defaults to SIGNPATH_SIGNING_POLICY_SLUG; set it only when the
+#              setup.exe needs a different policy from the application zip)
 # See CONTRIBUTING.md for the full setup walkthrough.
+#
+# Signing order, once configured:
+#   1. Sign the application zip (PageForge.App.Wpf.exe and the other binaries
+#      the policy matches). SignPath cannot see inside a compiled setup.exe,
+#      so the installer has to be built FROM the signed binaries.
+#   2. Compile the installer from that signed folder.
+#   3. Sign the setup.exe in a second request. The policy (or the optional
+#      installer policy) must match pageforge-*-win-x64-setup.exe.
+# The embedded uninstaller is a separate problem: Inno hashes it into the
+# setup at compile time, so only a SignTool invoked by ISCC can sign it.
+# tools/build-installer.ps1 -SignToolCommand is that hook. It is not wired
+# to a secret here.
 #
 # Distribution policy (decided 2026-09-12, see docs/sessions/session-phase7.md): a fully
 # gated signing path is preferred when configured. Until then, v* tags DO
@@ -188,12 +207,111 @@ jobs:
           Write-Host "signature verified: $exe" -ForegroundColor Green
           # Replace the unsigned release asset with the verified signed one.
           Copy-Item $signedZip "artifacts/release/pageforge-${{ steps.ver.outputs.version }}-win-x64.zip" -Force
+          # The installer is compiled from the payload folder. Replace the
+          # unsigned publish output with the verified tree, or the setup.exe
+          # would embed binaries the signature check just rejected.
+          $payload = "artifacts/release/PageForge-${{ steps.ver.outputs.version }}"
+          if (Test-Path $payload) { Remove-Item $payload -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $payload | Out-Null
+          Copy-Item (Join-Path $verifyDir '*') $payload -Recurse -Force
+
+      - name: Compile the installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          ./tools/build-installer.ps1 -Version "${{ steps.ver.outputs.version }}"
+          $setup = "artifacts/release/pageforge-${{ steps.ver.outputs.version }}-win-x64-setup.exe"
+          if (-not (Test-Path $setup)) { throw "installer was not produced: $setup" }
+
+      # Same install/upgrade/uninstall proof as the pull-request lane, against
+      # the payload this release will actually attach. Still no GitHub Release
+      # until the publish job, which is tag-only.
+      - name: Install, upgrade and uninstall
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          ./tools/test-installer.ps1 `
+            -SetupExe "artifacts/release/pageforge-${{ steps.ver.outputs.version }}-win-x64-setup.exe" `
+            -Version "${{ steps.ver.outputs.version }}" `
+            -AllowUserDataDeletion
+
+      # Second signing request. The application zip was signed above, and the
+      # installer was compiled from those binaries. This request signs the
+      # setup.exe itself. Input is a zip because that is the artifact shape
+      # the existing SignPath step already uses; the published asset is the
+      # exe, not this zip.
+      - name: Package installer for SignPath
+        if: steps.sign-check.outputs.signed == 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ver = "${{ steps.ver.outputs.version }}"
+          $exe = "artifacts/release/pageforge-$ver-win-x64-setup.exe"
+          $dir = "artifacts/signing"
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          Compress-Archive -Path $exe -DestinationPath "$dir/pageforge-$ver-win-x64-setup.zip" -Force
+
+      - name: Upload installer for SignPath
+        if: steps.sign-check.outputs.signed == 'true'
+        id: upload-setup
+        uses: actions/upload-artifact@v7
+        with:
+          name: pageforge-setup-unsigned
+          path: artifacts/signing/pageforge-${{ steps.ver.outputs.version }}-win-x64-setup.zip
+          if-no-files-found: error
+
+      - name: Sign installer (SignPath)
+        if: steps.sign-check.outputs.signed == 'true'
+        # v3 runs on Node 24 (v1 targeted Node 20). The inputs below are the v1
+        # set. connector-url stays explicit: v3's default connector host changed,
+        # and an empty SIGNPATH_CONNECTOR_URL must not switch endpoints.
+        uses: SignPath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORG_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_INSTALLER_SIGNING_POLICY_SLUG || vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          connector-url: ${{ vars.SIGNPATH_CONNECTOR_URL }}
+          github-artifact-id: ${{ steps.upload-setup.outputs.artifact-id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-for-completion: true
+          output-artifact-directory: artifacts/signing/signed
+
+      - name: Verify SignPath-signed installer
+        if: steps.sign-check.outputs.signed == 'true'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $signtool = & ./tools/find-signtool.ps1
+          $ver = "${{ steps.ver.outputs.version }}"
+          $signedZip = "artifacts/signing/signed/pageforge-$ver-win-x64-setup.zip"
+          if (-not (Test-Path $signedZip)) { throw "SignPath did not return the expected installer zip: $signedZip" }
+          $verifyDir = "artifacts/signing/verify"
+          Expand-Archive -Path $signedZip -DestinationPath $verifyDir -Force
+          $exe = Join-Path $verifyDir "pageforge-$ver-win-x64-setup.exe"
+          if (-not (Test-Path $exe)) { throw "signed installer zip missing pageforge-$ver-win-x64-setup.exe" }
+          & $signtool verify /pa /v $exe
+          if ($LASTEXITCODE -ne 0) { throw "installer signature verification failed (unsigned or untrusted): $exe" }
+          Write-Host "signature verified: $exe" -ForegroundColor Green
+          Copy-Item $exe "artifacts/release/pageforge-$ver-win-x64-setup.exe" -Force
+
+      - name: Confirm release assets
+        shell: pwsh
+        run: |
+          $ver = "${{ steps.ver.outputs.version }}"
+          foreach ($asset in @(
+            "artifacts/release/pageforge-$ver-win-x64.zip",
+            "artifacts/release/pageforge-$ver-win-x64-setup.exe")) {
+            if (-not (Test-Path $asset)) { throw "release asset missing: $asset" }
+          }
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v7
         with:
           name: pageforge-release
-          path: artifacts/release/*.zip
+          path: |
+            artifacts/release/*.zip
+            artifacts/release/*-setup.exe
           if-no-files-found: error
 
   publish-release:
@@ -216,18 +334,23 @@ jobs:
         shell: bash
         env:
           SIGNED: ${{ needs.build-and-sign.outputs.signed }}
-          # Built from the same string publish-release.ps1 named the zip with.
-          ASSET: pageforge-${{ needs.build-and-sign.outputs.version }}-win-x64.zip
+          # Built from the same string publish-release.ps1 and build-installer.ps1
+          # named the files with.
+          VERSION: ${{ needs.build-and-sign.outputs.version }}
         run: |
+          ZIP="pageforge-${VERSION}-win-x64.zip"
+          SETUP="pageforge-${VERSION}-win-x64-setup.exe"
           {
             echo "LiVi's PageForge release ${{ github.ref_name }}."
             echo ""
             echo "## Desktop"
             echo ""
             if [ "$SIGNED" = "true" ]; then
-              echo "- \`$ASSET\` — self-contained (no runtime install needed), code-signed via SignPath."
+              echo "- \`$ZIP\` — portable folder, self-contained (no runtime install needed), code-signed via SignPath."
+              echo "- \`$SETUP\` — per-user installer (no administrator rights required), code-signed via SignPath."
             else
-              echo "- \`$ASSET\` — self-contained (no runtime install needed). **Not code-signed in this build.**"
+              echo "- \`$ZIP\` — portable folder, self-contained (no runtime install needed). **Not code-signed in this build.**"
+              echo "- \`$SETUP\` — per-user installer (no administrator rights required). **Not code-signed in this build.**"
               echo ""
               echo "## Windows security prompts"
               echo ""
@@ -235,6 +358,8 @@ jobs:
               echo ""
               echo "Signed builds with an established publisher identity will replace these warnings once SignPath signing is configured."
             fi
+            echo ""
+            echo "The installer adds a Start menu shortcut, offers an optional desktop shortcut, and registers PageForge as a program that can open .pdf files. It does not change the current default PDF application. Uninstall removes the program and leaves settings, logs and crash-recovery files in \`%LOCALAPPDATA%\\PageForge\` unless you ask it to delete them. The portable zip is the same bits without an installer: unpack it and run \`PageForge.App.Wpf.exe\`."
             echo ""
             echo "## Verification"
             echo ""
@@ -249,5 +374,7 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: LiVi's PageForge ${{ github.ref_name }}
           draft: true
-          files: artifacts/release/*.zip
+          files: |
+            artifacts/release/*.zip
+            artifacts/release/*-setup.exe
           body_path: release-body.md

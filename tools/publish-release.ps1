@@ -3,6 +3,9 @@
 #  Produces a self-contained, signable folder payload for the desktop app (and a
 #  framework-dependent publish of the hosted API) under artifacts/release/, then
 #  zips the desktop folder into a distributable pageforge-<Version>-win-x64.zip.
+#  The per-user installer is a separate step (tools/build-installer.ps1) so it
+#  can be compiled from this folder AFTER SignPath has replaced it with signed
+#  binaries. Building it here would bake the unsigned bytes into the setup.
 #  A folder layout (NOT single-file) is used deliberately: it keeps the native
 #  pageforge_mupdf.dll and tessdata on disk exactly as CI's --smoke layout runs
 #  them, so OCR works offline with no runtime single-file extraction surprises.
@@ -41,6 +44,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+. (Join-Path $PSScriptRoot "release-version.ps1")
+$verInfo = ConvertTo-PageForgeVersion -Version $Version
+
 $root   = Split-Path -Parent $PSScriptRoot
 
 # Resolve the .NET SDK robustly across environments. Prefer an explicit
@@ -62,7 +68,7 @@ if (-not $dotnet -or -not (Test-Path $dotnet)) {
 }
 
 $relRoot    = Join-Path $root "artifacts\release"
-$desktopDir = Join-Path $relRoot "PageForge-$Version"
+$desktopDir = Join-Path $relRoot "PageForge-$($verInfo.Display)"
 $apiDir     = Join-Path $relRoot "server-api"
 New-Item -ItemType Directory -Force -Path $desktopDir, $apiDir | Out-Null
 
@@ -82,8 +88,17 @@ if (-not $ZipOnly) {
 
     # --- 2. publish the desktop app self-contained (folder layout) --------------
     Write-Host "publishing desktop app (self-contained win-x64, folder layout) ..." -ForegroundColor Cyan
+    # Version is the numeric assembly version. InformationalVersion keeps the
+    # tag, including a prerelease label, which is what Explorer shows as the
+    # product version. The SDK would otherwise append +<commit>.
     & $dotnet publish (Join-Path $root "src\PageForge.App.Wpf\PageForge.App.Wpf.csproj") `
-        -c Release -r win-x64 --self-contained true -o $desktopDir
+        -c Release -r win-x64 --self-contained true `
+        -p:Version=$($verInfo.Assembly) `
+        -p:FileVersion=$($verInfo.File) `
+        -p:AssemblyVersion=$($verInfo.File) `
+        -p:InformationalVersion=$($verInfo.Display) `
+        -p:IncludeSourceRevisionInInformationalVersion=false `
+        -o $desktopDir
     if ($LASTEXITCODE -ne 0) { throw "desktop publish failed." }
 
     # --- 3. publish the hosted API (framework-dependent, portable; deploys via docker) --
@@ -189,7 +204,7 @@ if ($NoZip) {
     return
 }
 
-$desktopZip = Join-Path $relRoot "pageforge-$Version-win-x64.zip"
+$desktopZip = Join-Path $relRoot "pageforge-$($verInfo.Display)-win-x64.zip"
 if (Test-Path $desktopZip) { Remove-Item $desktopZip -Force }
 Compress-Archive -Path (Join-Path $desktopDir "*") -DestinationPath $desktopZip
 Write-Host "desktop payload zipped: $desktopZip" -ForegroundColor Green

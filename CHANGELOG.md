@@ -250,6 +250,25 @@ version heading when the tag is pushed.
   `v*` tags ship an unsigned beta with release notes that say so and warn
   about SmartScreen "unknown publisher" prompts — decided 2026-09-12, recorded
   in TSD §12.1. Application to the SignPath Foundation program is pending.
+- Windows installer beside the portable zip. `tools/build-installer.ps1`
+  compiles an Inno Setup 6 script (`installer/pageforge.iss`) into
+  `pageforge-<version>-win-x64-setup.exe`. It installs per user without
+  administrator rights (the wizard can still choose a per-machine install),
+  adds a Start menu shortcut and an optional desktop shortcut, and registers
+  PageForge as an available `.pdf` handler without changing the current
+  default. Uninstall removes the program and leaves
+  `%LOCALAPPDATA%\PageForge` unless asked. Opening a `.pdf` from Explorer
+  passes the path through, and the shell opens that file. The `release`
+  workflow attaches the setup executable to the same draft as the zip. CI's
+  `installer` lane compiles it and install-tests it without publishing.
+  MSIX stays deferred: a normal install of an MSIX requires a trusted
+  signature, and the Windows 11 unsigned-install switch is an
+  administrator-only test hook. When SignPath is configured, a second
+  signing request covers the setup executable (optional variable
+  `SIGNPATH_INSTALLER_SIGNING_POLICY_SLUG`, otherwise the same policy as the
+  zip). No signing secrets were added. The uninstaller embedded inside the
+  setup is signed only if `-SignToolCommand` runs during compilation; that
+  hook is present and unused until a local signer exists.
 - Third-party notices for the vendored native dependencies.
 
 ### Known limitations
@@ -257,8 +276,14 @@ version heading when the tag is pushed.
 - The beta ships the WPF shell. `src/PageForge.App` is a WinUI 3 spike that
   renders one page; porting the UI to WinUI 3 is post-beta work. Recorded as an
   amendment in TSD §12.1.
-- Beta releases are unsigned until Azure Artifact Signing is configured
+- Beta releases are unsigned until SignPath signing is configured
   (TSD §12.1); Windows SmartScreen, Defender and browsers may warn "unknown
-  publisher" on first download.
+  publisher" on first download. The portable zip and the setup executable
+  are both affected.
+- There is no in-app check for updates. Comparing the latest GitHub release
+  and opening its page, with no silent install, is a follow-up. The shell's
+  strings are guarded by a bidirectional resource test and the title bar is
+  exercised by UI smoke, so a network command was not folded into the
+  installer change.
 - Release builds are `win-x64` only. ARM64 Windows runs them under emulation; a
   native ARM64 build is deferred post-beta (TSD §12.1).
