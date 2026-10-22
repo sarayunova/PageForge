@@ -31,18 +31,27 @@ FR-BATCH) so reviewers can reason about scope.
 
 ## Build, test, lint
 
-- Managed build: `.NET 8`, invoke via `& "$env:LOCALAPPDATA\Microsoft\dotnet\dotnet.exe"`
-  (this machine's SDK is user-scope with `-NoPath`).
-- The full `PageForge.sln` includes the WinUI app (`src/PageForge.App`), which
-  fails without UWP/MSIX MSBuild tasks — build/test the individual managed
-  projects instead. `TreatWarningsAsErrors` and `nullable` warnings are
-  enforced via `Directory.Build.props`; emit no warnings.
+- **.NET 10 SDK.** `global.json` pins `10.0.401` with `rollForward: latestMinor`.
+  Use the machine-wide install, which is on PATH (`C:\Program Files\dotnet`):
+  `dotnet`, or `& "C:\Program Files\dotnet\dotnet.exe"`. The user-scope SDK
+  under `%LOCALAPPDATA%\Microsoft\dotnet` is not the SDK this repo builds with.
+- Managed build: `powershell -ExecutionPolicy Bypass -File tools/build-managed.ps1`
+  (add `-Configuration Release -WarnAsError` to match CI). Do not build
+  `PageForge.sln` directly: it includes the WinUI spike (`src/PageForge.App`),
+  which needs the Visual Studio UWP/MSIX MSBuild tasks and fails MSB4062 on a
+  machine that only has the .NET SDK. The script owns that project list.
+  `TreatWarningsAsErrors` and `nullable` warnings are enforced via
+  `Directory.Build.props`; emit no warnings.
 - Test suites must be run **separately** (the .NET SDK errors MSB1008 if several
   are bundled into one `dotnet test`):
   - `dotnet test tests/PageForge.Core.Tests`
   - `dotnet test tests/PageForge.Fidelity.Tests` — must pass before merge; a
     corpus regression blocks a merge (render-equality = byte-identical PNGs).
   - `dotnet test tests/PageForge.Api.Tests`
+  - `dotnet test tests/PageForge.UiSmoke.Tests` — launches the real WPF window
+    through UI Automation, so it needs an interactive desktop and
+    `src/PageForge.App.Wpf` built in the same configuration. CI runs it in the
+    `ui-smoke` lane.
 - Native: `powershell -ExecutionPolicy Bypass -File native/build-mupdf.ps1`.
 
 ## Pre-commit / pre-PR AGPL compliance checklist
@@ -165,7 +174,7 @@ path):
 
 1. Branch from `main` for the change; keep it focused and reviewable.
 2. Ensure the `managed-build` CI lane passes (Core, Fidelity, and Api test
-   suites + fidelity render proof).
+   suites + fidelity render proof). UiSmoke is the separate `ui-smoke` lane.
 3. Request review. The maintainers apply the AGPL checklist above.
 
 ## Code of conduct
