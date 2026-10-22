@@ -7,7 +7,7 @@
 #   2. managed-build : downloads the shim, builds + tests the managed solution, runs the fidelity
 #                      render proof, byte-compares engine output against mutool.
 #   3. winui-build   : builds the WinUI 3 shell (src/PageForge.App). Needs the UWP/MSIX MSBuild
-#                      tasks that the windows-latest image provides; enforcing, so the spike
+#                      tasks that the windows-2025 image provides; enforcing, so the spike
 #                      cannot rot while the port is deferred (see AGENTS.md).
 #   4. api-hosted    : the hosted API suite against real Postgres (service container) + MinIO.
 #   5. ui-smoke      : launches the real WPF window and drives it through UI Automation.
@@ -15,6 +15,21 @@
 # The header used to say "Three lanes" while four existed. Lane 5 is new: the UiSmoke
 # suite had never run in CI at all - absent from every lane AND from PageForge.sln -
 # so the only tests that look at the real window were protecting nothing.
+#
+# Runners are pinned to explicit images, not -latest.
+#   windows-2025 — the image windows-latest selects today (Server 2025, Visual
+#     Studio 2026). native-build, winui-build and ui-smoke depend on its
+#     vcvars64, MSIX/PRI tasks and desktop session. build-mupdf.ps1 finds MSVC
+#     with vswhere -latest, so a later -latest move would swap that toolchain
+#     under a lane that is green now. The .NET 10 SDK is not taken from the
+#     image: setup-dotnet installs 10.0.x and global.json pins 10.0.401
+#     (rollForward latestMinor).
+#   ubuntu-26.04 — ubuntu-latest is migrating from 24.04 to 26.04 (19 Oct–19 Nov
+#     2026) and every job on the floating label logs that notice. api-hosted
+#     does not use the host's Postgres or a preinstalled SDK. Postgres 16 and
+#     MinIO are containers; setup-dotnet installs the SDK. Ubuntu 26.04 ships
+#     Docker, curl, PowerShell 7 and .NET SDK 10.0.401, which is what the lane
+#     calls.
 
 name: ci
 
@@ -30,7 +45,7 @@ env:
 jobs:
   native-build:
     name: MuPDF native + shim
-    runs-on: windows-latest
+    runs-on: windows-2025
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
@@ -46,7 +61,7 @@ jobs:
 
   managed-build:
     name: Managed build + tests + fidelity proof
-    runs-on: windows-latest
+    runs-on: windows-2025
     timeout-minutes: 45
     needs: [native-build]
     env:
@@ -167,7 +182,7 @@ jobs:
 
   winui-build:
     name: WinUI shell build
-    runs-on: windows-latest
+    runs-on: windows-2025
     timeout-minutes: 30
     needs: [managed-build]
     steps:
@@ -231,7 +246,7 @@ jobs:
     # containers. All other seams (email capture sink, fixed JWT) are unchanged,
     # so the 47 assertions behave identically to the hermetic managed-build lane.
     name: Hosted API integration (Postgres + MinIO)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     needs: [native-build]
     env:
@@ -239,8 +254,8 @@ jobs:
       # PAGEFORGE_REQUIRE_NATIVE is deliberately NOT set here, and the OCR engine
       # tests are filtered out of the run below.
       #
-      # native-build runs on windows-latest and publishes pageforge_mupdf.dll - a
-      # Windows library. This is the only ubuntu-latest job in the workflow, so the
+      # native-build runs on windows-2025 and publishes pageforge_mupdf.dll - a
+      # Windows library. This is the only ubuntu-26.04 job in the workflow, so the
       # artifact it downloads can never be loaded here: the three
       # OcrNativeEngineTests failed with "Unable to load shared library
       # 'pageforge_mupdf' ... pageforge_mupdf.so: cannot open shared object file".
@@ -332,7 +347,7 @@ jobs:
 
   ui-smoke:
     name: UI smoke (real window, UIA)
-    runs-on: windows-latest
+    runs-on: windows-2025
     timeout-minutes: 30
     needs: [native-build]
     steps:
