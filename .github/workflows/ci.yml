@@ -11,6 +11,9 @@
 #                      cannot rot while the port is deferred (see AGENTS.md).
 #   4. api-hosted    : the hosted API suite against real Postgres (service container) + MinIO.
 #   5. ui-smoke      : launches the real WPF window and drives it through UI Automation.
+#   6. installer     : publishes the desktop payload, compiles the Inno Setup
+#                      installer and install-tests it. Uploads the setup.exe as
+#                      an artifact. Does not publish a GitHub Release.
 #
 # The header used to say "Three lanes" while four existed. Lane 5 is new: the UiSmoke
 # suite had never run in CI at all - absent from every lane AND from PageForge.sln -
@@ -461,3 +464,63 @@ jobs:
           name: ui-smoke-log
           path: artifacts/pageforge-uismoke.log
           if-no-files-found: ignore
+
+  installer:
+    # Proves the setup compiles and that a per-user install, upgrade and
+    # uninstall do what installer/pageforge.iss says. Runs on every pull
+    # request so a broken script cannot merge. release.yml is the lane that
+    # attaches the same setup.exe to a draft release, and it only runs on a
+    # v* tag or a manual dispatch — this job never publishes one.
+    name: Windows installer (Inno Setup)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    needs: [native-build]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/download-artifact@v8
+        with:
+          name: native-shim
+          # Rooted at native/out, same as the managed lane. Unpacking one level
+          # deeper hides pageforge_mupdf.dll from the publish.
+          path: native/out
+      - name: Publish the desktop payload and compile the installer
+        shell: pwsh
+        env:
+          PAGEFORGE_REQUIRE_NATIVE: "1"
+        run: |
+          $ErrorActionPreference = 'Stop'
+          ./tools/publish-release.ps1 -Version 0.0.0-ci -SkipApi
+          if (-not (Test-Path 'artifacts/release/pageforge-0.0.0-ci-win-x64.zip')) {
+            throw 'publish-release.ps1 did not produce the portable zip'
+          }
+          ./tools/build-installer.ps1 -Version 0.0.0-ci
+          if (-not (Test-Path 'artifacts/release/pageforge-0.0.0-ci-win-x64-setup.exe')) {
+            throw 'build-installer.ps1 did not produce the setup executable'
+          }
+      - name: Install, upgrade and uninstall
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # The runner's account has no PageForge settings. The switch is what
+          # allows the test to prove uninstall can delete that folder when asked,
+          # and to refuse the same check on a machine that already has one.
+          ./tools/test-installer.ps1 `
+            -SetupExe artifacts/release/pageforge-0.0.0-ci-win-x64-setup.exe `
+            -Version 0.0.0-ci `
+            -AllowUserDataDeletion
+      - name: Upload installer logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: installer-test-log
+          path: artifacts/installer-test/*.log
+          if-no-files-found: ignore
+      - name: Upload the setup executable
+        uses: actions/upload-artifact@v7
+        with:
+          name: pageforge-setup
+          path: artifacts/release/pageforge-0.0.0-ci-win-x64-setup.exe
+          if-no-files-found: error

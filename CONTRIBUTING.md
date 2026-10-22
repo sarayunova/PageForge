@@ -73,17 +73,22 @@ FR-BATCH) so reviewers can reason about scope.
 A release is a signed, self-contained desktop payload staged and zipped by
 `tools/publish-release.ps1` (net10.0-windows, win-x64; folder layout so the
 native `pageforge_mupdf.dll` and `tessdata` stay on disk exactly as CI's `--smoke`
-runs them — offline OCR must not rely on single-file extraction).
+runs them — offline OCR must not rely on single-file extraction), plus a
+per-user installer compiled from that folder by `tools/build-installer.ps1`.
 
 Run it locally:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools/publish-release.ps1
+powershell -ExecutionPolicy Bypass -File tools/publish-release.ps1 -SkipApi
+powershell -ExecutionPolicy Bypass -File tools/build-installer.ps1
 ```
 
-Output lands in `artifacts/release/`. The script signs **only if a certificate is
-provided**; otherwise it warns loudly and produces an **unsigned** payload, which is
-not a release.
+Output lands in `artifacts/release/`: `pageforge-<version>-win-x64.zip` and
+`pageforge-<version>-win-x64-setup.exe`. Use the same `-Version` for both
+commands when it is not the default `0.0.0-beta`. The publish script signs
+**only if a certificate is provided**; otherwise it warns loudly and produces
+an **unsigned** payload. The installer compiler does not sign unless
+`-SignToolCommand` is passed. An unsigned payload is not a release.
 
 Signing — the production path is **SignPath** (SignPath Foundation's free code
 signing for qualifying open-source projects). The signing key never leaves
@@ -116,39 +121,69 @@ release.
    - variables `SIGNPATH_ORG_ID`, `SIGNPATH_PROJECT_SLUG`,
      `SIGNPATH_SIGNING_POLICY_SLUG`, `SIGNPATH_CONNECTOR_URL` (the GitHub
      Actions endpoint of your SignPath Pipeline Connector, from the dashboard)
+   - optional variable `SIGNPATH_INSTALLER_SIGNING_POLICY_SLUG`, only if the
+     setup executable needs a different policy from the application zip.
+     When it is unset, the installer request uses `SIGNPATH_SIGNING_POLICY_SLUG`.
+
+The signing policy has to match both shapes, or the two policies do: the
+application zip contains `PageForge.App.Wpf.exe` (and the other binaries you
+want signed), and the installer request is a zip of
+`pageforge-<version>-win-x64-setup.exe`. SignPath never sees the files inside
+a compiled setup, so the application must be signed first.
 
 ### How a release runs
 
-`release.yml`, on a `v*` tag push:
+`release.yml` builds on a `v*` tag push and on a manual `workflow_dispatch`.
+Only the tag creates a GitHub Release. The manual run uploads the zip and the
+setup executable as workflow artifacts and stops there. Pull requests do not
+run this workflow; they compile and install-test the installer in the
+`installer` job of `ci.yml`.
+
+On a tag:
 
 1. builds the native shim, then publishes and zips the desktop payload
    **unsigned** (`publish-release.ps1`) — SignPath signs a zip as a whole
-   rather than rewriting an `.exe` in a staged folder, so there is no unzipped
-   staging step here;
+   rather than rewriting an `.exe` in a staged folder;
 2. **if signing is configured** (secret `SIGNPATH_API_TOKEN` is set), uploads
    the unsigned zip as a build artifact, submits it to SignPath via
    `SignPath/github-action-submit-signing-request`, waits for the signed zip,
-   then extracts and verifies the executable with `signtool verify /pa`
-   **before** it replaces the release asset;
-3. **if signing is not configured**, ships the unsigned zip as-is — an
-   unsigned beta ships rather than a signing-pipeline hold-up;
-4. attaches the zip to a **draft** GitHub Release for manual review, with release
-   notes that state the signing status truthfully (they say "Not code-signed in
-   this build" for unsigned payloads) and document the SmartScreen / Defender /
-   browser "unknown publisher" warnings, so a released beta is never
-   misrepresented as signed.
+   then extracts and verifies `PageForge.App.Wpf.exe` with `signtool verify /pa`
+   **before** it replaces the release zip. The verified files also replace the
+   payload folder, because the installer is compiled from that folder;
+3. compiles `pageforge-<version>-win-x64-setup.exe` and install-tests it on
+   the runner (per-user install, upgrade, uninstall that keeps user data,
+   uninstall that deletes it when asked);
+4. **if signing is configured**, zips the setup executable, submits that zip
+   in a second SignPath request, and verifies the returned setup executable
+   with `signtool verify /pa` before it replaces the release asset;
+5. **if signing is not configured**, ships the unsigned zip and the unsigned
+   setup executable — an unsigned beta ships rather than a signing-pipeline
+   hold-up;
+6. on a `v*` tag only, attaches both files to a **draft** GitHub Release for
+   manual review. The notes state the signing status truthfully (they say
+   "Not code-signed in this build" for unsigned payloads) and document the
+   SmartScreen / Defender / browser "unknown publisher" warnings, so a
+   released beta is never misrepresented as signed.
 
 The distribution policy is recorded in TSD §12.1: the v0.1 beta ships unsigned
-until signing is configured; signed installers take over as the distribution
-path once the SignPath setup below exists.
+until signing is configured; signed builds take over as the distribution path
+once the SignPath setup below exists. The portable zip stays alongside the
+installer either way.
 
 Ordering matters for the signed path: SignPath returns a new zip rather than
 modifying files in place, and the workflow verifies the executable inside that
 returned zip with `signtool verify /pa` before it overwrites the release
 asset — a signing step that silently no-ops or fails can never produce a
-release claiming to be signed. Note also that a newly issued certificate has
+release claiming to be signed. The installer is compiled after that
+replacement, then signed itself. Note also that a newly issued certificate has
 no SmartScreen reputation; early signed downloads may still warn until
 reputation accrues.
+
+The uninstaller that Inno Setup embeds is not covered by the post-compile
+SignPath request, because its hash is fixed when `ISCC` runs. Pass
+`-SignToolCommand` to `build-installer.ps1` once a local sign tool exists
+(the command's `$f` placeholder is the file Inno asks to sign). That switch
+is the hook; CI does not set it and does not store a signing secret for it.
 
 Prereqs to enable the **signed** release path (the SignPath distribution
 path):

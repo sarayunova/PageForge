@@ -247,6 +247,32 @@ WCAG self-assessment. The WinUI 3 spike (`src/PageForge.App`) moves with the
 rest so it can reference Core; its build is verified only in the `winui-build`
 lane.
 
+**Amendment (2026-10-22): the beta installer is Inno Setup, not MSIX.**
+The packaging row above still names MSIX plus a signed unpackaged installer,
+which is the Store-shaped end state. It is the wrong vehicle for this beta.
+An MSIX install requires a signature that chains to a trusted root. Windows 11
+can install an unsigned package only through an administrator PowerShell
+`-AllowUnsigned` test switch, and Microsoft's own guidance says not to
+distribute that way; a package that contains an executable is forced
+per-machine. SignPath is not configured yet, so an MSIX attached to the beta
+would be an artifact almost nobody can install.
+
+The direct-download installer is therefore Inno Setup 6 (`installer/pageforge.iss`,
+compiled by `tools/build-installer.ps1`, compiler pinned in
+`tools/install-innosetup.ps1`). One script copies the self-contained publish
+folder, which is hundreds of files that change with the runtime, without a
+harvest step that has to be regenerated. `PrivilegesRequired=lowest` installs
+per user with no UAC prompt; the wizard can still choose a per-machine
+install. The same `AppId` makes the next version an upgrade, and the previous
+payload is removed from the install directory first so a retired runtime file
+cannot linger. Shortcuts, the optional desktop icon, the uninstaller and the
+`.pdf` registration (Open with and Default apps, without writing `UserChoice`
+or the `.pdf` default) are script directives. The portable zip is unchanged
+and remains a release asset. WiX was the other unpackaged option; a per-user
+MSI is the awkward case, and a setup.exe on top of it is a second authoring
+surface. MSIX returns when a trusted signature exists and a Store package is
+actually wanted.
+
 ## 13. Risk register
 
 | Risk | Mitigation |

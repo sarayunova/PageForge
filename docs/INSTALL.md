@@ -5,6 +5,45 @@
 > for Windows. This file is install-only guidance; build authority lives in
 > `AGENTS.md` and the source-of-truth TRD/TSD artifacts.
 
+## Install a downloaded release
+
+A `v*` tag's draft GitHub Release carries two files. Prefer the installer.
+
+`pageforge-<version>-win-x64-setup.exe` installs **for your Windows account**
+and does not ask for administrator rights. The program is placed in
+`%LOCALAPPDATA%\Programs\PageForge`. The wizard can switch to a per-machine
+install (`%ProgramFiles%\PageForge`); that choice does ask for administrator
+rights. A silent per-user install is `setup.exe /VERYSILENT /CURRENTUSER`, and
+`/ALLUSERS` selects the per-machine install instead.
+
+The installer creates a Start menu shortcut. A desktop shortcut is offered and
+left unticked. PageForge is registered as a program that can open `.pdf` files,
+so it appears under **Open with** and under **Settings > Apps > Default apps**.
+The current default PDF program is not changed.
+
+Uninstall from **Settings > Apps**. The program, its shortcuts and its file
+registration are removed. Settings, logs and crash-recovery files in
+`%LOCALAPPDATA%\PageForge` stay unless the uninstaller asks and you say yes
+(or you pass `/DELETEUSERDATA=yes` to the uninstaller). An upgrade installs
+over the previous copy and leaves that folder alone.
+
+`pageforge-<version>-win-x64.zip` is the same build without an installer.
+Unpack it anywhere and run `PageForge.App.Wpf.exe`. It does not register a
+file association or add shortcuts.
+
+Until code signing is configured, Windows may warn that the publisher is
+unknown. That warning is expected for this unsigned beta. See the README.
+
+Building the installer from source (after `tools/publish-release.ps1` has
+published the desktop folder for the same version):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/build-installer.ps1 -Version 0.0.0-beta
+```
+
+That downloads a pinned Inno Setup 6 compiler if `ISCC.exe` is not already
+installed, and writes `artifacts/release/pageforge-<version>-win-x64-setup.exe`.
+
 ## 1. What you get
 
 ```
@@ -19,6 +58,9 @@ tests/PageForge.Core.Tests               — core unit suite
 tests/PageForge.Fidelity.Tests           — fidelity regression (render byte-pins)
 tests/PageForge.UiSmoke.Tests            — real-window UI Automation suite
 tools/build-managed.ps1                  — managed build (every project except the WinUI spike)
+tools/publish-release.ps1                — self-contained desktop folder and portable zip
+tools/build-installer.ps1                — per-user Windows installer (Inno Setup)
+installer/pageforge.iss                  — the installer script
 docker-compose.yml                       — hosted lane: Postgres 16, MinIO, Mailpit, Redis
 LICENSE, THIRD-PARTY-NOTICES.md          — AGPL + third-party notices
 ```

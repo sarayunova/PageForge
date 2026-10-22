@@ -60,6 +60,22 @@ public partial class MainWindow : Controls.FluentShellWindow
         {
             await OfferRecoveredDocumentsAsync();
 
+            // A document on the command line is the file the user opened. The
+            // development sample is only a stand-in for launching the exe with
+            // no arguments from a build tree; opening it as well would put the
+            // corpus PDF next to the document Open with just handed us.
+            IReadOnlyList<string> requested = StartupDocuments.FromArgs(Environment.GetCommandLineArgs());
+            if (requested.Count > 0)
+            {
+                foreach (string path in requested)
+                {
+                    await OpenDocumentAsync(path);
+                }
+
+                UpdateEmptyState();
+                return;
+            }
+
             string? sample = App.FindSamplePdf();
             if (sample is not null)
             {

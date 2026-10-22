@@ -66,6 +66,13 @@ repository (`.gitignore`) and is not redistributed as a binary-only artifact.
   converted to commands and bindings. These assemblies **are distributed** with the
   desktop application.
 
+### Inno Setup — Windows installer engine
+- Version: 6.7.3 (pinned by SHA-256 in `tools/install-innosetup.ps1`; the compiler is downloaded at build time and is not committed)
+- Source: `https://github.com/jrsoftware/issrc` (release `is-6_7_3`)
+- License: Inno Setup License (`https://jrsoftware.org/files/is/license.txt`)
+- Copyright: Jordan Russell, portions Martijn Laan
+- Usage: `installer/pageforge.iss` is compiled into `pageforge-<version>-win-x64-setup.exe`. The setup executable embeds Inno Setup's installer engine, so that engine **is distributed** inside the setup file. The license permits use for any purpose, including commercial applications, provided its copyright notices stay in the binary (they do, in the installer's about box). A separate paid license is requested, and not required, for some commercial users; this repository builds under the Inno Setup License text and does not ship a commercial-license key. PageForge itself stays AGPL-3.0-only.
+
 ## Build / verification tooling (used at build or test time, not distributed)
 
 ### qpdf — structural PDF validation (dev tool)

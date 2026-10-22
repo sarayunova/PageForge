@@ -26,6 +26,10 @@
     <Copyright>Copyright (c) 2026 LiVi Software Company</Copyright>
   </PropertyGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="PageForge.UiSmoke.Tests" />
+  </ItemGroup>
+
   <!-- Brand assets. The .ico is what Windows chrome uses; the 256px PNG is for
        in-app display (title bar, and the empty state once it exists), where a
        PNG avoids the shell's icon-size negotiation entirely. Both are generated
