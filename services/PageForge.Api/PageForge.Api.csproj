@@ -14,6 +14,11 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <!-- Design pulls Microsoft.Build.Tasks.Core 17.14.28, which restores
+         System.Security.Cryptography.Pkcs 9.0.0. That version is NU1902/NU1903
+         (GHSA-2fmv-rv2c-59x7, GHSA-846f-f764-76mx). 10.0.13 is the patched
+         net10.0 package; the parent constraint is a minimum version. -->
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
     <PackageReference Include="Minio" Version="7.0.0" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
     <PackageReference Include="Stripe.net" Version="52.4.1" />

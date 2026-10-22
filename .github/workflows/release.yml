@@ -21,7 +21,7 @@
 #              SIGNPATH_SIGNING_POLICY_SLUG, SIGNPATH_CONNECTOR_URL
 # See CONTRIBUTING.md for the full setup walkthrough.
 #
-# Distribution policy (decided 2026-09-12, see session-phase7.md): a fully
+# Distribution policy (decided 2026-09-12, see docs/sessions/session-phase7.md): a fully
 # gated signing path is preferred when configured. Until then, v* tags DO
 # create a draft release with an UNSIGNED payload — an unsigned beta is better
 # than no beta. The release notes state the signing status truthfully (see the
