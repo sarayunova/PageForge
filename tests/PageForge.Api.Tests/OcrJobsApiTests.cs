@@ -6,6 +6,9 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
+using PageForge.Api.Services.Email;
 
 namespace PageForge.Api.Tests;
 
@@ -19,7 +22,8 @@ public sealed class OcrJobsApiTests : IDisposable
 {
     private readonly JsonSerializerOptions _json = new(JsonSerializerDefaults.Web);
     private readonly PageForgeApiFactory _factory;
-    private readonly HttpClient _client;
+    private HttpClient _client;
+    private WebApplicationFactory<Program>? _throwingFactory;
 
     // A poll returns as soon as its condition holds, so a generous ceiling costs nothing
     // when the job is quick and only matters when the runner is slow (real Postgres,
@@ -36,6 +40,7 @@ public sealed class OcrJobsApiTests : IDisposable
     public void Dispose()
     {
         _client.Dispose();
+        _throwingFactory?.Dispose();
         _factory.Dispose();
     }
 
@@ -73,8 +78,8 @@ public sealed class OcrJobsApiTests : IDisposable
         Assert.Equal(JsonValueKind.String, completed.GetProperty("completedAt").ValueKind);
         Assert.Equal(1, completed.GetProperty("items").GetArrayLength());
 
-        // Completion notification email reached the owner. It is sent after the job
-        // is marked complete, so it can land a moment after the poll sees Completed.
+        // Completion notification email reached the owner. The worker saves the job and
+        // only then sends the email, so it can land a moment after the poll sees Completed.
         var emailDeadline = DateTime.UtcNow.Add(PollTimeout);
         while (!_factory.Email.Messages.Any(m => m.Subject.Contains("complete", StringComparison.OrdinalIgnoreCase))
                && DateTime.UtcNow < emailDeadline)
@@ -84,6 +89,35 @@ public sealed class OcrJobsApiTests : IDisposable
 
         Assert.Contains(_factory.Email.Messages, m =>
             m.Subject.Contains("complete", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Failing_email_sender_does_not_lose_the_job_or_stop_the_worker()
+    {
+        // The helpers below talk to _client, so point it at the host with the throwing sender.
+        _throwingFactory = _factory.WithWebHostBuilder(b =>
+            b.ConfigureServices(services =>
+            {
+                ServiceDescriptor? email = services.SingleOrDefault(d => d.ServiceType == typeof(IEmailSender));
+                if (email is not null) services.Remove(email);
+                services.AddSingleton<IEmailSender, ThrowingEmailSender>();
+            }));
+        _client = _throwingFactory.CreateClient();
+
+        string token = await RegisterAsync("ocr-mailfail@example.com", "MailFail", "pw");
+        Guid first = await SubmitJobAsync(token, await CreateVersionAsync(token), key: "mailfail-1");
+        JsonElement done = await WaitForStatusAsync(token, first, "Completed");
+        Assert.Equal(1, done.GetProperty("pagesProcessed").GetInt32());
+
+        // The worker must still be alive: a second job completes after the mail failure.
+        Guid second = await SubmitJobAsync(token, await CreateVersionAsync(token), key: "mailfail-2");
+        await WaitForStatusAsync(token, second, "Completed");
+    }
+
+    private sealed class ThrowingEmailSender : IEmailSender
+    {
+        public Task SendAsync(EmailMessage message, CancellationToken ct)
+            => throw new InvalidOperationException("SMTP unavailable.");
     }
 
     [Fact]

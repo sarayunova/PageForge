@@ -18,18 +18,16 @@ namespace PageForge.Api.Services;
 public sealed class OcrJobsService
 {
     private readonly AppDbContext _db;
-    private readonly IEmailSender _email;
     private readonly OcrOptions _options;
     private readonly OcrJobWorker _worker;
     private readonly IBlobStorage _blobs;
     private readonly SyncOptions _sync;
 
     public OcrJobsService(
-        AppDbContext db, IEmailSender email, IOptions<OcrOptions> options, OcrJobWorker worker,
+        AppDbContext db, IOptions<OcrOptions> options, OcrJobWorker worker,
         IBlobStorage blobs, IOptions<SyncOptions> sync)
     {
         _db = db;
-        _email = email;
         _options = options.Value;
         _worker = worker;
         _blobs = blobs;
@@ -117,9 +115,12 @@ public sealed class OcrJobsService
     /// Marks a job item (and the job) complete/failed, accrues usage, and when the
     /// item produced an artifact, persists it as a new document version. Called by
     /// the queue worker after <see cref="IOcrJobProcessor.ProcessAsync"/>. Returns
-    /// the job and whether the whole job just finished.
+    /// the job, whether the whole job just finished, and the owner notification to
+    /// deliver. The notification is built here but NOT sent: the caller sends it after
+    /// the state is persisted and outside any lock, so a failing or slow mail server
+    /// can neither lose the completion nor stall the other workers.
     /// </summary>
-    public async Task<(OcrJob Job, bool Finished)> CompleteItemAsync(
+    public async Task<(OcrJob Job, bool Finished, EmailMessage? Notification)> CompleteItemAsync(
         Guid jobId, Guid itemId, int pagesProcessed, string? error, OcrOutput? output, CancellationToken ct)
     {
         OcrJobItem item = await _db.OcrJobItems.FindAsync([itemId], ct)
@@ -131,7 +132,7 @@ public sealed class OcrJobsService
         {
             OcrJob existingJob = await _db.OcrJobs.FindAsync([jobId], ct)
                 ?? throw new KeyNotFoundException("Job not found.");
-            return (existingJob, existingJob.Status is OcrJobStatus.Completed or OcrJobStatus.Failed);
+            return (existingJob, existingJob.Status is OcrJobStatus.Completed or OcrJobStatus.Failed, null);
         }
 
         item.Status = error is null ? OcrItemStatus.Completed : OcrItemStatus.Failed;
@@ -151,6 +152,7 @@ public sealed class OcrJobsService
         bool allDone = allItems.Count > 0 && allItems.All(i => i.Status != OcrItemStatus.Queued && i.Status != OcrItemStatus.Running);
 
         bool finished = false;
+        EmailMessage? notification = null;
         if (allDone)
         {
             finished = true;
@@ -159,13 +161,13 @@ public sealed class OcrJobsService
                 job.Status = OcrJobStatus.Failed;
                 job.FailedAt = DateTime.UtcNow;
                 job.ErrorMessage = allItems.First(i => i.Status == OcrItemStatus.Failed).ErrorMessage;
-                await _email.SendAsync(await BuildFailureEmailAsync(job, allItems, ct), ct);
+                notification = await BuildFailureEmailAsync(job, allItems, ct);
             }
             else
             {
                 job.Status = OcrJobStatus.Completed;
                 job.CompletedAt = DateTime.UtcNow;
-                await _email.SendAsync(await BuildCompletionEmailAsync(job, ct), ct);
+                notification = await BuildCompletionEmailAsync(job, ct);
             }
         }
 
@@ -175,7 +177,7 @@ public sealed class OcrJobsService
         }
 
         await _db.SaveChangesAsync(ct);
-        return (job, finished);
+        return (job, finished, notification);
     }
 
     private async Task<OcrJobItem> PersistOutputAsync(OcrJobItem item, OcrOutput output, CancellationToken ct)

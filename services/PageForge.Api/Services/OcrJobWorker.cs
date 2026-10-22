@@ -6,6 +6,7 @@ using System.Threading.Channels;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using PageForge.Api.Data;
+using PageForge.Api.Services.Email;
 
 namespace PageForge.Api.Services;
 
@@ -22,6 +23,8 @@ public sealed class OcrJobWorker : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IOcrJobProcessor _processor;
     private readonly OcrOptions _options;
+    private readonly IEmailSender _email;
+    private readonly ILogger<OcrJobWorker> _logger;
 
     // Serializes the item-completion write across every worker instance in this
     // process. Tests spin up multiple WebApplicationFactory hosts (each with its own
@@ -32,11 +35,15 @@ public sealed class OcrJobWorker : BackgroundService
     public OcrJobWorker(
         IServiceScopeFactory scopeFactory,
         IOcrJobProcessor processor,
-        IOptions<OcrOptions> options)
+        IOptions<OcrOptions> options,
+        IEmailSender email,
+        ILogger<OcrJobWorker> logger)
     {
         _scopeFactory = scopeFactory;
         _processor = processor;
         _options = options.Value;
+        _email = email;
+        _logger = logger;
         _queue = Channel.CreateBounded<(Guid, Guid)>(new BoundedChannelOptions(1000)
         {
             FullMode = BoundedChannelFullMode.Wait
@@ -75,24 +82,53 @@ public sealed class OcrJobWorker : BackgroundService
     {
         await foreach (var (jobId, itemId) in _queue.Reader.ReadAllAsync(ct))
         {
-            await ProcessItemAsync(jobId, itemId, ct);
+            try
+            {
+                await ProcessItemAsync(jobId, itemId, ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // One bad item (a failed save, a vanished row) must not end the worker:
+                // an escaping exception stops this BackgroundService and with it every
+                // later job. Log it and carry on with the next item.
+                _logger.LogError(ex, "OCR job {JobId} item {ItemId} could not be finalised.", jobId, itemId);
+            }
         }
     }
 
     private async Task ProcessItemAsync(Guid jobId, Guid itemId, CancellationToken ct)
     {
+        EmailMessage? notification;
         await _completionLock.WaitAsync(ct);
         try
         {
-            await ProcessItemCoreAsync(jobId, itemId, ct);
+            notification = await ProcessItemCoreAsync(jobId, itemId, ct);
         }
         finally
         {
             _completionLock.Release();
         }
+
+        // Sent after the completion is saved and the lock is released: a slow or failing
+        // mail server must neither undo the job's outcome nor hold up other workers.
+        if (notification is not null)
+        {
+            try
+            {
+                await _email.SendAsync(notification, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "OCR job {JobId} finished but its notification email was not sent.", jobId);
+            }
+        }
     }
 
-    private async Task ProcessItemCoreAsync(Guid jobId, Guid itemId, CancellationToken ct)
+    private async Task<EmailMessage?> ProcessItemCoreAsync(Guid jobId, Guid itemId, CancellationToken ct)
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -100,18 +136,18 @@ public sealed class OcrJobWorker : BackgroundService
 
         OcrJobItem? item = await db.OcrJobItems.FindAsync([itemId], ct);
         if (item is null)
-            return;
+            return null;
 
         OcrJob? job = await db.OcrJobs.FindAsync([jobId], ct);
         if (job is null)
-            return;
+            return null;
 
         DocumentVersion? version = await db.DocumentVersions.AsNoTracking()
             .SingleOrDefaultAsync(v => v.Id == item.DocumentVersionId, ct);
         if (version is null)
         {
-            await service.CompleteItemAsync(jobId, itemId, 0, "The document version no longer exists.", null, ct);
-            return;
+            return (await service.CompleteItemAsync(
+                jobId, itemId, 0, "The document version no longer exists.", null, ct)).Notification;
         }
 
         OcrItemResult result;
@@ -121,14 +157,14 @@ public sealed class OcrJobWorker : BackgroundService
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            return;
+            return null;
         }
         catch (Exception ex)
         {
             result = new OcrItemResult(0, ex.Message);
         }
 
-        await service.CompleteItemAsync(
-            jobId, itemId, result.PagesProcessed, result.ErrorMessage, result.Output, ct);
+        return (await service.CompleteItemAsync(
+            jobId, itemId, result.PagesProcessed, result.ErrorMessage, result.Output, ct)).Notification;
     }
 }

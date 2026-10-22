@@ -282,6 +282,8 @@ public sealed class NativeEngineIsolatedFactory : WebApplicationFactory<Program>
     {
         builder.UseEnvironment("Testing");
         builder.UseSetting("Ocr:EnableNativeEngine", "true");
+        // Private database, so there is nothing foreign to sweep; matches PageForgeApiFactory.
+        builder.UseSetting("Ocr:SweepQueuedOnStart", "false");
 
         builder.ConfigureServices(services =>
         {
