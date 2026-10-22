@@ -91,6 +91,13 @@ public sealed class PageForgeApiFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
+        // On the host builder, not only inside ConfigureServices. That callback
+        // runs after Program.cs binds OcrOptions, and a UseSetting from inside it
+        // can miss the snapshot the worker copies in its constructor. Left at the
+        // default (true), a second test host sweeps this host's queued item and
+        // delivers the completion email to its own sender. The job then reads
+        // Completed and Submit_job_completes_and_notifies_owner sees an empty inbox.
+        builder.UseSetting("Ocr:SweepQueuedOnStart", "false");
 
         bool hosted = HostedCiEnabled;
 
@@ -188,7 +195,11 @@ public sealed class PageForgeApiFactory : WebApplicationFactory<Program>
             // job read Completed and the email was nowhere, so
             // Submit_job_completes_and_notifies_owner failed about one run in three.
             // Tests enqueue in-process at submit time, so nothing here needs the sweep.
+            // UseSetting is repeated here for the configuration reads; PostConfigure
+            // is what the worker actually observes, because it copies IOptions at
+            // construction, after every Configure callback, and last write wins.
             builder.UseSetting("Ocr:SweepQueuedOnStart", "false");
+            services.PostConfigure<OcrOptions>(options => options.SweepQueuedOnStart = false);
 
             ServiceDescriptor? email = services.SingleOrDefault(
                 d => d.ServiceType == typeof(IEmailSender));
