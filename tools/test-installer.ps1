@@ -82,6 +82,16 @@ function Assert-That {
     }
 }
 
+function Get-VersionText {
+    param($Value)
+    # Inno Setup writes the setup executable's version resource into a
+    # fixed-width placeholder, so ProductName and ProductVersion come back
+    # padded with spaces. The installed app is a normal .NET binary and is
+    # not padded; trimming both keeps the comparison on the text.
+    if ($null -eq $Value) { return "" }
+    return (($Value -replace "`0", "").Trim())
+}
+
 function Get-UninstallEntry {
     $root = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall"
     if (-not (Test-Path $root)) { return $null }
@@ -135,9 +145,9 @@ function Assert-Installed {
     Assert-That (Test-Path -LiteralPath (Join-Path $installDir "unins000.exe")) "uninstaller missing from $installDir"
 
     $info = (Get-Item -LiteralPath $app).VersionInfo
-    Assert-That ($info.ProductName -eq "LiVi's PageForge") "installed product name was '$($info.ProductName)'"
-    Assert-That ($info.CompanyName -eq "LiVi Software Company") "installed company was '$($info.CompanyName)'"
-    Assert-That ($info.ProductVersion -eq $ver.Display) "installed product version was '$($info.ProductVersion)', expected '$($ver.Display)'"
+    Assert-That ((Get-VersionText $info.ProductName) -eq "LiVi's PageForge") "installed product name was '$($info.ProductName)'"
+    Assert-That ((Get-VersionText $info.CompanyName) -eq "LiVi Software Company") "installed company was '$($info.CompanyName)'"
+    Assert-That ((Get-VersionText $info.ProductVersion) -eq $ver.Display) "installed product version was '$($info.ProductVersion)', expected '$($ver.Display)'"
     Assert-That ($info.FileVersionRaw -eq [version]$ver.File) "installed file version was '$($info.FileVersionRaw)', expected '$($ver.File)'"
 
     Assert-That (Test-Path -LiteralPath $startLink) "Start menu shortcut missing: $startLink. Programs folder contains: $((Get-ChildItem $programs -ErrorAction SilentlyContinue | ForEach-Object Name) -join ', ')"
@@ -210,8 +220,8 @@ try {
     }
 
     $setupInfo = (Get-Item -LiteralPath $SetupExe).VersionInfo
-    Assert-That ($setupInfo.ProductName -eq "LiVi's PageForge") "setup product name was '$($setupInfo.ProductName)'"
-    Assert-That ($setupInfo.ProductVersion -eq $ver.Display) "setup product version was '$($setupInfo.ProductVersion)', expected '$($ver.Display)'"
+    Assert-That ((Get-VersionText $setupInfo.ProductName) -eq "LiVi's PageForge") "setup product name was '$($setupInfo.ProductName)'"
+    Assert-That ((Get-VersionText $setupInfo.ProductVersion) -eq $ver.Display) "setup product version was '$($setupInfo.ProductVersion)', expected '$($ver.Display)'"
     Assert-That ($setupInfo.FileVersionRaw -eq [version]$ver.File) "setup file version was '$($setupInfo.FileVersionRaw)', expected '$($ver.File)'"
 
     Install-PageForge -LogName "install.log"

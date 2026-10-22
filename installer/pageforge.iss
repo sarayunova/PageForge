@@ -42,6 +42,9 @@ AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}/releases
 AppCopyright=Copyright (c) 2026 LiVi Software Company
+; These land in a fixed-width placeholder inside SetupLdr, so the setup
+; executable's Details tab shows the strings padded with trailing spaces.
+; The wizard and Apps & Features use AppVersion, which is not padded.
 VersionInfoVersion={#MyAppVersionNumeric}
 VersionInfoProductVersion={#MyAppVersionNumeric}
 VersionInfoTextVersion={#MyAppVersion}
