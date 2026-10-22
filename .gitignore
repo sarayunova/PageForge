@@ -37,3 +37,15 @@ Desktop.ini
 .DS_Store
 # Playwright MCP session data
 .playwright-mcp/
+
+# Local environment files. These can hold secrets. The placeholder template
+# services/PageForge.Api/.env.example stays tracked.
+.env
+.env.*
+**/.env
+**/.env.*
+!**/.env.example
+
+# Raw agent session logs (for example session-ses_*.md). Curated notes live
+# under docs/sessions/, not the repository root.
+/session-*.md

@@ -43,32 +43,82 @@ their licenses are documented in `THIRD-PARTY-NOTICES.md`.
 | `src/PageForge.App` | WinUI 3 spike, page-one render only (builds only in CI's `winui-build` lane). The shipping shell for the v0.1 beta is `src/PageForge.App.Wpf` — see TSD §12.1 |
 | `src/PageForge.App.Wpf` | Runnable desktop proof (net10.0-windows, x64) with a `--smoke` headless mode |
 | `services/PageForge.Api` | Hosted API (accounts, sync, billing, e-sign, team review, batch OCR) |
-| `tests/` | Core, Fidelity, and Api test suites (`PageForge.*.Tests`) |
+| `tests/` | Core, Fidelity, Api, and UiSmoke suites (`PageForge.*.Tests`) |
+| `docs/sessions/` | Curated agent session notes and handoffs (moved off the repo root) |
 | `tools/` | Fidelity corpus/manifest, sample PDFs, verification scripts |
 | *repo root* | Source-of-truth docs: `PageForge_Technical_Requirements_Document.md` (what), `PageForge_Technical_Specification_Document.md` (how), `PageForge_Artifact_Verification_Playbook.md` (agent verification) |
 
-## Build & test
+## Prerequisites
 
-Requires the .NET 8 SDK. The native MuPDF build requires Visual Studio Build
-Tools 2022 / vcvars64.
+- **Windows 10/11 x64.** The shipping shell is `net10.0-windows`, x64.
+- **.NET 10 SDK.** `global.json` pins `10.0.401` with `rollForward: latestMinor`.
+  Use the machine-wide install, which is on PATH (`C:\Program Files\dotnet`):
+  `dotnet`, or `& "C:\Program Files\dotnet\dotnet.exe"`. CI installs `10.0.x`
+  the same way (`actions/setup-dotnet`). The user-scope SDK under
+  `%LOCALAPPDATA%\Microsoft\dotnet` is not the SDK this repo builds with.
+- **Visual Studio Build Tools 2022** with the "Desktop development with C++"
+  workload (v143), for the native MuPDF build. MSVC is located via
+  `vcvars64.bat`. `curl.exe` and `tar` ship with Windows.
+- **Docker**, only for a local hosted API (Postgres 16, MinIO, Mailpit, Redis
+  via `docker-compose.yml`). Desktop features do not need it.
+
+## Build
 
 ```powershell
-# Native MuPDF + shim (idempotent; required for engine-backed work)
+# Native MuPDF 1.28.3 + pageforge_mupdf.dll. Idempotent; ends with a mutool info smoke check.
 powershell -ExecutionPolicy Bypass -File native/build-mupdf.ps1
 
-# Managed build. NOTE: this machine's SDK is user-scope with -NoPath, so invoke
-# it explicitly; the full PageForge.sln includes WinUI and fails without the
-# UWP/MSIX MSBuild tasks, so build/test the individual managed projects instead.
-& "$env:LOCALAPPDATA\Microsoft\dotnet\dotnet.exe" build services/PageForge.Api/PageForge.Api.csproj -c Debug
-
-# Tests (run suites separately; a shared dotnet test invocation errors MSB1008)
-& "$env:LOCALAPPDATA\Microsoft\dotnet\dotnet.exe" test tests/PageForge.Core.Tests
-& "$env:LOCALAPPDATA\Microsoft\dotnet\dotnet.exe" test tests/PageForge.Fidelity.Tests
-& "$env:LOCALAPPDATA\Microsoft\dotnet\dotnet.exe" test tests/PageForge.Api.Tests
+# Every managed project. Do not build PageForge.sln directly: it includes the
+# WinUI 3 spike (src/PageForge.App), which needs the Visual Studio UWP/MSIX
+# MSBuild tasks and fails MSB4062 on a machine that only has the .NET SDK.
+# The script owns that project list and fails if the solution gains a project
+# it does not know about. Add -Configuration Release -WarnAsError to match CI.
+powershell -ExecutionPolicy Bypass -File tools/build-managed.ps1
 ```
 
-Desktop build/test CI excludes `src/PageForge.App` (WinUI) on this dev machine;
-the WinUI shell builds only in the `winui-build` lane. See `AGENTS.md`.
+`src/PageForge.App.Wpf` is the shipping shell. The WinUI spike builds only in
+CI's enforcing `winui-build` lane. See `AGENTS.md`.
+
+## Test
+
+Run each suite in its own `dotnet test`. Passing several projects to one
+invocation errors MSB1008, and a script that lists them in sequence only
+reports the last exit code unless it checks each one. CI's `managed-build`
+lane runs the first three in Release; `ui-smoke` is its own lane.
+
+```powershell
+dotnet test tests/PageForge.Core.Tests
+dotnet test tests/PageForge.Fidelity.Tests
+dotnet test tests/PageForge.Api.Tests
+dotnet test tests/PageForge.UiSmoke.Tests
+```
+
+The fidelity suite must pass before merge; a corpus regression blocks the
+merge. Render equality requires the spike, WPF, and mutool PNGs to stay
+byte-identical. UiSmoke launches the real WPF window and drives it through UI
+Automation, so it needs an interactive desktop and `src/PageForge.App.Wpf`
+built in the same configuration.
+
+## Run
+
+```powershell
+# Shipping desktop shell (build the native shim first for engine-backed viewing).
+dotnet run --project src/PageForge.App.Wpf
+
+# Headless render used by CI, after the shell is built:
+# src/PageForge.App.Wpf/bin/<Configuration>/net10.0-windows/PageForge.App.Wpf.exe --smoke
+
+# Hosted API. appsettings.json already matches the compose Postgres and MinIO
+# defaults, so no .env file is required for a local stack. The http launch
+# profile listens on http://localhost:5230.
+docker compose up -d
+dotnet run --project services/PageForge.Api
+```
+
+Optional API overrides (Mailpit SMTP, OAuth, Stripe) are listed as
+placeholders in `services/PageForge.Api/.env.example`. Copy that file to
+`.env` and export the variables before `dotnet run`; the process does not
+load a `.env` file on its own. Keep `.env` out of source control.
 
 ## Hosted source availability
 
