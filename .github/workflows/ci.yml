@@ -22,11 +22,12 @@
 # Runners are pinned to explicit images, not -latest.
 #   windows-2025 — the image windows-latest selects today (Server 2025, Visual
 #     Studio 2026). native-build, winui-build and ui-smoke depend on its
-#     vcvars64, MSIX/PRI tasks and desktop session. build-mupdf.ps1 finds MSVC
-#     with vswhere -latest, so a later -latest move would swap that toolchain
-#     under a lane that is green now. The .NET 10 SDK is not taken from the
-#     image: setup-dotnet installs 10.0.x and global.json pins 10.0.401
-#     (rollForward latestMinor).
+#     vcvars64, MSIX/PRI tasks and desktop session. The installer lane uses the
+#     same image so a later -latest move cannot change the machine the setup
+#     is install-tested on. build-mupdf.ps1 finds MSVC with vswhere -latest, so
+#     a later -latest move would swap that toolchain under a lane that is green
+#     now. The .NET 10 SDK is not taken from the image: setup-dotnet installs
+#     10.0.x and global.json pins 10.0.401 (rollForward latestMinor).
 #   ubuntu-26.04 — ubuntu-latest is migrating from 24.04 to 26.04 (19 Oct–19 Nov
 #     2026) and every job on the floating label logs that notice. api-hosted
 #     does not use the host's Postgres or a preinstalled SDK. Postgres 16 and
@@ -487,7 +488,8 @@ jobs:
     # attaches the same setup.exe to a draft release, and it only runs on a
     # v* tag or a manual dispatch — this job never publishes one.
     name: Windows installer (Inno Setup)
-    runs-on: windows-latest
+    # Same pinned image as the other Windows lanes. See the runner note above.
+    runs-on: windows-2025
     timeout-minutes: 60
     needs: [native-build]
     steps:
