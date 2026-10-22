@@ -111,6 +111,13 @@ Source: "{#PayloadDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 ; even for a per-user install ({localappdata}\Programs\PageForge).
 Type: filesandordirs; Name: "{app}\*"
 
+[UninstallDelete]
+; {app} is recorded for removal only when this install created it. An upgrade
+; finds the folder already there, so the new uninstall log would leave an
+; empty directory behind. dirifempty is retried after unins000.exe itself
+; has been deleted, and it does nothing if the folder is not empty.
+Type: dirifempty; Name: "{app}"
+
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"; IconFilename: "{app}\{#MyAppExe}"; Comment: "View and edit PDFs"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExe}"; IconFilename: "{app}\{#MyAppExe}"; Comment: "View and edit PDFs"; Tasks: desktopicon
