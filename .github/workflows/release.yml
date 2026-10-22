@@ -71,7 +71,8 @@ permissions:
 jobs:
   build-and-sign:
     name: Publish + sign desktop payload
-    runs-on: windows-latest
+    # Same image as ci.yml: build-mupdf.ps1 needs that image's vcvars64.
+    runs-on: windows-2025
     outputs:
       signed: ${{ steps.sign-check.outputs.signed }}
       # The release notes name the asset, so they must use the SAME version
@@ -170,7 +171,10 @@ jobs:
 
       - name: Sign desktop payload (SignPath)
         if: steps.sign-check.outputs.signed == 'true'
-        uses: SignPath/github-action-submit-signing-request@v1
+        # v3 runs on Node 24 (v1 targeted Node 20). The inputs below are the v1
+        # set. connector-url stays explicit: v3's default connector host changed,
+        # and an empty SIGNPATH_CONNECTOR_URL must not switch endpoints.
+        uses: SignPath/github-action-submit-signing-request@v3
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ vars.SIGNPATH_ORG_ID }}
@@ -309,7 +313,9 @@ jobs:
 
   publish-release:
     name: Attach to GitHub Release (v* tag)
-    runs-on: ubuntu-latest
+    # ubuntu-latest is migrating to 26.04 and logs a notice on every job that
+    # still uses it. This job only downloads the zip and opens a draft release.
+    runs-on: ubuntu-26.04
     needs: [build-and-sign]
     permissions:
       contents: write # creating the release
@@ -357,7 +363,10 @@ jobs:
             echo "This release was produced by the \`release\` workflow. The payload attached here was built only after the Core, Fidelity and Api suites passed in the same job that produced it — the fidelity suite is the corpus render proof, so a rendering regression blocks the release rather than shipping in it. See CONTRIBUTING.md for the AGPL checklist and THIRD-PARTY-NOTICES.md for component licenses."
           } > release-body.md
       - name: Create draft GitHub Release
-        uses: softprops/action-gh-release@v2
+        # v3 is the Node 24 line (v2 is Node 20, which runners force onto 24 and
+        # warn about). tag_name, name, draft, files and body_path are unchanged.
+        # draft: true keeps a v* tag as a draft release with the zip attached.
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
           name: LiVi's PageForge ${{ github.ref_name }}
