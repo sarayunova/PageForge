@@ -121,6 +121,28 @@ function Install-PageForge {
     Invoke-Gui -File $SetupExe -Arguments $args -What "install ($LogName)"
 }
 
+function Wait-PathGone {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$What,
+        [int]$TimeoutSeconds = 120
+    )
+    # Inno's uninstaller copies itself to TEMP and the process we started
+    # exits while that copy is still deleting {app} and running the
+    # usPostUninstall step. Waiting on the process is not waiting on the
+    # uninstall.
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while (Test-Path -LiteralPath $Path) {
+        if ((Get-Date) -gt $deadline) {
+            $left = @(Get-ChildItem -LiteralPath $Path -Force -Recurse -ErrorAction SilentlyContinue |
+                Select-Object -ExpandProperty FullName)
+            $shown = ($left | Select-Object -First 20) -join ", "
+            throw "$What still present after ${TimeoutSeconds}s: $Path ($($left.Count) entries). $shown"
+        }
+        Start-Sleep -Milliseconds 200
+    }
+}
+
 function Uninstall-PageForge {
     param(
         [Parameter(Mandatory = $true)][string]$LogName,
@@ -134,6 +156,10 @@ function Uninstall-PageForge {
     $args = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG=`"$log`""
     if ($DeleteUserData) { $args = "$args /DELETEUSERDATA=yes" }
     Invoke-Gui -File $unins -Arguments $args -What "uninstall ($LogName)"
+    Wait-PathGone -Path $installDir -What "install directory"
+    if ($DeleteUserData) {
+        Wait-PathGone -Path $dataDir -What "user data directory"
+    }
 }
 
 function Assert-Installed {
@@ -256,6 +282,13 @@ try {
         $log = Join-Path $logDir "cleanup.log"
         try {
             Invoke-Gui -File $unins -Arguments "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG=`"$log`"" -What "cleanup uninstall"
+        } catch {
+            Write-Warning $_.Exception.Message
+        }
+    }
+    if (Test-Path -LiteralPath $installDir) {
+        try {
+            Wait-PathGone -Path $installDir -What "cleanup install directory"
         } catch {
             Write-Warning $_.Exception.Message
         }
